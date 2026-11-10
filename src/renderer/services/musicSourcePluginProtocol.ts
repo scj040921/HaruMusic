@@ -32,7 +32,7 @@ const QUALITY_TO_LX: Record<string, '128k' | '320k' | 'flac' | 'flac24bit'> = {
 };
 
 export const getMusicFreeQualityLadder = (quality: string): string[] => {
-  const target = QUALITY_TO_MUSICFREE[quality] || 'standard';
+  const target = QUALITY_TO_MUSICFREE[quality === 'auto' ? 'jymaster' : quality] || 'standard';
   const index = MUSICFREE_QUALITY_LADDER.indexOf(target);
   return [
     ...MUSICFREE_QUALITY_LADDER.slice(index),
@@ -42,8 +42,9 @@ export const getMusicFreeQualityLadder = (quality: string): string[] => {
 
 export const getPluginQuality = (quality: string, dialect: MusicSourcePluginDialect): string => {
   if (dialect === 'musicfree') return getMusicFreeQualityLadder(quality)[0] || 'standard';
-  if (dialect === 'lxmusic') return QUALITY_TO_LX[quality] || '320k';
-  return quality || 'exhigh';
+  if (dialect === 'lxmusic')
+    return QUALITY_TO_LX[quality === 'auto' ? 'jymaster' : quality] || '320k';
+  return quality === 'auto' ? 'jymaster' : quality || 'exhigh';
 };
 
 export const inferPluginAudioFormat = (url: string, br?: number): string => {

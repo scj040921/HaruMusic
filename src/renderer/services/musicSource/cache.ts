@@ -3,7 +3,7 @@
  *
  * - URL 缓存：IndexedDB music_url_cache，30 分钟 TTL；缓存键包含参与音源
  *   集合，配置变化自动失效
- * - 失败缓存：内存 Map，1 分钟；键 `${songId}:${providerKey}`，单个 provider
+ * - 失败缓存：内存 Map，1 分钟；键 `${songId}:${providerKey}:${quality || ''}`，单个 provider
  *   短时间内不重试（切歌场景避免重复等待同一坏源）
  */
 import { cloneDeep } from 'lodash';
@@ -32,7 +32,11 @@ const CACHE_CONFIG = {
 const failedCacheMap = new Map<string, number>();
 
 export const MusicResolveCache = {
-  async getCachedMusicUrl(songId: number, sourceKeys?: string[]): Promise<CachedUrlEntry | null> {
+  async getCachedMusicUrl(
+    songId: number,
+    sourceKeys?: string[],
+    quality?: string
+  ): Promise<CachedUrlEntry | null> {
     try {
       const cached = await getData('music_url_cache', songId);
       if (
@@ -41,7 +45,10 @@ export const MusicResolveCache = {
       ) {
         const cachedKeys: string[] = cached.sourceKeys || [];
         const currentKeys = [...(sourceKeys || [])].sort();
-        if (JSON.stringify([...cachedKeys].sort()) !== JSON.stringify(currentKeys)) {
+        if (
+          cached.quality !== quality ||
+          JSON.stringify([...cachedKeys].sort()) !== JSON.stringify(currentKeys)
+        ) {
           await deleteData('music_url_cache', songId);
           return null;
         }
@@ -59,13 +66,15 @@ export const MusicResolveCache = {
   async setCachedMusicUrl(
     songId: number,
     entry: CachedUrlEntry,
-    sourceKeys?: string[]
+    sourceKeys?: string[],
+    quality?: string
   ): Promise<void> {
     try {
       await saveData('music_url_cache', {
         id: songId,
         entry: cloneDeep(entry),
         sourceKeys: cloneDeep(sourceKeys || []),
+        quality,
         createTime: Date.now()
       });
     } catch (error) {
@@ -73,17 +82,17 @@ export const MusicResolveCache = {
     }
   },
 
-  isInFailedCache(songId: number, providerKey: string): boolean {
-    const cachedTime = failedCacheMap.get(`${songId}:${providerKey}`);
+  isInFailedCache(songId: number, providerKey: string, quality?: string): boolean {
+    const cachedTime = failedCacheMap.get(`${songId}:${providerKey}:${quality || ''}`);
     if (cachedTime && Date.now() - cachedTime < CACHE_CONFIG.FAILED_CACHE_TIME) {
       return true;
     }
-    if (cachedTime) failedCacheMap.delete(`${songId}:${providerKey}`);
+    if (cachedTime) failedCacheMap.delete(`${songId}:${providerKey}:${quality || ''}`);
     return false;
   },
 
-  addFailedCache(songId: number, providerKey: string): void {
-    failedCacheMap.set(`${songId}:${providerKey}`, Date.now());
+  addFailedCache(songId: number, providerKey: string, quality?: string): void {
+    failedCacheMap.set(`${songId}:${providerKey}:${quality || ''}`, Date.now());
   },
 
   clearFailedCache(songId: number): void {

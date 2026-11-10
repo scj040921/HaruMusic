@@ -57,12 +57,14 @@ export const getMusicUrl = async (id: number, isDownloaded: boolean = false, qua
   }
 
   return await request.get('/song/url/v1', {
+    timeout: 2500,
+    noRetry: true,
     params: {
       id,
       level,
       encodeType: level === 'lossless' ? 'aac' : 'flac'
     }
-  });
+  } as any);
 };
 
 // 获取歌曲详情

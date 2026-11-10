@@ -16,8 +16,8 @@ import { MusicResolveCache } from './cache';
 import { useMusicSourceRegistry } from './registry';
 import type { ResolveAttempt, ResolveSongResult } from './types';
 
-const STAGE_BUDGET_MS = 15_000;
-const CHAIN_BUDGET_MS = 30_000;
+const STAGE_BUDGET_MS = 25_000;
+const CHAIN_BUDGET_MS = 40_000;
 
 export type ResolveSongOptions = {
   /** 歌曲级音源覆盖（缺省取全局启用集合） */
@@ -122,7 +122,11 @@ export const resolveSong = async (
 
   // URL 缓存（键含参与音源集合，配置变化自动失效）
   if (!options.force) {
-    const cached = await MusicResolveCache.getCachedMusicUrl(songId, sourceKeys ?? globalKeys);
+    const cached = await MusicResolveCache.getCachedMusicUrl(
+      songId,
+      sourceKeys ?? globalKeys,
+      quality
+    );
     if (cached) {
       return {
         media: validatePluginMediaSource({
@@ -163,15 +167,25 @@ export const resolveSong = async (
       continue;
     }
 
-    if (MusicResolveCache.isInFailedCache(songId, provider.key)) {
+    if (MusicResolveCache.isInFailedCache(songId, provider.key, quality)) {
       attempts.push({ providerKey: provider.key, ok: false, reason: 'skipped' });
       continue;
     }
 
     try {
+      let verifiedUrl: string | null = null;
       const raw = await withTimeout(
-        provider.resolve(song, quality, { isDownload: options.isDownload }),
-        STAGE_BUDGET_MS
+        provider.resolve(song, quality, {
+          isDownload: options.isDownload,
+          verifyMedia:
+            provider.key === 'netease'
+              ? async (url, headers) => {
+                  verifiedUrl = await withTimeout(verifyMediaUrl(url, headers), 4000);
+                  return verifiedUrl;
+                }
+              : undefined
+        }),
+        provider.key === 'netease' ? STAGE_BUDGET_MS : 15_000
       );
       if (!raw) {
         attempts.push({
@@ -180,12 +194,15 @@ export const resolveSong = async (
           reason: 'no-source',
           costMs: Date.now() - stageStart
         });
-        MusicResolveCache.addFailedCache(songId, provider.key);
+        MusicResolveCache.addFailedCache(songId, provider.key, quality);
         continue;
       }
 
       // 验证也纳入单步预算：失效端点/HTML 页当场判失败降级，不进缓存
-      const resolvedUrl = await withTimeout(verifyMediaUrl(raw.url, raw.headers), STAGE_BUDGET_MS);
+      const resolvedUrl =
+        verifiedUrl === raw.url
+          ? verifiedUrl
+          : await withTimeout(verifyMediaUrl(raw.url, raw.headers), STAGE_BUDGET_MS);
       const media = resolvedUrl ? validatePluginMediaSource({ ...raw, url: resolvedUrl }) : null;
       if (!media) {
         attempts.push({
@@ -195,7 +212,7 @@ export const resolveSong = async (
           detail: 'invalid-url',
           costMs: Date.now() - stageStart
         });
-        MusicResolveCache.addFailedCache(songId, provider.key);
+        MusicResolveCache.addFailedCache(songId, provider.key, quality);
         continue;
       }
 
@@ -220,7 +237,8 @@ export const resolveSong = async (
           providerKey: provider.key,
           providerName: provider.name
         },
-        sourceKeys ?? globalKeys
+        sourceKeys ?? globalKeys,
+        quality
       );
       return result;
     } catch (error) {
@@ -232,7 +250,7 @@ export const resolveSong = async (
         detail: (error as Error).message?.slice(0, 120),
         costMs: Date.now() - stageStart
       });
-      MusicResolveCache.addFailedCache(songId, provider.key);
+      MusicResolveCache.addFailedCache(songId, provider.key, quality);
     }
   }
 

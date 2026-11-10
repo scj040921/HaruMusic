@@ -99,6 +99,14 @@ export const migrateLegacyMusicSources = (): boolean => {
     data = settingsStore.setData;
   }
 
+  if (!data.haruAutoQualityMigrated) {
+    settingsStore.setSetData({
+      ...(data.musicQuality === 'higher' ? { musicQuality: 'auto' } : {}),
+      haruAutoQualityMigrated: true
+    });
+    data = settingsStore.setData;
+  }
+
   if (data[MIGRATED_FLAG]) return false;
 
   const scripts = (data.lxMusicScripts || []) as LegacyLxScript[];

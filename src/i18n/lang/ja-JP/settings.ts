@@ -69,8 +69,9 @@ export default {
       add: '選択した曲のみ追加する'
     },
     quality: '音質設定',
-    qualityDesc: '音楽再生の音質を選択（NetEase Cloud VIP）',
+    qualityDesc: '再生可能な最高音質を優先し、手動選択時は下位の音質に切り替えます。',
     qualityOptions: {
+      auto: '自動（再生可能な最高音質）',
       standard: '標準',
       higher: '高音質',
       exhigh: '超高音質',

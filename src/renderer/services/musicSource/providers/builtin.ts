@@ -45,13 +45,16 @@ export const neteaseProvider: MusicSourceProvider = {
   builtin: true,
   available: true,
   resolve: async (song: SongResult, quality: string, options) => {
-    // Only request lower official tiers when the selected tier has no full URL.
+    // Spatial effects are not strictly ordered by fidelity, so auto uses the
+    // ordinary stereo ladder; explicitly selected effects are tried first.
+    const stereoLevels = ['jymaster', 'hires', 'lossless', 'exhigh', 'higher', 'standard'];
+    const index = stereoLevels.indexOf(quality);
     const levels =
-      quality === 'standard'
-        ? ['standard']
-        : quality === 'higher'
-          ? ['higher', 'standard']
-          : [quality, 'higher', 'standard'];
+      quality === 'auto'
+        ? stereoLevels
+        : index >= 0
+          ? stereoLevels.slice(index)
+          : [quality, ...stereoLevels.slice(1)];
     for (const level of levels) {
       try {
         const res = await getMusicUrl(song.id as number, Boolean(options?.isDownload), level);
@@ -61,7 +64,13 @@ export const neteaseProvider: MusicSourceProvider = {
           format: detail.type,
           br: detail.br ? Number(detail.br) : undefined
         });
-        if (media) return media;
+        if (!media) continue;
+        if (options?.verifyMedia) {
+          const url = await options.verifyMedia(media.url, media.headers);
+          if (!url) continue;
+          return { ...media, url };
+        }
+        return media;
       } catch {
         // A failed tier should not prevent trying a lower official tier.
       }

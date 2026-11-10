@@ -159,7 +159,36 @@ describe('official source quality fallback', () => {
     } as any);
     const result = await neteaseProvider.resolve({ id: 123 } as any, 'jymaster', {});
     expect(result?.url).toBe('https://example.com/audio.mp3');
-    expect(getUrl.mock.calls.map((call) => call[2])).toEqual(['jymaster', 'higher']);
+    expect(getUrl.mock.calls.map((call) => call[2])).toEqual(['jymaster', 'hires']);
+  });
+
+  it('uses the highest validated available tier and continues past an invalid URL', async () => {
+    const getUrl = vi.mocked(getMusicUrl);
+    getUrl.mockReset();
+    getUrl.mockResolvedValueOnce({
+      data: { data: [{ url: 'https://example.com/unreachable.flac' }] }
+    } as any);
+    getUrl.mockResolvedValueOnce({ data: { data: [{ url: null }] } } as any);
+    getUrl.mockResolvedValueOnce({
+      data: { data: [{ url: 'https://example.com/lossless.flac', br: 999000 }] }
+    } as any);
+    const verifyMedia = vi.fn(async (url: string) => (url.includes('unreachable') ? null : url));
+    const result = await neteaseProvider.resolve({ id: 123 } as any, 'auto', { verifyMedia });
+    expect(getUrl.mock.calls.map((call) => call[2])).toEqual(['jymaster', 'hires', 'lossless']);
+    expect(result?.url).toBe('https://example.com/lossless.flac');
+  });
+
+  it('treats manual quality as an upper bound', async () => {
+    const getUrl = vi.mocked(getMusicUrl);
+    getUrl.mockReset();
+    getUrl.mockResolvedValue({ data: { data: [{ url: null }] } } as any);
+    await neteaseProvider.resolve({ id: 123 } as any, 'lossless', {});
+    expect(getUrl.mock.calls.map((call) => call[2])).toEqual([
+      'lossless',
+      'exhigh',
+      'higher',
+      'standard'
+    ]);
   });
 
   it('does not treat a trial clip as a complete song', async () => {
@@ -181,6 +210,23 @@ describe('migration: migrateLegacyMusicSources', () => {
     info: { version: '1.0' },
     createdAt: 1700000000000
   };
+
+  it('migrates the old default quality to auto without overriding manual choices', () => {
+    mockSetData.musicSourceUnifiedMigrated = true;
+    mockSetData.musicQuality = 'higher';
+    migrateLegacyMusicSources();
+    expect(mockSetData.musicQuality).toBe('auto');
+    mockSetData.musicQuality = 'standard';
+    migrateLegacyMusicSources();
+    expect(mockSetData.musicQuality).toBe('standard');
+  });
+
+  it('keeps a previously chosen high quality', () => {
+    mockSetData.musicSourceUnifiedMigrated = true;
+    mockSetData.musicQuality = 'jymaster';
+    migrateLegacyMusicSources();
+    expect(mockSetData.musicQuality).toBe('jymaster');
+  });
 
   it('repairs the obsolete default once even after the old migration ran', () => {
     mockSetData.musicSourceUnifiedMigrated = true;

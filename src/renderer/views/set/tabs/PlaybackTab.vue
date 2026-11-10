@@ -163,6 +163,7 @@ watch(pureModeEnabled, (value) => {
 });
 
 const qualityOptions = computed(() => [
+  { label: t('settings.playback.qualityOptions.auto'), value: 'auto' },
   { label: t('settings.playback.qualityOptions.standard'), value: 'standard' },
   { label: t('settings.playback.qualityOptions.higher'), value: 'higher' },
   { label: t('settings.playback.qualityOptions.exhigh'), value: 'exhigh' },

@@ -69,8 +69,9 @@ export default {
       add: 'Add only this song'
     },
     quality: 'Audio Quality',
-    qualityDesc: 'Select music playback quality (VIP)',
+    qualityDesc: 'Use the highest available quality, or fall back below your selected quality.',
     qualityOptions: {
+      auto: 'Automatic (highest playable)',
       standard: 'Standard',
       higher: 'Higher',
       exhigh: 'Extreme',

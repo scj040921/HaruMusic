@@ -66,8 +66,9 @@ export default {
       add: '仅将当前歌曲加入播放列表'
     },
     quality: '音质设置',
-    qualityDesc: '选择音乐播放音质（不确保有效）',
+    qualityDesc: '优先播放可用的最高音质；手动选择时不可用会向下回退。',
     qualityOptions: {
+      auto: '自动（最高可播放音质）',
       standard: '标准',
       higher: '较高',
       exhigh: '极高',

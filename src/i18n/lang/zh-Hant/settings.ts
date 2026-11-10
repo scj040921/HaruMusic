@@ -66,8 +66,9 @@ export default {
       add: '僅將目前歌曲加入播放清單'
     },
     quality: '音質設定',
-    qualityDesc: '選擇音樂播放音質（網易云VIP）',
+    qualityDesc: '優先播放可用的最高音質；手動選擇時不可用會向下回退。',
     qualityOptions: {
+      auto: '自動（最高可播放音質）',
       standard: '標準',
       higher: '較高',
       exhigh: '極高',

@@ -14,6 +14,7 @@ export type MusicSourceKind = 'builtin' | 'plugin';
 export type ResolveCallOptions = {
   /** 下载场景：netease provider 切换 VIP 下载口 */
   isDownload?: boolean;
+  verifyMedia?: (url: string, headers?: Record<string, string>) => Promise<string | null>;
 };
 
 export type MusicSourceProvider = {

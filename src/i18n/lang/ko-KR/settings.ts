@@ -69,8 +69,10 @@ export default {
       add: '선택한 곡만 추가'
     },
     quality: '음질 설정',
-    qualityDesc: '음악 재생 음질 선택 (넷이즈 클라우드 VIP)',
+    qualityDesc:
+      '재생 가능한 최고 음질을 우선하며 선택한 음질이 불가능하면 낮은 음질로 전환합니다.',
     qualityOptions: {
+      auto: '자동 (재생 가능한 최고 음질)',
       standard: '표준',
       higher: '높음',
       exhigh: '매우 높음',
