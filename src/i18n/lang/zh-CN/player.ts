@@ -52,6 +52,12 @@ export default {
     customApiError: '自定义API请求出错，正在尝试使用内置音源...'
   },
   playBar: {
+    qualityShort: '音质',
+    songQuality: '当前歌曲音质',
+    songQualityHint: '仅影响当前歌曲；不可用时自动回退。',
+    qualityDefault: '跟随默认设置',
+    qualityChanging: '正在切换音质…',
+    qualityFailed: '切换失败，已保留原来的选择。',
     expand: '展开歌词',
     collapse: '收起歌词',
     like: '喜欢',

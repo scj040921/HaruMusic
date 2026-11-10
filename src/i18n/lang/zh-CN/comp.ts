@@ -1,5 +1,6 @@
 export default {
   haruHome: {
+    artists: '热门歌手',
     expandSidebar: '展开侧边栏',
     collapseSidebar: '收起侧边栏',
     title: '发现好音乐',

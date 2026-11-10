@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
     forceResetOperationLock: vi.fn()
   },
   parse: vi.fn(),
+  resolveQuality: vi.fn(),
+  setQuality: vi.fn(),
   getSongDetail: vi.fn(),
   clearMusicCache: vi.fn(),
   setConfig: vi.fn(),
@@ -33,6 +35,11 @@ vi.mock('naive-ui', () => ({
   createDiscreteApi: () => ({ message: { error: vi.fn() } })
 }));
 vi.mock('@/api/music', () => ({ getParsingMusicUrl: mocks.parse }));
+vi.mock('@/services/musicSource/resolver', () => ({ resolveSong: mocks.resolveQuality }));
+vi.mock('@/services/songQuality', () => ({ setSongQuality: mocks.setQuality }));
+vi.mock('@/store/modules/settings', () => ({
+  useSettingsStore: () => ({ setData: { musicQuality: 'auto' } })
+}));
 vi.mock('@/services/musicSource/cache', () => ({
   MusicResolveCache: { clearMusicCache: mocks.clearMusicCache }
 }));
@@ -85,6 +92,10 @@ describe('playback recovery ownership (#769)', () => {
       playMusicUrl: song.playMusicUrl || `https://example.com/refreshed-${song.id}.mp3`
     }));
     mocks.clearMusicCache.mockResolvedValue(undefined);
+    mocks.resolveQuality.mockResolvedValue({
+      media: { url: 'https://example.com/new-quality.mp3' }
+    });
+    mocks.setQuality.mockClear();
     mocks.parse.mockResolvedValue({ data: { data: { url: 'https://example.com/reparsed.mp3' } } });
     vi.stubGlobal('localStorage', { getItem: () => null });
     vi.stubGlobal('document', { title: '', createElement: () => ({}) });
@@ -108,6 +119,57 @@ describe('playback recovery ownership (#769)', () => {
     vi.useRealTimers();
     await vi.dynamicImportSettled();
     vi.unstubAllGlobals();
+  });
+
+  it('changes quality without losing paused state or progress', async () => {
+    const song = makeSong(1);
+    mocks.core.playMusic = song;
+    mocks.audio.getCurrentSound.mockReturnValue({ ...mocks.sound, paused: true });
+    expect(await controller.switchCurrentSongQuality('lossless')).toBe(true);
+    expect(mocks.resolveQuality).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), {
+      quality: 'lossless',
+      force: true
+    });
+    expect(mocks.audio.play).toHaveBeenCalledWith(
+      'https://example.com/new-quality.mp3',
+      expect.anything(),
+      false,
+      42
+    );
+    expect(mocks.setQuality).toHaveBeenCalledWith(1, 'lossless');
+  });
+
+  it('keeps current playback and selection when quality resolution fails', async () => {
+    mocks.core.playMusic = makeSong(1);
+    mocks.resolveQuality.mockResolvedValueOnce(null);
+    expect(await controller.switchCurrentSongQuality('lossless')).toBe(false);
+    expect(mocks.audio.stop).not.toHaveBeenCalled();
+    expect(mocks.setQuality).not.toHaveBeenCalled();
+  });
+
+  it('restores the original stream when the new quality cannot be played', async () => {
+    mocks.core.playMusic = makeSong(1);
+    mocks.audio.getCurrentSound.mockReturnValue({ ...mocks.sound, paused: false });
+    mocks.audio.play.mockRejectedValueOnce(new Error('unsupported format'));
+    mocks.audio.play.mockRejectedValueOnce(new Error('unsupported format'));
+    mocks.audio.play.mockResolvedValue(mocks.sound);
+    expect(await controller.switchCurrentSongQuality('lossless')).toBe(false);
+    expect(mocks.setQuality).not.toHaveBeenCalled();
+    expect(mocks.core.playMusic.playMusicUrl).toBe('https://example.com/1.mp3');
+  });
+
+  it('does not replace a newer song when a quality request finishes late', async () => {
+    mocks.core.playMusic = makeSong(1);
+    const pending = deferred<any>();
+    mocks.resolveQuality.mockReturnValueOnce(pending.promise);
+    const change = controller.switchCurrentSongQuality('lossless');
+    await vi.waitFor(() => expect(mocks.resolveQuality).toHaveBeenCalled());
+    await controller.playTrack(makeSong(2));
+    const stopCount = mocks.audio.stop.mock.calls.length;
+    pending.resolve({ media: { url: 'https://example.com/old.mp3' } });
+    expect(await change).toBe(false);
+    expect(mocks.core.playMusic.id).toBe(2);
+    expect(mocks.audio.stop).toHaveBeenCalledTimes(stopCount);
   });
 
   it('ignores URL-expired events for local files', async () => {

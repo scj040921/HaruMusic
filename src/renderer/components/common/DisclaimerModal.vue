@@ -3,24 +3,24 @@
     <Transition name="disclaimer-modal">
       <div
         v-if="showDisclaimer"
-        class="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-md"
+        class="fixed inset-0 z-[999999] flex items-center justify-center bg-[#12241d]/55"
       >
         <div
-          class="w-full max-w-md mx-4 bg-white dark:bg-gray-900 rounded-3xl overflow-hidden shadow-2xl"
+          class="w-full max-w-md mx-4 bg-white dark:bg-[#18221e] rounded-2xl overflow-hidden shadow-2xl"
         >
-          <div class="h-2 bg-gradient-to-r from-amber-400 via-orange-500 to-red-500"></div>
-          <h2 class="text-2xl font-bold text-center text-gray-900 dark:text-white px-6 mt-10">
+          <div class="h-1 bg-[#4b8170]"></div>
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-white px-7 mt-8">
             {{ t('comp.disclaimer.title') }}
           </h2>
 
-          <div class="px-6 py-6">
+          <div class="px-7 py-6">
             <div class="space-y-4 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
               <div
-                class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800"
+                class="p-4 rounded-xl bg-[#edf4f0] dark:bg-[#263b32] border border-[#dfece5] dark:border-[#385247]"
               >
                 <div class="flex items-start gap-3">
-                  <i class="ri-alert-line text-amber-500 text-xl flex-shrink-0 mt-0.5"></i>
-                  <p class="text-amber-700 dark:text-amber-300">
+                  <i class="ri-alert-line text-[#56836f] text-xl flex-shrink-0 mt-0.5"></i>
+                  <p class="text-[#365d4d] dark:text-[#cee4d8]">
                     {{ t('comp.disclaimer.warning') }}
                   </p>
                 </div>
@@ -29,27 +29,27 @@
               <div class="space-y-3">
                 <div class="flex items-start gap-3">
                   <div
-                    class="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0"
+                    class="w-6 h-6 rounded-full bg-[#edf3f0] dark:bg-[#2d4137] flex items-center justify-center flex-shrink-0"
                   >
-                    <i class="ri-book-2-line text-blue-500 text-sm"></i>
+                    <i class="ri-book-2-line text-[#608576] text-sm"></i>
                   </div>
                   <p>{{ t('comp.disclaimer.item1') }}</p>
                 </div>
 
                 <div class="flex items-start gap-3">
                   <div
-                    class="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0"
+                    class="w-6 h-6 rounded-full bg-[#edf3f0] dark:bg-[#2d4137] flex items-center justify-center flex-shrink-0"
                   >
-                    <i class="ri-time-line text-green-500 text-sm"></i>
+                    <i class="ri-time-line text-[#608576] text-sm"></i>
                   </div>
                   <p>{{ t('comp.disclaimer.item2') }}</p>
                 </div>
 
                 <div class="flex items-start gap-3">
                   <div
-                    class="w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0"
+                    class="w-6 h-6 rounded-full bg-[#edf3f0] dark:bg-[#2d4137] flex items-center justify-center flex-shrink-0"
                   >
-                    <i class="ri-shield-check-line text-purple-500 text-sm"></i>
+                    <i class="ri-shield-check-line text-[#608576] text-sm"></i>
                   </div>
                   <p>{{ t('comp.disclaimer.item3') }}</p>
                 </div>
@@ -60,7 +60,7 @@
           <div class="px-6 pb-8 space-y-3">
             <button
               @click="handleAgree"
-              class="w-full py-4 rounded-2xl text-base font-medium text-white bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-green-500/25"
+              class="w-full py-3 rounded-xl text-sm font-semibold text-white bg-[#315f55] hover:bg-[#274f46] active:scale-[0.98] transition-transform duration-150 shadow-green-500/25"
             >
               <span class="flex items-center justify-center gap-2">
                 <i class="ri-check-line text-lg"></i>

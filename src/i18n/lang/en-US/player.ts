@@ -53,6 +53,12 @@ export default {
     customApiError: 'Custom API request error, trying built-in sources...'
   },
   playBar: {
+    qualityShort: 'Quality',
+    songQuality: 'Current song quality',
+    songQualityHint: 'Only this song is affected. Unavailable levels fall back automatically.',
+    qualityDefault: 'Use default',
+    qualityChanging: 'Changing quality…',
+    qualityFailed: 'Could not change quality. Your previous choice is kept.',
     expand: 'Expand Lyrics',
     collapse: 'Collapse Lyrics',
     like: 'Like',

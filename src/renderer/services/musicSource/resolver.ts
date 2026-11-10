@@ -5,6 +5,7 @@
  * 失败缓存跳过，统一校验与 API 端点二次解析，返回 attempts 归因。
  * 取代旧的「getSongUrl 内联降级链 + MusicParser 策略工厂」双轨编排。
  */
+import { getSongQuality } from '@/services/songQuality';
 import { SongSourceConfigManager } from '@/services/SongSourceConfigManager';
 import { useSettingsStore } from '@/store';
 import type { SongResult } from '@/types/music';
@@ -115,7 +116,8 @@ export const resolveSong = async (
   const { orderedProviders, findProvider } = useMusicSourceRegistry();
 
   const sourceKeys = options.sourceKeys ?? effectiveSourceKeys(song.id as number);
-  const quality = options.quality || settingsStore.setData?.musicQuality || 'higher';
+  const quality =
+    options.quality || getSongQuality(song.id) || settingsStore.setData?.musicQuality || 'auto';
   const globalKeys: string[] = settingsStore.setData?.enabledMusicSources || [];
 
   const songId = Number(song.id);

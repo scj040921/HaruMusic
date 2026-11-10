@@ -39,7 +39,7 @@
         <div class="hero-card" :style="{ animationDelay: '0.12s' }">
           <!-- Card -->
           <div
-            class="daily-card group relative cursor-pointer overflow-hidden rounded-2xl shadow-sm transition-all duration-300 ease-out hover:shadow-xl"
+            class="daily-card group relative cursor-pointer overflow-hidden rounded-xl transition-colors duration-200"
             :style="{ background: dailyCardBg }"
             @click="showDayRecommend"
           >
@@ -60,7 +60,7 @@
             <div class="relative flex h-full flex-col justify-between p-5 md:p-6">
               <!-- Top: Title + Badge -->
               <div>
-                <h3 class="text-2xl font-black leading-tight tracking-wider text-white md:text-3xl">
+                <h3 class="text-2xl font-bold leading-tight tracking-tight text-white md:text-3xl">
                   {{ t('comp.homeHero.dailyRecommend') }}
                 </h3>
                 <span
@@ -107,7 +107,7 @@
         <!-- ===== 已登录: 私人FM (Right Card) ===== -->
         <div v-if="isLoggedIn" class="hero-card" :style="{ animationDelay: '0.22s' }">
           <div
-            class="fm-card group relative cursor-pointer overflow-hidden rounded-2xl shadow-sm transition-all duration-300 ease-out hover:shadow-xl"
+            class="fm-card group relative cursor-pointer overflow-hidden rounded-xl transition-colors duration-200"
             :style="{ background: fmCardBg }"
             @click="handleFmPlay"
           >
@@ -207,7 +207,7 @@
           @click="router.push('/list')"
         >
           <div
-            class="fm-card relative overflow-hidden rounded-2xl bg-neutral-100 shadow-sm transition-all duration-300 ease-out group-hover:shadow-xl dark:bg-neutral-800"
+            class="fm-card relative overflow-hidden rounded-xl bg-neutral-100 transition-colors duration-200 dark:bg-neutral-800"
           >
             <!-- 2x2 Cover Grid -->
             <div class="absolute inset-0 grid grid-cols-2 grid-rows-2">

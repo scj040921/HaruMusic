@@ -53,6 +53,12 @@ export default {
     customApiError: '사용자 정의 API 요청 오류, 기본 음원을 시도합니다...'
   },
   playBar: {
+    qualityShort: '음질',
+    songQuality: '현재 곡 음질',
+    songQualityHint: '이 곡에만 적용되며, 사용할 수 없으면 자동으로 낮춥니다.',
+    qualityDefault: '기본 설정 따르기',
+    qualityChanging: '음질 변경 중…',
+    qualityFailed: '변경하지 못해 이전 설정을 유지합니다.',
     expand: '가사 펼치기',
     collapse: '가사 접기',
     like: '좋아요',

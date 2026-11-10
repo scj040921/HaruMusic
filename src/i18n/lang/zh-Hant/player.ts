@@ -52,6 +52,12 @@ export default {
     customApiError: '自定義API請求出錯，正在嘗試使用內置音源...'
   },
   playBar: {
+    qualityShort: '音質',
+    songQuality: '目前歌曲音質',
+    songQualityHint: '僅影響目前歌曲；無法使用時自動回退。',
+    qualityDefault: '跟隨預設設定',
+    qualityChanging: '正在切換音質…',
+    qualityFailed: '切換失敗，已保留原本的選擇。',
     expand: '展開歌詞',
     collapse: '收合歌詞',
     like: '喜歡',

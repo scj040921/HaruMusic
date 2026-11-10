@@ -54,7 +54,7 @@
   --text-color-100: #e9ecef;
   --text-color-200: #dee2e6;
   --text-color-300: #dde0e3;
-  --primary-color: #22c55e;
+  --primary-color: #376d5e;
 }
 
 .theme-light {
@@ -67,7 +67,7 @@
   --text-color-100: #161616;
   --text-color-200: #2d2d2d;
   --text-color-300: #3d3d3d;
-  --primary-color: #22c55e;
+  --primary-color: #376d5e;
 }
 
 .theme-gray {
@@ -80,7 +80,7 @@
   --text-color-100: #161616;
   --text-color-200: #2d2d2d;
   --text-color-300: #3d3d3d;
-  --primary-color: #22c55e;
+  --primary-color: #376d5e;
 }
 
 :root {
@@ -174,5 +174,27 @@
 @keyframes shimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+
+/* HaruMusic: keep artwork vivid and the surrounding controls quiet. */
+:root {
+  --haru-ink: #21342e;
+  --haru-muted: #64746d;
+  --haru-surface: #f4f7f5;
+  --haru-accent: #376d5e;
+}
+:focus-visible {
+  outline: 2px solid #568f7c;
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

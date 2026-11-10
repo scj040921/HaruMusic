@@ -158,15 +158,23 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
 }
 
 .layout-main-page {
-  @apply flex h-full;
+  @apply flex;
+  height: calc(100% - 44px);
 }
 
 .menu {
-  @apply h-full bg-light dark:bg-black;
+  @apply h-full;
+  background: #f4f7f5;
 }
 
 .main {
   @apply overflow-hidden flex-1 flex flex-col;
+  min-width: 0;
+  padding-top: 5px;
+}
+
+:global(.dark) .menu {
+  background: #111815;
 }
 
 .main-content {

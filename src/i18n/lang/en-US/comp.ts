@@ -1,5 +1,6 @@
 export default {
   haruHome: {
+    artists: 'Popular artists',
     expandSidebar: 'Expand sidebar',
     collapseSidebar: 'Collapse sidebar',
     title: 'Find your next favorite',

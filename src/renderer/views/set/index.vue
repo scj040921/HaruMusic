@@ -10,26 +10,24 @@
 
       <n-scrollbar x-scrollable class="w-full">
         <div class="flex items-center pl-2 pb-2 whitespace-nowrap">
-          <div
+          <button
             v-for="section in navSections"
             :key="section.id"
-            class="py-1.5 px-4 mr-3 inline-block rounded-full cursor-pointer transition-all duration-300 text-sm font-medium select-none"
-            :class="
-              currentSection === section.id
-                ? 'bg-primary text-white shadow-lg shadow-primary/25 scale-105'
-                : 'bg-gray-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 hover:bg-gray-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white'
-            "
+            type="button"
+            class="settings-tab"
+            :class="{ 'settings-tab-active': currentSection === section.id }"
+            :aria-pressed="currentSection === section.id"
             @click="currentSection = section.id"
           >
             {{ section.title }}
-          </div>
+          </button>
         </div>
       </n-scrollbar>
     </div>
 
     <!-- 内容区域 -->
     <n-scrollbar class="flex-1">
-      <div class="w-full mx-auto pb-32 pt-6 page-padding">
+      <div class="settings-content w-full mx-auto pb-32 pt-6 page-padding">
         <div v-show="currentSection === 'basic'" class="animate-fade-in">
           <basic-tab />
         </div>
@@ -175,6 +173,47 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.settings-content {
+  max-width: 1120px;
+}
+.settings-tab {
+  position: relative;
+  padding: 9px 14px 12px;
+  border: 0;
+  background: transparent;
+  color: #63736c;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.settings-tab:hover {
+  color: #315f55;
+}
+.settings-tab-active {
+  color: #315f55;
+}
+.settings-tab-active::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: #376d5e;
+}
+.settings-tab:focus-visible {
+  outline: 2px solid #568f7c;
+  outline-offset: -2px;
+}
+:global(.dark) .settings-tab {
+  color: #a6b8b0;
+}
+:global(.dark) .settings-tab-active {
+  color: #c5e2d5;
+}
+
 :deep(.n-select .n-base-selection) {
   border-radius: 10px;
 }

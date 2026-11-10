@@ -15,6 +15,7 @@ import { getParsingMusicUrl } from '@/api/music';
 import { loadLrc, useSongDetail } from '@/hooks/usePlayerHooks';
 import { audioService } from '@/services/audioService';
 import { playbackRequestManager } from '@/services/playbackRequestManager';
+import { setSongQuality, type SongQuality } from '@/services/songQuality';
 import { SongSourceConfigManager } from '@/services/SongSourceConfigManager';
 import type { Platform, SongResult } from '@/types/music';
 import { getImgUrl } from '@/utils';
@@ -383,6 +384,47 @@ export const reparseCurrentSong = async (
     console.error('[playbackController] 重新解析失败:', error);
     return false;
   }
+};
+
+/** Change only the current song's quality. Resolve before interrupting playback. */
+export const switchCurrentSongQuality = async (quality: SongQuality | null): Promise<boolean> => {
+  const generation = getCurrentGeneration();
+  const request = ++reparseGeneration;
+  const core = await getPlayerCoreStore();
+  const song = core.playMusic;
+  if (!song?.id || !Number.isSafeInteger(Number(song.id)) || Number(song.id) <= 0 || song.isPodcast)
+    return false;
+  const settings = await getSettingsStore();
+  const { resolveSong } = await import('@/services/musicSource/resolver');
+  const result = await resolveSong(cloneDeep(song), {
+    quality: quality ?? settings.setData.musicQuality ?? 'auto',
+    force: true
+  });
+  if (
+    !result ||
+    generation !== getCurrentGeneration() ||
+    request !== reparseGeneration ||
+    core.playMusic.id !== song.id
+  )
+    return false;
+  const sound = audioService.getCurrentSound();
+  const position = sound?.currentTime ?? 0;
+  const shouldPlay = sound ? !sound.paused : core.isPlaying;
+  const previous = { ...core.playMusic };
+  const next = { ...previous, playMusicUrl: result.media.url, expiredAt: Date.now() + 1800000 };
+  const pending = playTrack(next, shouldPlay, { startTime: position, recordHistory: false });
+  const activeGeneration = getCurrentGeneration();
+  const success = await pending;
+  if (activeGeneration !== getCurrentGeneration() || request !== reparseGeneration) return false;
+  if (!success) {
+    if (previous.playMusicUrl)
+      await playTrack(previous, shouldPlay, { startTime: position, recordHistory: false });
+    return false;
+  }
+  setSongQuality(song.id, quality);
+  const playlist = await getPlaylistStore();
+  if (activeGeneration === getCurrentGeneration()) playlist.updateSong(next);
+  return true;
 };
 
 /**

@@ -53,6 +53,12 @@ export default {
     customApiError: 'カスタムAPIのリクエストでエラーが発生しました。内蔵音源を試しています...'
   },
   playBar: {
+    qualityShort: '音質',
+    songQuality: 'この曲の音質',
+    songQualityHint: 'この曲のみに適用します。利用できない場合は自動で切り替えます。',
+    qualityDefault: '既定の設定に従う',
+    qualityChanging: '音質を切り替えています…',
+    qualityFailed: '切り替えに失敗しました。以前の設定を維持します。',
     expand: '歌詞を展開',
     collapse: '歌詞を折りたたみ',
     like: 'いいね',

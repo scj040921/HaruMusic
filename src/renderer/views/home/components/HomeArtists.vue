@@ -1,5 +1,8 @@
 <template>
   <section class="artists-section">
+    <div class="artist-heading">
+      <h2>{{ title }}</h2>
+    </div>
     <!-- Loading Skeleton -->
     <div v-if="loading" class="artists-scroll flex gap-6 md:gap-8 overflow-x-hidden pb-4">
       <div v-for="i in 8" :key="i" class="flex flex-col items-center gap-3">
@@ -31,17 +34,13 @@
         >
           <!-- Artist Avatar -->
           <div
-            class="artist-avatar relative h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 lg:h-32 lg:w-32 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800 shadow-lg transition-all duration-500 group-hover:scale-110 group-hover:shadow-2xl group-hover:shadow-primary/20"
+            class="artist-avatar relative h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 lg:h-32 lg:w-32 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800 transition-transform duration-200 group-hover:scale-105"
           >
             <img
               :src="getImgUrl(item.picUrl, '300y300')"
               class="h-full w-full object-cover grayscale-[0.15] transition-all duration-700 group-hover:grayscale-0 group-hover:brightness-110"
               loading="lazy"
               :alt="item.name"
-            />
-            <!-- Gradient Overlay on Hover -->
-            <div
-              class="absolute inset-0 bg-gradient-to-tr from-primary/30 via-primary/10 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100"
             />
           </div>
 
@@ -141,6 +140,19 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.artist-heading {
+  margin-bottom: 20px;
+}
+.artist-heading h2 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #21342e;
+}
+:global(.dark) .artist-heading h2 {
+  color: #eef5f1;
+}
+
 /* 优化水平滚动 */
 .artists-scroll {
   /* Hide scrollbar while maintaining functionality */

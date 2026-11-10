@@ -55,6 +55,8 @@ export const neteaseProvider: MusicSourceProvider = {
         : index >= 0
           ? stereoLevels.slice(index)
           : [quality, ...stereoLevels.slice(1)];
+    let bestFallback: PluginMediaSource | null = null;
+    let bestRank = Number.POSITIVE_INFINITY;
     for (const level of levels) {
       try {
         const res = await getMusicUrl(song.id as number, Boolean(options?.isDownload), level);
@@ -65,17 +67,28 @@ export const neteaseProvider: MusicSourceProvider = {
           br: detail.br ? Number(detail.br) : undefined
         });
         if (!media) continue;
-        if (options?.verifyMedia) {
-          const url = await options.verifyMedia(media.url, media.headers);
-          if (!url) continue;
-          return { ...media, url };
+        const url = options?.verifyMedia
+          ? await options.verifyMedia(media.url, media.headers)
+          : media.url;
+        if (!url) continue;
+        const playable = { ...media, url };
+        const requestedRank = stereoLevels.indexOf(level);
+        const actualRank = stereoLevels.indexOf(detail.level);
+        // Some responses silently downgrade the requested level. Keep the
+        // playable fallback but continue checking the intervening tiers.
+        if (requestedRank >= 0 && actualRank > requestedRank) {
+          if (actualRank < bestRank) {
+            bestFallback = playable;
+            bestRank = actualRank;
+          }
+          continue;
         }
-        return media;
+        return playable;
       } catch {
         // A failed tier should not prevent trying a lower official tier.
       }
     }
-    return null;
+    return bestFallback;
   }
 };
 

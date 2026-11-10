@@ -1,5 +1,6 @@
 export default {
   haruHome: {
+    artists: '人気アーティスト',
     expandSidebar: 'サイドバーを開く',
     collapseSidebar: 'サイドバーを閉じる',
     title: 'お気に入りの音楽を見つけよう',

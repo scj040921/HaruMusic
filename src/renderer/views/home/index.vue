@@ -4,7 +4,6 @@
       <div class="home-content w-full pb-32 page-padding">
         <div class="home-heading">
           <div>
-            <p class="home-kicker">HaruMusic</p>
             <h1>{{ t('comp.haruHome.title') }}</h1>
             <p class="home-subtitle">{{ t('comp.haruHome.subtitle') }}</p>
           </div>
@@ -22,7 +21,7 @@
           />
 
           <!-- Hot Artists (Horizontal Scroll Section) -->
-          <home-artists :title="t('comp.recommendSinger.title')" :limit="15" />
+          <home-artists :title="t('comp.haruHome.artists')" :limit="15" />
 
           <!-- New Albums (NEW - 新碟上架) -->
           <home-album-section
@@ -69,18 +68,11 @@ const router = useRouter();
   display: flex;
   align-items: end;
   justify-content: space-between;
-  padding: 18px 0 28px;
-}
-.home-kicker {
-  margin: 0 0 8px;
-  color: #638b83;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  padding: 22px 0 25px;
 }
 .home-heading h1 {
   margin: 0;
-  font-size: 32px;
+  font-size: 28px;
   line-height: 1.2;
   font-weight: 700;
   letter-spacing: -0.04em;
@@ -104,15 +96,15 @@ const router = useRouter();
   }
 }
 
-/* Global animation optimization - use will-change sparingly */
+/* Reveal only when the user enters the page; interactive feedback stays subtle. */
 :deep(.animate-item) {
-  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: fadeInUp 0.24s cubic-bezier(0.23, 1, 0.32, 1) backwards;
 }
 
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(24px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -124,7 +116,7 @@ const router = useRouter();
 :deep(.animate-item) {
   @for $i from 1 through 20 {
     &:nth-child(#{$i}) {
-      animation-delay: #{$i * 0.05}s;
+      animation-delay: #{min($i, 5) * 0.025}s;
     }
   }
 }

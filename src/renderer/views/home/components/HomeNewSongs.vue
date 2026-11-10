@@ -6,7 +6,6 @@
         <h2 class="text-xl font-bold tracking-tight text-neutral-900 md:text-2xl dark:text-white">
           {{ title }}
         </h2>
-        <div class="h-1.5 w-1.5 rounded-full bg-primary" />
       </div>
       <button
         class="play-all-btn text-xs md:text-sm font-bold text-primary dark:text-white hover:text-primary/80 dark:hover:text-white/80 transition-colors flex items-center gap-1.5"

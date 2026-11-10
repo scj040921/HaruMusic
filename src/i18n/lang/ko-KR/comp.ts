@@ -1,5 +1,6 @@
 export default {
   haruHome: {
+    artists: '인기 아티스트',
     expandSidebar: '사이드바 펼치기',
     collapseSidebar: '사이드바 접기',
     title: '새로운 음악을 발견하세요',

@@ -50,6 +50,7 @@
         </div>
 
         <div class="right-controls">
+          <song-quality-control :song="playMusic" />
           <!-- 播放列表按钮 -->
           <button class="control-btn small-btn" @click="openPlayListDrawer">
             <i class="iconfont icon-list"></i>
@@ -81,7 +82,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 
-import { allTime, nowTime } from '@/hooks/MusicHook';
+import SongQualityControl from '@/components/player/SongQualityControl.vue';
+import { allTime, nowTime, playMusic } from '@/hooks/MusicHook';
 import { usePlaybackControl } from '@/hooks/usePlaybackControl';
 import { usePlayMode } from '@/hooks/usePlayMode';
 import { useVolumeControl } from '@/hooks/useVolumeControl';

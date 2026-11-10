@@ -1,5 +1,5 @@
 <template>
-  <div class="flex items-center gap-2 pb-4 pr-4 pl-1">
+  <div class="haru-topbar flex items-center gap-2 pb-4 pr-4 pl-1">
     <!-- ── LEFT: Tabs（搜索展开时隐藏）─────────────── -->
     <transition name="tab-slide">
       <div
@@ -496,29 +496,45 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.haru-topbar {
+  min-height: 55px;
+  padding-right: 24px;
+}
+@media (max-width: 1100px) {
+  .tab-btn {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .search-wrap--idle {
+    flex-basis: 180px;
+    max-width: 180px;
+  }
+}
+
 /* ── Tab track ───────────────────────────────────────── */
 .tabs-track {
   position: relative;
   display: inline-flex;
   align-items: center;
-  height: 34px;
-  background: #edf2f0;
-  border-radius: 10px;
-  padding: 3px;
+  height: 42px;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
   gap: 0;
   box-sizing: border-box;
 }
 .dark .tabs-track {
-  background: #1f2937;
+  background: transparent;
 }
 
 .tab-slider-bg {
   position: absolute;
-  top: 3px;
+  top: auto;
+  bottom: 0;
   left: 0;
-  height: calc(100% - 6px);
-  border-radius: 7px;
-  background: #345e56;
+  height: 2px;
+  border-radius: 2px;
+  background: #376d5e;
   box-shadow: none;
   transition:
     transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
@@ -533,7 +549,7 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 13px;
+  padding: 9px 12px;
   border-radius: 9999px;
   font-size: 12.5px;
   font-weight: 600;
@@ -544,7 +560,10 @@ onMounted(() => {
   transition: color 0.2s;
 }
 .tab-btn--on {
-  color: #fff;
+  color: #254f43;
+}
+.dark .tab-btn--on {
+  color: #b7d9ca;
 }
 .tab-btn--off {
   color: #6b7280;

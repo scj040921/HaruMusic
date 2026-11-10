@@ -164,6 +164,8 @@
         {{ isDownloading ? t('songItem.message.downloading') : t('player.playBar.download') }}
       </n-tooltip>
 
+      <song-quality-control :song="playMusic" />
+
       <!-- 高级控制菜单按钮（整合了 EQ、定时关闭、播放速度） -->
       <advanced-controls-popover />
 
@@ -191,6 +193,7 @@ import { useI18n } from 'vue-i18n';
 import MusicFullWrapper from '@/components/lyric/MusicFullWrapper.vue';
 import AdvancedControlsPopover from '@/components/player/AdvancedControlsPopover.vue';
 import ReparsePopover from '@/components/player/ReparsePopover.vue';
+import SongQualityControl from '@/components/player/SongQualityControl.vue';
 import {
   allTime,
   artistList,
@@ -371,7 +374,8 @@ const openPlayListDrawer = () => {
 
 .music-play-bar {
   @apply h-20 w-full absolute bottom-0 left-0 flex items-center box-border px-6 py-2 pt-3;
-  @apply bg-light dark:bg-dark shadow-2xl shadow-gray-300;
+  @apply bg-light dark:bg-dark;
+  border-top: 1px solid #e3ebe7;
   z-index: 9999;
   animation-duration: 0.5s !important;
   /* 空白区域可点击展开详情页（#751） */
@@ -392,7 +396,7 @@ const openPlayListDrawer = () => {
   }
 
   .music-content {
-    width: 200px;
+    width: clamp(140px, 17vw, 220px);
     @apply ml-4;
 
     &-title {
@@ -406,7 +410,7 @@ const openPlayListDrawer = () => {
 }
 
 .play-bar-img {
-  @apply w-14 h-14 rounded-2xl;
+  @apply w-14 h-14 rounded-xl;
 }
 
 .music-buttons {
@@ -429,9 +433,31 @@ const openPlayListDrawer = () => {
   }
 
   &-play {
-    @apply flex justify-center items-center w-20 h-12 rounded-full mx-4 transition text-gray-500;
-    @apply bg-gray-100 bg-opacity-60 dark:bg-gray-800 dark:bg-opacity-60 hover:bg-gray-200;
+    @apply flex justify-center items-center w-12 h-12 rounded-full mx-4 text-white;
+    background: #315f55;
   }
+}
+
+@media (max-width: 1100px) {
+  .music-play-bar {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .music-buttons {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+  .music-buttons-play {
+    margin-left: 8px;
+    margin-right: 8px;
+  }
+  .audio-button .iconfont {
+    margin-left: 5px;
+    margin-right: 5px;
+  }
+}
+:global(.dark) .music-play-bar {
+  border-top-color: #26352f;
 }
 
 .audio-volume {
@@ -470,9 +496,10 @@ const openPlayListDrawer = () => {
 
 .audio-button {
   @apply flex items-center;
+  gap: 2px;
 
   .iconfont {
-    @apply text-2xl transition cursor-pointer mx-3;
+    @apply text-xl transition cursor-pointer mx-2;
     @apply hover:text-green-500;
   }
 }
@@ -609,7 +636,7 @@ const openPlayListDrawer = () => {
 }
 
 .play-bar-img {
-  @apply w-14 h-14 rounded-2xl;
+  @apply w-14 h-14 rounded-xl;
 }
 
 .like-active {

@@ -14,7 +14,8 @@
           :aria-expanded="settingsStore.setData.isMenuExpanded"
           @click="toggleMenu"
         >
-          <span class="haru-mark" aria-label="HaruMusic">h<span>♪</span></span>
+          <span class="haru-mark" aria-hidden="true">h<span>♪</span></span>
+          <span v-if="settingsStore.setData.isMenuExpanded" class="haru-name">HaruMusic</span>
         </button>
       </div>
       <div class="app-menu-list">
@@ -65,11 +66,11 @@ const props = defineProps({
   },
   color: {
     type: String,
-    default: '#aaa'
+    default: 'var(--haru-nav-icon)'
   },
   selectColor: {
     type: String,
-    default: '#315f55'
+    default: 'var(--haru-nav-active)'
   },
   menus: {
     type: Array as any,
@@ -128,11 +129,13 @@ const toggleMenu = () => {
   margin-top: -8px;
 }
 .app-menu {
+  --haru-nav-icon: #84928b;
+  --haru-nav-active: #315f55;
   width: 84px;
   padding: 0 10px;
 }
 .app-menu-expanded {
-  width: 176px;
+  width: 196px;
 }
 .app-menu-header {
   display: flex;
@@ -140,6 +143,9 @@ const toggleMenu = () => {
   padding: 0 13px 20px;
 }
 .app-menu-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border: 0;
   padding: 0;
   background: transparent;
@@ -196,9 +202,22 @@ const toggleMenu = () => {
 .app-menu-logo:active {
   transform: scale(0.96);
 }
+.haru-name {
+  color: #284c41;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+:global(.dark) .haru-name {
+  color: #d1e7de;
+}
 .app-menu-item-text {
   font-size: 13px;
   font-weight: 600;
+}
+:global(.dark) .app-menu {
+  --haru-nav-icon: #9fb0a8;
+  --haru-nav-active: #b8dacc;
 }
 :global(.dark) .app-menu-item-link:hover {
   background: #252a29;

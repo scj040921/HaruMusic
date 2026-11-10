@@ -6,9 +6,8 @@
         <h2 class="text-xl font-bold tracking-tight text-neutral-900 md:text-2xl dark:text-white">
           {{ title }}
         </h2>
-        <div class="h-1.5 w-1.5 rounded-full bg-primary" />
       </div>
-      <bui-button variant="ghost" size="sm" @click="$emit('more')">
+      <bui-button class="haru-more" variant="ghost" size="sm" @click="$emit('more')">
         {{ t('comp.more') }}
         <template #trailing><i class="ri-arrow-right-s-line" aria-hidden="true" /></template>
       </bui-button>
@@ -178,3 +177,20 @@ onMounted(() => {
   fetchPlaylists();
 });
 </script>
+
+<style scoped>
+.haru-more {
+  color: #477667 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.haru-more:hover {
+  background: #edf4f0 !important;
+}
+:global(.dark) .haru-more {
+  color: #b5d9c9 !important;
+}
+:global(.dark) .haru-more:hover {
+  background: #263c32 !important;
+}
+</style>

@@ -178,6 +178,20 @@ describe('official source quality fallback', () => {
     expect(result?.url).toBe('https://example.com/lossless.flac');
   });
 
+  it('checks intermediate tiers when the API silently returns lower quality', async () => {
+    const getUrl = vi.mocked(getMusicUrl);
+    getUrl.mockReset();
+    getUrl.mockResolvedValueOnce({
+      data: { data: [{ url: 'https://example.com/standard.mp3', level: 'standard' }] }
+    } as any);
+    getUrl.mockResolvedValueOnce({
+      data: { data: [{ url: 'https://example.com/hires.flac', level: 'hires' }] }
+    } as any);
+    const result = await neteaseProvider.resolve({ id: 123 } as any, 'auto', {});
+    expect(result?.url).toBe('https://example.com/hires.flac');
+    expect(getUrl.mock.calls.map((call) => call[2])).toEqual(['jymaster', 'hires']);
+  });
+
   it('treats manual quality as an upper bound', async () => {
     const getUrl = vi.mocked(getMusicUrl);
     getUrl.mockReset();

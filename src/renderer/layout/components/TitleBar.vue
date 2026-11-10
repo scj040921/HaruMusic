@@ -233,7 +233,12 @@ onUnmounted(() => {
   min-height: 44px;
   padding: 0 16px;
   color: var(--text-color);
+  background: #f4f7f5;
   -webkit-app-region: drag;
+}
+
+:global(.dark) #title-bar {
+  background: #111815;
 }
 
 .title-bar__leading,
@@ -288,11 +293,11 @@ onUnmounted(() => {
 }
 
 .window-control:hover {
-  color: rgb(34 197 94);
+  color: #376d5e;
 }
 
 .window-control:focus-visible {
-  outline: 2px solid rgb(34 197 94 / 0.8);
+  outline: 2px solid #568f7c;
   outline-offset: -2px;
 }
 
