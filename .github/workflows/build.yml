@@ -34,10 +34,12 @@ jobs:
           if ($version -ne $env:REQUESTED_VERSION) { throw "Requested version does not match package.json" }
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Expected a three-part version" }
       - run: npm ci
+      # Vite generates the auto-import and component declaration files used by vue-tsc.
+      - run: npm run build
       - run: npm run typecheck
       - run: npm run lint:i18n
       - run: npm test
-      - run: npm run build:win
+      - run: npx electron-builder --win --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
       - run: node scripts/prepare-update-metadata.cjs dist
