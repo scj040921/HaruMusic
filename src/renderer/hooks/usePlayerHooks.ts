@@ -108,8 +108,7 @@ export const getSongUrl = async (
   try {
     ensureRequestValid();
 
-    if (songData.playMusicUrl) {
-      if (isDownloaded) return songData.playMusicUrl;
+    if (songData.playMusicUrl && !isDownloaded) {
       return await resolveCachedPlaybackUrl(songData.playMusicUrl, songData);
     }
 

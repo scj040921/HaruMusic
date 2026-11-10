@@ -116,14 +116,15 @@ export const resolveSong = async (
   const { orderedProviders, findProvider } = useMusicSourceRegistry();
 
   const sourceKeys = options.sourceKeys ?? effectiveSourceKeys(song.id as number);
-  const quality =
-    options.quality || getSongQuality(song.id) || settingsStore.setData?.musicQuality || 'auto';
+  const quality = options.isDownload
+    ? options.quality || 'auto'
+    : options.quality || getSongQuality(song.id) || settingsStore.setData?.musicQuality || 'auto';
   const globalKeys: string[] = settingsStore.setData?.enabledMusicSources || [];
 
   const songId = Number(song.id);
 
   // URL 缓存（键含参与音源集合，配置变化自动失效）
-  if (!options.force) {
+  if (!options.force && !options.isDownload) {
     const cached = await MusicResolveCache.getCachedMusicUrl(
       songId,
       sourceKeys ?? globalKeys,
@@ -169,7 +170,7 @@ export const resolveSong = async (
       continue;
     }
 
-    if (MusicResolveCache.isInFailedCache(songId, provider.key, quality)) {
+    if (!options.isDownload && MusicResolveCache.isInFailedCache(songId, provider.key, quality)) {
       attempts.push({ providerKey: provider.key, ok: false, reason: 'skipped' });
       continue;
     }
@@ -196,7 +197,7 @@ export const resolveSong = async (
           reason: 'no-source',
           costMs: Date.now() - stageStart
         });
-        MusicResolveCache.addFailedCache(songId, provider.key, quality);
+        if (!options.isDownload) MusicResolveCache.addFailedCache(songId, provider.key, quality);
         continue;
       }
 
@@ -214,7 +215,7 @@ export const resolveSong = async (
           detail: 'invalid-url',
           costMs: Date.now() - stageStart
         });
-        MusicResolveCache.addFailedCache(songId, provider.key, quality);
+        if (!options.isDownload) MusicResolveCache.addFailedCache(songId, provider.key, quality);
         continue;
       }
 
@@ -230,18 +231,19 @@ export const resolveSong = async (
         providerName: provider.name,
         attempts
       };
-      await MusicResolveCache.setCachedMusicUrl(
-        songId,
-        {
-          url: media.url,
-          format: result.media.format,
-          br: result.media.br,
-          providerKey: provider.key,
-          providerName: provider.name
-        },
-        sourceKeys ?? globalKeys,
-        quality
-      );
+      if (!options.isDownload)
+        await MusicResolveCache.setCachedMusicUrl(
+          songId,
+          {
+            url: media.url,
+            format: result.media.format,
+            br: result.media.br,
+            providerKey: provider.key,
+            providerName: provider.name
+          },
+          sourceKeys ?? globalKeys,
+          quality
+        );
       return result;
     } catch (error) {
       const isTimeout = (error as Error).message === 'timeout';
@@ -252,7 +254,7 @@ export const resolveSong = async (
         detail: (error as Error).message?.slice(0, 120),
         costMs: Date.now() - stageStart
       });
-      MusicResolveCache.addFailedCache(songId, provider.key, quality);
+      if (!options.isDownload) MusicResolveCache.addFailedCache(songId, provider.key, quality);
     }
   }
 

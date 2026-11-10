@@ -63,4 +63,18 @@ src/renderer/components.d.ts
 
 # 内部整理记录，不进公开仓库
 docs/private/
-docs/private/
+
+# Local credentials, build output and discarded upstream assets
+.env
+.env.*
+!.env.development
+*.log
+*.exe
+*.blockmap
+docs/image*.png
+.github/CODEOWNERS
+.github/ISSUE_TEMPLATE/
+.github/PULL_REQUEST_TEMPLATE.md
+.github/issue-shoot.md
+.github/workflows/deploy.yml
+android/
