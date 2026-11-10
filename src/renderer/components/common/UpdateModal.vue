@@ -41,9 +41,10 @@
       >
         <n-scrollbar style="max-height: 300px">
           <div
-            class="update-body p-5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300"
-            v-html="parsedReleaseNotes"
-          />
+            class="update-body whitespace-pre-wrap p-5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300"
+          >
+            {{ updateState.releaseNotes }}
+          </div>
         </n-scrollbar>
       </div>
 
@@ -101,7 +102,6 @@
 </template>
 
 <script setup lang="ts">
-import { marked } from 'marked';
 import { computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -112,8 +112,6 @@ import {
   type AppUpdateState,
   createDefaultAppUpdateState
 } from '../../../shared/appUpdate';
-
-marked.setOptions({ breaks: true, gfm: true });
 
 const { t } = useI18n();
 const message = useMessage();
@@ -143,18 +141,6 @@ const currentVersionText = computed(() => updateState.value.currentVersion || '-
 const updateVersionText = computed(() => updateState.value.availableVersion || '--');
 const progressPercent = computed(() => Math.round(updateState.value.downloadProgress));
 const errorText = computed(() => updateState.value.errorMessage || t('comp.update.downloadFailed'));
-
-const parsedReleaseNotes = computed(() => {
-  const releaseNotes = updateState.value.releaseNotes;
-  if (!releaseNotes) return '';
-
-  try {
-    return marked.parse(releaseNotes) as string;
-  } catch (error) {
-    console.error('Markdown 解析失败:', error);
-    return releaseNotes;
-  }
-});
 
 const progressText = computed(() => {
   if (isDownloaded.value) {

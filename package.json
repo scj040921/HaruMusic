@@ -1,6 +1,6 @@
 {
   "name": "harumusic",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "HaruMusic desktop music player",
   "author": "HaruMusic contributors",
   "main": "./out/main/index.js",
@@ -221,7 +221,21 @@
       "include": "build/installer.nsh",
       "deleteAppDataOnUninstall": false,
       "uninstallDisplayName": "HaruMusic"
-    }
+    },
+    "files": [
+      "out/**/*",
+      "resources/icons/**/*",
+      "resources/icon.png",
+      "LICENSE"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "scj040921",
+        "repo": "HaruMusic",
+        "private": true
+      }
+    ]
   },
   "pnpm": {
     "onlyBuiltDependencies": [

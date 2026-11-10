@@ -20,4 +20,4 @@ npm run build
 npx electron-builder --win --x64 --publish never
 ```
 
-HaruMusic 当前尚未配置自己的自动更新服务；请勿使用上游安装包更新本应用。原始版权和许可声明见 [LICENSE](LICENSE)。上游 README 另有使用范围声明，分发前应核对其适用条件及相关音乐内容授权。
+Windows 版本可从私有 GitHub Release 检查更新。需要安装 GitHub CLI，并使用有仓库读取权限的账号运行 `gh auth login`；凭据由 GitHub CLI 保管，不打包进应用。自动更新只检查正式 Release，下载和安装需用户确认。原始版权和许可声明见 [LICENSE](LICENSE)。上游 README 另有使用范围声明，分发前应核对其适用条件及相关音乐内容授权。

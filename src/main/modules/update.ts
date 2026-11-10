@@ -11,6 +11,7 @@ import {
   type AppUpdateState,
   createDefaultAppUpdateState
 } from '../../shared/appUpdate';
+import { getGithubUpdateCredential } from './githubUpdateAuth';
 
 const { autoUpdater } = electronUpdater;
 
@@ -23,7 +24,19 @@ let isInitialized = false;
 let checkForUpdatesPromise: Promise<AppUpdateState> | null = null;
 let downloadUpdatePromise: Promise<AppUpdateState> | null = null;
 
-const isAutoUpdateSupported = (): boolean => false;
+const isAutoUpdateSupported = (): boolean => app.isPackaged && process.platform === 'win32';
+
+const configurePrivateFeed = async (): Promise<void> => {
+  const token = await getGithubUpdateCredential();
+  // This credential exists only in the running process, never in the package.
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'scj040921',
+    repo: 'HaruMusic',
+    private: true,
+    token
+  });
+};
 
 const normalizeReleaseNotes = (releaseNotes: UpdateInfo['releaseNotes']): string => {
   if (typeof releaseNotes === 'string') {
@@ -63,7 +76,7 @@ const resetUpdateState = () => {
   };
 };
 
-const getUnsupportedMessage = () => 'HaruMusic 暂未配置更新服务';
+const getUnsupportedMessage = () => '自动更新仅适用于已安装的 Windows 版本。';
 
 const applyUpdateInfo = (
   status: AppUpdateState['status'],
@@ -109,10 +122,14 @@ const checkForUpdates = async (options: CheckUpdateOptions = {}): Promise<AppUpd
         errorMessage: null,
         checkedAt: Date.now()
       });
+      await configurePrivateFeed();
       await autoUpdater.checkForUpdates();
       return updateState;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '检查更新失败';
+      const errorMessage =
+        error instanceof Error && error.message.startsWith('无法读取 GitHub CLI')
+          ? error.message
+          : '检查更新失败，请确认网络和 GitHub 仓库访问权限后重试。';
       setUpdateState({
         status: APP_UPDATE_STATUS.error,
         errorMessage,
@@ -156,8 +173,8 @@ const downloadUpdate = async (): Promise<AppUpdateState> => {
     try {
       await autoUpdater.downloadUpdate();
       return updateState;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '下载更新失败';
+    } catch {
+      const errorMessage = '下载更新失败，请确认网络和 GitHub 仓库访问权限后重试。';
       setUpdateState({
         status: APP_UPDATE_STATUS.error,
         errorMessage
@@ -192,7 +209,10 @@ export function setupUpdateHandlers(mainWindow: BrowserWindow) {
   resetUpdateState();
 
   autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.allowPrerelease = false;
+  // Upstream error objects can contain request metadata; do not log them.
+  autoUpdater.logger = null;
 
   autoUpdater.on('checking-for-update', () => {
     setUpdateState({
@@ -242,10 +262,10 @@ export function setupUpdateHandlers(mainWindow: BrowserWindow) {
     });
   });
 
-  autoUpdater.on('error', (error) => {
+  autoUpdater.on('error', () => {
     setUpdateState({
       status: APP_UPDATE_STATUS.error,
-      errorMessage: error?.message ?? '自动更新失败'
+      errorMessage: '更新操作失败，请确认网络和 GitHub 仓库访问权限后重试。'
     });
   });
 
@@ -262,6 +282,7 @@ export function setupUpdateHandlers(mainWindow: BrowserWindow) {
   });
 
   ipcMain.handle('app-update:quit-and-install', async () => {
+    if (updateState.status !== APP_UPDATE_STATUS.downloaded) return false;
     autoUpdater.quitAndInstall(false, true);
     return true;
   });
