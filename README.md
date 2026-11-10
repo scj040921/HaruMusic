@@ -20,4 +20,4 @@ npm run build
 npx electron-builder --win --x64 --publish never
 ```
 
-HaruMusic 当前尚未配置自己的自动更新服务；请勿使用上游安装包更新本应用。原项目文档保留在 [README.upstream.md](README.upstream.md)，原始版权和许可声明见 [LICENSE](LICENSE)。上游 README 另有使用范围声明，分发前应核对其适用条件及相关音乐内容授权。
+HaruMusic 当前尚未配置自己的自动更新服务；请勿使用上游安装包更新本应用。原始版权和许可声明见 [LICENSE](LICENSE)。上游 README 另有使用范围声明，分发前应核对其适用条件及相关音乐内容授权。

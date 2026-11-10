@@ -91,7 +91,7 @@ export default {
       groupPlugin: 'インポートしたプラグイン',
       tab: 'ローカルプラグイン',
       title: 'ローカル音源プラグイン',
-      desc: 'Alger ネイティブ・MusicFree・LX Music の音源スクリプトをインポートし、再生時にリスト順で自動解析します',
+      desc: 'ネイティブ・MusicFree・LX Music の音源スクリプトをインポートし、再生時にリスト順で自動解析します',
       importLocal: 'ローカルスクリプトをインポート',
       importOnline: 'URL からインポート',
       urlPlaceholder: '音源スクリプトの URL を入力',
@@ -311,7 +311,7 @@ export default {
     manualUpdate: '手動更新',
     gotoGithub: 'Githubへ',
     author: '作者',
-    authorDesc: 'algerkong スターを付けてください🌟',
+    authorDesc: 'HaruMusic プロジェクト',
     messages: {
       checkError: '更新確認に失敗しました。後でもう一度お試しください'
     }

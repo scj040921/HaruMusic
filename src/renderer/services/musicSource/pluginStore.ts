@@ -101,7 +101,7 @@ export const MusicSourcePluginStore = {
       }
     }
     if (!dialect) {
-      throw new Error('无法识别的音源脚本格式，支持 Alger 原生、MusicFree 与 LX Music 脚本。');
+      throw new Error('无法识别的音源脚本格式，支持 原生、MusicFree 与 LX Music 脚本。');
     }
 
     const existing = readPlugins();
@@ -218,7 +218,7 @@ export const MusicSourcePluginStore = {
   getDialectLabel(dialect: MusicSourcePluginDialect): string {
     if (dialect === 'musicfree') return 'MusicFree';
     if (dialect === 'lxmusic') return 'LX Music';
-    return 'Alger';
+    return 'Native';
   },
 
   nextOrder(): number {

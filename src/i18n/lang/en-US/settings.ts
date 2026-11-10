@@ -92,7 +92,7 @@ export default {
       groupPlugin: 'Imported Plugins',
       tab: 'Local Plugins',
       title: 'Local Source Plugins',
-      desc: 'Import Alger native, MusicFree or LX Music source scripts; playback resolves them in list order',
+      desc: 'Import native, MusicFree or LX Music source scripts; playback resolves them in list order',
       importLocal: 'Import Local Script',
       importOnline: 'Import from URL',
       urlPlaceholder: 'Enter source script URL',
@@ -313,7 +313,7 @@ export default {
     manualUpdate: 'Manual Update',
     gotoGithub: 'Go to Github',
     author: 'Author',
-    authorDesc: 'algerkong Give a star🌟',
+    authorDesc: 'HaruMusic project',
     messages: {
       checkError: 'Failed to check for updates, please try again later'
     }

@@ -94,7 +94,7 @@ export default {
     wechatQR: '微信收款码',
     coffeeDesc: '一杯咖啡，一份支持',
     coffeeDescLinkText: '查看更多',
-    groupText: '微信公众号：AlgerMusic',
+    groupText: 'HaruMusic',
     messages: {
       copySuccess: '已复制到剪贴板'
     },

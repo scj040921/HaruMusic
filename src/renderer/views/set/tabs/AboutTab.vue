@@ -153,7 +153,7 @@ const openManualUpdatePage = async () => {
 };
 
 const openAuthor = () => {
-  window.open(setData.value.authorUrl);
+  window.open('https://github.com/scj040921/HaruMusic', '_blank');
 };
 
 defineExpose({ checkForUpdates });

@@ -181,7 +181,7 @@ const {
 
 const openDownloadPage = () => {
   if (!isElectron) {
-    window.open('http://donate.alger.fun/download', '_blank');
+    window.open('https://github.com/scj040921/HaruMusic/releases', '_blank');
   }
 };
 

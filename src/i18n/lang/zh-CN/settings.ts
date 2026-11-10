@@ -88,7 +88,7 @@ export default {
       groupPlugin: '导入的音源插件',
       tab: '本地插件',
       title: '本地音源插件',
-      desc: '支持导入 Alger 原生、MusicFree 与 LX Music 音源脚本，播放时按列表顺序自动解析',
+      desc: '支持导入 原生、MusicFree 与 LX Music 音源脚本，播放时按列表顺序自动解析',
       importLocal: '导入本地脚本',
       importOnline: '从 URL 导入',
       urlPlaceholder: '输入音源脚本 URL',
@@ -307,7 +307,7 @@ export default {
     manualUpdate: '官网更新',
     gotoGithub: '前往 Github',
     author: '作者',
-    authorDesc: 'algerkong 点个star🌟呗',
+    authorDesc: 'HaruMusic 项目主页',
     messages: {
       checkError: '检查更新失败，请稍后重试'
     }

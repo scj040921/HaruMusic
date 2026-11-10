@@ -91,7 +91,7 @@ export default {
       groupPlugin: '가져온 플러그인',
       tab: '로컬 플러그인',
       title: '로컬 음원 플러그인',
-      desc: 'Alger 네이티브, MusicFree, LX Music 음원 스크립트를 가져오고 재생 시 목록 순서대로 자동으로 해석합니다',
+      desc: '네이티브, MusicFree, LX Music 음원 스크립트를 가져오고 재생 시 목록 순서대로 자동으로 해석합니다',
       importLocal: '로컬 스크립트 가져오기',
       importOnline: 'URL에서 가져오기',
       urlPlaceholder: '음원 스크립트 URL 입력',
@@ -312,7 +312,7 @@ export default {
     manualUpdate: '수동 업데이트',
     gotoGithub: 'Github로 이동',
     author: '작성자',
-    authorDesc: 'algerkong 별점🌟 부탁드려요',
+    authorDesc: 'HaruMusic 프로젝트',
     messages: {
       checkError: '업데이트 확인 실패, 나중에 다시 시도하세요'
     }
