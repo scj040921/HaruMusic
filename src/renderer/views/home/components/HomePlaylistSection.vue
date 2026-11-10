@@ -8,13 +8,10 @@
         </h2>
         <div class="h-1.5 w-1.5 rounded-full bg-primary" />
       </div>
-      <button
-        class="group flex items-center gap-1.5 text-sm font-semibold text-neutral-400 transition-colors hover:text-primary dark:text-neutral-500 dark:hover:text-white"
-        @click="$emit('more')"
-      >
-        <span>{{ t('comp.more') }}</span>
-        <i class="ri-arrow-right-s-line text-base transition-transform group-hover:translate-x-1" />
-      </button>
+      <bui-button variant="ghost" size="sm" @click="$emit('more')">
+        {{ t('comp.more') }}
+        <template #trailing><i class="ri-arrow-right-s-line" aria-hidden="true" /></template>
+      </bui-button>
     </div>
 
     <!-- Loading Skeleton -->
@@ -53,6 +50,9 @@
 </template>
 
 <script setup lang="ts">
+import '@nilptr/boardui-vue/style.css';
+
+import { BuiButton } from '@nilptr/boardui-vue';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';

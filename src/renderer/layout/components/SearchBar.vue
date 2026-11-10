@@ -200,11 +200,9 @@
     </n-popover>
 
     <!-- GitHub -->
-    <coffee :alipay-q-r="alipay" :wechat-q-r="wechat">
-      <button class="action-btn" @click="toGithub">
-        <i class="ri-github-fill" />
-      </button>
-    </coffee>
+    <button class="action-btn" type="button" aria-label="HaruMusic GitHub" @click="toGithub">
+      <i class="ri-github-fill" />
+    </button>
   </div>
 </template>
 
@@ -217,9 +215,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { getSearchKeyword } from '@/api/home';
 import { getUserDetail } from '@/api/login';
 import { getSearchSuggestions } from '@/api/search';
-import alipay from '@/assets/alipay.png';
-import wechat from '@/assets/wechat.png';
-import Coffee from '@/components/Coffee.vue';
 import { SEARCH_TYPES, USER_SET_OPTIONS } from '@/const/bar-const';
 import { useZoom } from '@/hooks/useZoom';
 import { useDownloadStore } from '@/store/modules/download';
@@ -229,7 +224,7 @@ import { useSearchStore } from '@/store/modules/search';
 import { useSettingsStore } from '@/store/modules/settings';
 import { useUserStore } from '@/store/modules/user';
 import { getImgUrl, isElectron } from '@/utils';
-import { checkUpdate, UpdateResult } from '@/utils/update';
+import type { UpdateResult } from '@/utils/update';
 
 import config from '../../../../package.json';
 
@@ -458,9 +453,9 @@ watchEffect(() => {
 
 const restartApp = () => window.electron.ipcRenderer.send('restart');
 const toLogin = () => router.push('/user');
-const toGithub = () => window.open('http://donate.alger.fun/download', '_blank');
+const toGithub = () => window.open('https://github.com/scj040921/HaruMusic', '_blank');
 const toGithubRelease = () => {
-  window.location.href = 'https://donate.alger.fun/download';
+  window.open('https://github.com/scj040921/HaruMusic', '_blank');
 };
 
 const isDark = computed({
@@ -491,19 +486,11 @@ const updateInfo = ref<UpdateResult>({
   currentVersion: config.version,
   releaseInfo: null
 });
-const checkForUpdates = async () => {
-  try {
-    const r = await checkUpdate(config.version);
-    if (r) updateInfo.value = r;
-  } catch (e) {
-    void e; // 更新检查失败时静默处理
-  }
-};
 
 onMounted(() => {
   loadHotSearch();
   loadPage();
-  checkForUpdates();
+  // HaruMusic does not use the upstream release feed.
   isElectron && initZoomFactor();
 });
 </script>
@@ -515,8 +502,8 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   height: 34px;
-  background: #f3f4f6;
-  border-radius: 9999px;
+  background: #edf2f0;
+  border-radius: 10px;
   padding: 3px;
   gap: 0;
   box-sizing: border-box;
@@ -530,9 +517,9 @@ onMounted(() => {
   top: 3px;
   left: 0;
   height: calc(100% - 6px);
-  border-radius: 9999px;
-  background: #22c55e;
-  box-shadow: 0 1px 6px rgba(34, 197, 94, 0.35);
+  border-radius: 7px;
+  background: #345e56;
+  box-shadow: none;
   transition:
     transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
     width 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);

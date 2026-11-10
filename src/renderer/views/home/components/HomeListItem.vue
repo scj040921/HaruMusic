@@ -6,12 +6,12 @@
   >
     <!-- Cover -->
     <div
-      class="relative aspect-square overflow-hidden rounded-2xl bg-neutral-100 shadow-sm transition-all duration-300 ease-out group-hover:shadow-xl dark:bg-neutral-800"
+      class="relative aspect-square overflow-hidden rounded-xl bg-neutral-100 transition-all duration-300 ease-out dark:bg-neutral-800"
     >
       <img
         ref="coverRef"
         :src="getImgUrl(cover, '512y512')"
-        class="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
+        class="h-full w-full object-cover cover-art"
         loading="lazy"
         :alt="title"
         crossorigin="anonymous"
@@ -196,7 +196,27 @@ const extractColor = async () => {
 
 <style scoped>
 .home-list-card {
-  animation: itemFadeIn 0.5s ease-out backwards;
+  animation: itemFadeIn 220ms cubic-bezier(0.23, 1, 0.32, 1) backwards;
+}
+
+.cover-art {
+  transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .home-list-card:hover .cover-art {
+    transform: scale(1.035);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-list-card {
+    animation: none;
+  }
+  .cover-art {
+    transition: none;
+  }
+  .home-list-card:hover .cover-art {
+    transform: none;
+  }
 }
 
 @keyframes itemFadeIn {

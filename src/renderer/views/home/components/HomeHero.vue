@@ -302,8 +302,8 @@ const hotPlaylists = ref<any[]>([]);
 const hotArtistsList = ref<any[]>([]);
 const dailyCoverRef = ref<HTMLImageElement | null>(null);
 const fmCoverRef = ref<HTMLImageElement | null>(null);
-const dailyCardBg = ref('linear-gradient(135deg, #667eea 0%, #764ba2 100%)');
-const fmCardBg = ref('linear-gradient(135deg, #e91e63 0%, #c2185b 100%)');
+const dailyCardBg = ref('#355d54');
+const fmCardBg = ref('#344b47');
 
 const isLoggedIn = computed(() => !!userStore.user);
 const dayRecommendSongs = computed(() => recommendStore.dailyRecommendSongs);
@@ -675,6 +675,15 @@ onActivated(() => {
   height: 100%;
   min-height: 140px;
   max-height: 180px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-card,
+  .fm-bg-flow,
+  .eq-bar,
+  .skeleton-shimmer {
+    animation: none !important;
+  }
 }
 
 /* Card animation */

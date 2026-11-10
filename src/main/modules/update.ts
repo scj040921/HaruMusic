@@ -23,17 +23,7 @@ let isInitialized = false;
 let checkForUpdatesPromise: Promise<AppUpdateState> | null = null;
 let downloadUpdatePromise: Promise<AppUpdateState> | null = null;
 
-const isAutoUpdateSupported = (): boolean => {
-  // if (!app.isPackaged) {
-  //   return false;
-  // }
-
-  if (process.platform === 'linux') {
-    return Boolean(process.env.APPIMAGE);
-  }
-
-  return true;
-};
+const isAutoUpdateSupported = (): boolean => false;
 
 const normalizeReleaseNotes = (releaseNotes: UpdateInfo['releaseNotes']): string => {
   if (typeof releaseNotes === 'string') {
@@ -73,17 +63,7 @@ const resetUpdateState = () => {
   };
 };
 
-const getUnsupportedMessage = () => {
-  if (!app.isPackaged) {
-    return '当前环境为开发模式，自动更新仅在打包后的应用内可用';
-  }
-
-  if (process.platform === 'linux') {
-    return '当前 Linux 安装方式不支持自动更新，请前往官网下载安装包更新';
-  }
-
-  return '当前环境不支持自动更新，请前往官网下载安装包更新';
-};
+const getUnsupportedMessage = () => 'HaruMusic 暂未配置更新服务';
 
 const applyUpdateInfo = (
   status: AppUpdateState['status'],

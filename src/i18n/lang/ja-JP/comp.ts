@@ -1,4 +1,10 @@
 export default {
+  haruHome: {
+    expandSidebar: 'サイドバーを開く',
+    collapseSidebar: 'サイドバーを閉じる',
+    title: 'お気に入りの音楽を見つけよう',
+    subtitle: '今日のおすすめから、新しい一曲に出会おう。'
+  },
   more: 'もっと見る',
   homeListItem: {
     loading: '読み込み中...'

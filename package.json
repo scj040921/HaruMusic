@@ -1,15 +1,15 @@
 {
-  "name": "AlgerMusicPlayer",
-  "version": "5.1.0",
-  "description": "Alger Music Player",
-  "author": "Alger <algerkc@qq.com>",
+  "name": "harumusic",
+  "version": "0.1.0",
+  "description": "HaruMusic desktop music player, based on AlgerMusicPlayer",
+  "author": "HaruMusic contributors",
   "main": "./out/main/index.js",
-  "homepage": "https://github.com/algerkong/AlgerMusicPlayer",
+  "homepage": "https://github.com/scj040921/HaruMusic",
   "scripts": {
     "prepare": "husky",
     "format": "prettier --write ./src",
     "lint": "eslint ./src --fix && npm run lint:i18n",
-    "lint:i18n": "bun scripts/check_i18n.ts",
+    "lint:i18n": "node --experimental-strip-types scripts/check_i18n.ts",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
@@ -43,6 +43,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@httptoolkit/dbus-native": "^0.1.5",
+    "@nilptr/boardui-vue": "0.0.2",
     "@unblockneteasemusic/server": "^0.27.10",
     "big-integer": "^1.6.52",
     "cheerio": "^1.2.0",
@@ -132,15 +133,8 @@
     "vue-tsc": "^2.2.12"
   },
   "build": {
-    "appId": "com.alger.music",
-    "productName": "AlgerMusicPlayer",
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "algerkong",
-        "repo": "AlgerMusicPlayer"
-      }
-    ],
+    "appId": "com.haruapps.harumusic",
+    "productName": "HaruMusic",
     "extraResources": [
       {
         "from": "resources/html",
@@ -171,7 +165,7 @@
       "identity": null,
       "type": "distribution",
       "binaries": [
-        "Contents/MacOS/AlgerMusicPlayer"
+        "Contents/MacOS/HaruMusic"
       ]
     },
     "win": {
@@ -180,9 +174,7 @@
         {
           "target": "nsis",
           "arch": [
-            "x64",
-            "ia32",
-            "arm64"
+            "x64"
           ]
         }
       ],
@@ -225,10 +217,10 @@
       "uninstallerIcon": "resources/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "AlgerMusicPlayer",
+      "shortcutName": "HaruMusic",
       "include": "build/installer.nsh",
-      "deleteAppDataOnUninstall": true,
-      "uninstallDisplayName": "AlgerMusicPlayer"
+      "deleteAppDataOnUninstall": false,
+      "uninstallDisplayName": "HaruMusic"
     }
   },
   "pnpm": {
@@ -240,5 +232,8 @@
   "optionalDependencies": {
     "jsbi": "^4.3.2",
     "x11": "^2.3.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

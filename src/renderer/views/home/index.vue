@@ -2,13 +2,24 @@
   <div class="home-container h-full w-full bg-white dark:bg-black transition-colors duration-500">
     <n-scrollbar class="h-full">
       <div class="home-content w-full pb-32 page-padding">
-        <!-- Hero Section -->
+        <div class="home-heading">
+          <div>
+            <p class="home-kicker">HaruMusic</p>
+            <h1>{{ t('comp.haruHome.title') }}</h1>
+            <p class="home-subtitle">{{ t('comp.haruHome.subtitle') }}</p>
+          </div>
+        </div>
         <home-hero />
 
         <!-- Main Content Sections -->
         <div class="content-sections space-y-10 md:space-y-8 lg:space-y-12">
           <!-- Recommended Playlists (Grid Section) -->
-          <home-playlist-section :title="t('comp.recommendSonglist.title')" :limit="18" />
+          <home-playlist-section
+            :title="t('comp.recommendSonglist.title')"
+            :limit="10"
+            :rows="2"
+            @more="router.push('/list')"
+          />
 
           <!-- Hot Artists (Horizontal Scroll Section) -->
           <home-artists :title="t('comp.recommendSinger.title')" :limit="15" />
@@ -52,6 +63,45 @@ const router = useRouter();
 <style lang="scss" scoped>
 .home-container {
   position: relative;
+}
+
+.home-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  padding: 18px 0 28px;
+}
+.home-kicker {
+  margin: 0 0 8px;
+  color: #638b83;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.home-heading h1 {
+  margin: 0;
+  font-size: 32px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.home-subtitle {
+  margin: 9px 0 0;
+  color: #737e7d;
+  font-size: 14px;
+}
+@media (max-width: 767px) {
+  .home-heading {
+    padding: 14px 0 20px;
+  }
+  .home-heading h1 {
+    font-size: 26px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :deep(.animate-item) {
+    animation: none !important;
+  }
 }
 
 /* Global animation optimization - use will-change sparingly */

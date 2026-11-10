@@ -346,6 +346,25 @@ const openPlayListDrawer = () => {
 </script>
 
 <style lang="scss" scoped>
+.music-buttons-play {
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms ease;
+}
+.music-buttons-play:active {
+  transform: scale(0.96);
+}
+@media (prefers-reduced-motion: reduce) {
+  .music-buttons-play {
+    transition: none;
+  }
+  .music-buttons-play:active {
+    transform: none;
+  }
+  .music-play-bar {
+    animation-duration: 1ms !important;
+  }
+}
 .text-ellipsis {
   width: 100%;
 }

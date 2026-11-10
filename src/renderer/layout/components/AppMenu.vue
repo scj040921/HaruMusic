@@ -3,9 +3,19 @@
     <!-- menu -->
     <div class="app-menu" :class="{ 'app-menu-expanded': settingsStore.setData.isMenuExpanded }">
       <div class="app-menu-header">
-        <div class="app-menu-logo" @click="toggleMenu">
-          <img :src="icon" class="w-9 h-9" alt="logo" />
-        </div>
+        <button
+          class="app-menu-logo"
+          type="button"
+          :aria-label="
+            settingsStore.setData.isMenuExpanded
+              ? t('comp.haruHome.collapseSidebar')
+              : t('comp.haruHome.expandSidebar')
+          "
+          :aria-expanded="settingsStore.setData.isMenuExpanded"
+          @click="toggleMenu"
+        >
+          <span class="haru-mark" aria-label="HaruMusic">h<span>♪</span></span>
+        </button>
       </div>
       <div class="app-menu-list">
         <div v-for="(item, index) in menus" :key="item.path" class="app-menu-item">
@@ -15,18 +25,21 @@
             placement="bottom"
           >
             <template #trigger>
-              <router-link class="app-menu-item-link" :to="item.path">
+              <router-link
+                class="app-menu-item-link"
+                :class="{ 'is-active': isChecked(index) }"
+                :aria-label="t(item.meta.title)"
+                :aria-current="isChecked(index) ? 'page' : undefined"
+                :to="item.path"
+              >
                 <i
                   class="iconfont app-menu-item-icon"
                   :style="iconStyle(index)"
                   :class="item.meta.icon"
                 ></i>
-                <span
-                  v-if="settingsStore.setData.isMenuExpanded"
-                  class="app-menu-item-text ml-3"
-                  :class="isChecked(index) ? 'text-green-500' : ''"
-                  >{{ t(item.meta.title) }}</span
-                >
+                <span v-if="settingsStore.setData.isMenuExpanded" class="app-menu-item-text ml-3">{{
+                  t(item.meta.title)
+                }}</span>
               </router-link>
             </template>
             <div v-if="!settingsStore.setData.isMenuExpanded">{{ t(item.meta.title) }}</div>
@@ -42,7 +55,6 @@ import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 
-import icon from '@/assets/icon.png';
 import { useSettingsStore } from '@/store';
 import { isMobile } from '@/utils';
 
@@ -57,7 +69,7 @@ const props = defineProps({
   },
   selectColor: {
     type: String,
-    default: '#22c55e'
+    default: '#315f55'
   },
   menus: {
     type: Array as any,
@@ -97,74 +109,113 @@ const toggleMenu = () => {
 </script>
 
 <style lang="scss" scoped>
-.app-menu {
-  @apply flex-col items-center justify-center transition-all duration-300 w-[100px] px-1;
+.haru-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: #d9e9e3;
+  color: #315f55;
+  font:
+    700 25px/1 Georgia,
+    serif;
 }
-
+.haru-mark span {
+  font-size: 13px;
+  margin-left: -2px;
+  margin-top: -8px;
+}
+.app-menu {
+  width: 84px;
+  padding: 0 10px;
+}
+.app-menu-expanded {
+  width: 176px;
+}
+.app-menu-header {
+  display: flex;
+  align-items: center;
+  padding: 0 13px 20px;
+}
+.app-menu-logo {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.app-menu-logo:focus-visible,
+.app-menu-item-link:focus-visible {
+  outline: 2px solid #4b8173;
+  outline-offset: 2px;
+}
 .app-menu-list {
-  max-height: calc(100vh - 120px); /* 为header预留空间，防止菜单项被遮挡 */
+  max-height: calc(100vh - 130px);
   overflow-y: auto;
   overflow-x: hidden;
-  /* 自定义滚动条样式 - 默认隐藏，悬停时显示 */
   scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-  padding-bottom: 20px;
-  transition: scrollbar-color 0.3s ease;
-
-  &::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background-color: transparent;
-    border-radius: 2px;
-    transition: background-color 0.3s ease;
-  }
-
-  /* 悬停时显示滚动条 */
-  &:hover {
-    scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
-
-    &::-webkit-scrollbar-thumb {
-      background-color: rgba(156, 163, 175, 0.5);
-
-      &:hover {
-        background-color: rgba(156, 163, 175, 0.7);
-      }
-    }
-  }
 }
-
-.app-menu-expanded {
-  @apply w-[160px];
-
-  .app-menu-item {
-    @apply hover:bg-gray-100 dark:hover:bg-gray-800 rounded mr-4;
-  }
+.app-menu-item {
+  margin-bottom: 5px;
 }
-
-.app-menu-item-link,
-.app-menu-header {
-  @apply flex items-center w-[200px] overflow-hidden ml-2 px-5;
-}
-
-.app-menu-header {
-  @apply ml-1;
-}
-
 .app-menu-item-link {
-  @apply mb-6 mt-6;
+  display: flex;
+  align-items: center;
+  height: 45px;
+  padding: 0 18px;
+  border-radius: 10px;
+  color: #7d8885;
+  text-decoration: none;
+  white-space: nowrap;
 }
-
+.app-menu-item-link:hover {
+  background: #edf2f0;
+}
+.app-menu-item-link.is-active {
+  background: #e5efeb;
+  color: #315f55;
+}
 .app-menu-item-icon {
-  @apply transition-all duration-200 text-gray-500 dark:text-gray-400;
-
-  &:hover {
-    @apply text-green-500 scale-105 !important;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.app-menu-item-link:active .app-menu-item-icon {
+  transform: scale(0.94);
+}
+@media (hover: hover) and (pointer: fine) {
+  .app-menu-item-link:hover .app-menu-item-icon {
+    transform: translateX(2px);
+  }
+}
+.app-menu-logo {
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.app-menu-logo:active {
+  transform: scale(0.96);
+}
+.app-menu-item-text {
+  font-size: 13px;
+  font-weight: 600;
+}
+:global(.dark) .app-menu-item-link:hover {
+  background: #252a29;
+}
+:global(.dark) .app-menu-item-link.is-active {
+  background: #283c36;
+  color: #a8d4c4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-menu-logo,
+  .app-menu-item-icon {
+    transition: none;
+  }
+  .app-menu-logo:active,
+  .app-menu-item-link:active .app-menu-item-icon,
+  .app-menu-item-link:hover .app-menu-item-icon {
+    transform: none;
   }
 }
 

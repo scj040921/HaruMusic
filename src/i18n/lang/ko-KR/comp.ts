@@ -1,4 +1,10 @@
 export default {
+  haruHome: {
+    expandSidebar: '사이드바 펼치기',
+    collapseSidebar: '사이드바 접기',
+    title: '새로운 음악을 발견하세요',
+    subtitle: '오늘의 추천에서 다음으로 좋아할 곡을 찾아보세요.'
+  },
   more: '더 보기',
   homeListItem: {
     loading: '로딩 중...'

@@ -1,4 +1,10 @@
 export default {
+  haruHome: {
+    expandSidebar: '展開側邊欄',
+    collapseSidebar: '收合側邊欄',
+    title: '發現好音樂',
+    subtitle: '從今天的推薦開始，找到下一首喜歡的歌。'
+  },
   more: '更多',
   homeListItem: {
     loading: '載入中...'

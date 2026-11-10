@@ -66,7 +66,7 @@
 
       <!-- 应用标题：Mac 靠左侧紧随控制按钮，其他系统靠左 -->
       <span class="title-bar__brand" :class="{ 'title-bar__brand--mac': isElectron && isMac }">
-        Alger Music
+        HaruMusic
       </span>
     </div>
 
@@ -230,8 +230,8 @@ onUnmounted(() => {
 <style scoped lang="scss">
 #title-bar {
   @apply relative z-[3000] flex select-none items-center justify-between;
-  min-height: 40px;
-  padding: 0 10px;
+  min-height: 44px;
+  padding: 0 16px;
   color: var(--text-color);
   -webkit-app-region: drag;
 }
@@ -253,6 +253,9 @@ onUnmounted(() => {
 .title-bar__brand {
   @apply truncate text-xs font-medium tracking-wide text-neutral-600 dark:text-neutral-300;
   pointer-events: none;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .title-bar__brand--mac {

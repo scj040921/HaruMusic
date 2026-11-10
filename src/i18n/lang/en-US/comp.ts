@@ -1,4 +1,10 @@
 export default {
+  haruHome: {
+    expandSidebar: 'Expand sidebar',
+    collapseSidebar: 'Collapse sidebar',
+    title: 'Find your next favorite',
+    subtitle: 'Start with today’s picks and discover something new.'
+  },
   more: 'More',
   homeListItem: {
     loading: 'Loading...'
