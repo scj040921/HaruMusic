@@ -66,8 +66,12 @@ vi.mock('@/api/parseFromCustomApi', () => ({
   parseFromCustomApi: vi.fn(async () => null)
 }));
 
+import { getMusicUrl } from '../src/renderer/api/music';
 import { migrateLegacyMusicSources } from '../src/renderer/services/musicSource/migration';
-import { builtinProviders } from '../src/renderer/services/musicSource/providers/builtin';
+import {
+  builtinProviders,
+  neteaseProvider
+} from '../src/renderer/services/musicSource/providers/builtin';
 import { useMusicSourceRegistry } from '../src/renderer/services/musicSource/registry';
 
 const resetData = () => {
@@ -145,6 +149,29 @@ describe('registry: orderedProviders', () => {
   });
 });
 
+describe('official source quality fallback', () => {
+  it('falls back from unavailable master quality to an available official tier', async () => {
+    const getUrl = vi.mocked(getMusicUrl);
+    getUrl.mockReset();
+    getUrl.mockResolvedValueOnce({ data: { data: [{ url: null }] } } as any);
+    getUrl.mockResolvedValueOnce({
+      data: { data: [{ url: 'https://example.com/audio.mp3', br: 320000 }] }
+    } as any);
+    const result = await neteaseProvider.resolve({ id: 123 } as any, 'jymaster', {});
+    expect(result?.url).toBe('https://example.com/audio.mp3');
+    expect(getUrl.mock.calls.map((call) => call[2])).toEqual(['jymaster', 'higher']);
+  });
+
+  it('does not treat a trial clip as a complete song', async () => {
+    const getUrl = vi.mocked(getMusicUrl);
+    getUrl.mockReset();
+    getUrl.mockResolvedValue({
+      data: { data: [{ url: 'https://example.com/trial.mp3', freeTrialInfo: {} }] }
+    } as any);
+    expect(await neteaseProvider.resolve({ id: 123 } as any, 'higher', {})).toBeNull();
+  });
+});
+
 describe('migration: migrateLegacyMusicSources', () => {
   const lxScript = {
     id: 'lx_1',
@@ -154,6 +181,29 @@ describe('migration: migrateLegacyMusicSources', () => {
     info: { version: '1.0' },
     createdAt: 1700000000000
   };
+
+  it('repairs the obsolete default once even after the old migration ran', () => {
+    mockSetData.musicSourceUnifiedMigrated = true;
+    mockSetData.enabledMusicSources = ['migu', 'kugou', 'pyncmd'];
+    migrateLegacyMusicSources();
+    expect(mockSetData.enabledMusicSources).toEqual(['netease']);
+    expect(mockSetData.haruSourceDefaultsRepaired).toBe(true);
+    mockSetData.enabledMusicSources = ['pyncmd'];
+    migrateLegacyMusicSources();
+    expect(mockSetData.enabledMusicSources).toEqual(['pyncmd']);
+  });
+
+  it('repairs the obsolete default before the first migration', () => {
+    mockSetData.enabledMusicSources = ['migu', 'kugou', 'pyncmd'];
+    migrateLegacyMusicSources();
+    expect(mockSetData.enabledMusicSources).toEqual(['netease']);
+  });
+
+  it('does not change a customized source selection', () => {
+    mockSetData.enabledMusicSources = ['pyncmd'];
+    migrateLegacyMusicSources();
+    expect(mockSetData.enabledMusicSources).toEqual(['pyncmd']);
+  });
 
   it('LX 脚本入库 + 激活脚本启用 + 旧 key remap', async () => {
     const { hashMusicSource } = await import('../src/renderer/utils/musicSourcePlugin');

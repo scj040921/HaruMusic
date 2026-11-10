@@ -25,7 +25,7 @@
   "alwaysShowDownloadButton": false,
   "unlimitedDownload": false,
   "enableMusicUnblock": true,
-  "enabledMusicSources": ["migu", "kugou", "pyncmd"],
+  "enabledMusicSources": ["netease"],
   "showTopAction": false,
   "contentZoomFactor": 1,
   "autoTheme": false,

@@ -31,9 +31,10 @@ export const getMusicQualityDetail = (id: number) => {
 };
 
 // 根据音乐Id获取音乐播放URl
-export const getMusicUrl = async (id: number, isDownloaded: boolean = false) => {
+export const getMusicUrl = async (id: number, isDownloaded: boolean = false, quality?: string) => {
   const userStore = useUserStore();
   const settingStore = useSettingsStore();
+  const level = quality || settingStore.setData.musicQuality || 'higher';
   // 判断是否登录
   try {
     if (userStore.user && isDownloaded && userStore.user.vipType !== 0) {
@@ -41,8 +42,8 @@ export const getMusicUrl = async (id: number, isDownloaded: boolean = false) => 
       const res = await request.get(url, {
         params: {
           id,
-          level: settingStore.setData.musicQuality || 'higher',
-          encodeType: settingStore.setData.musicQuality == 'lossless' ? 'aac' : 'flac',
+          level,
+          encodeType: level === 'lossless' ? 'aac' : 'flac',
           cookie: `${localStorage.getItem('token')} os=pc;`
         }
       });
@@ -58,8 +59,8 @@ export const getMusicUrl = async (id: number, isDownloaded: boolean = false) => 
   return await request.get('/song/url/v1', {
     params: {
       id,
-      level: settingStore.setData.musicQuality || 'higher',
-      encodeType: settingStore.setData.musicQuality == 'lossless' ? 'aac' : 'flac'
+      level,
+      encodeType: level === 'lossless' ? 'aac' : 'flac'
     }
   });
 };

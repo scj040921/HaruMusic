@@ -83,7 +83,21 @@ const to = (remap: Record<string, string>, from: string): string => remap[from] 
  */
 export const migrateLegacyMusicSources = (): boolean => {
   const settingsStore = useSettingsStore();
-  const data = settingsStore.setData;
+  let data = settingsStore.setData;
+
+  // Earlier desktop defaults enabled two retired sources and omitted the official
+  // provider. Repair only that exact untouched default, once; respect custom lists.
+  if (!data.haruSourceDefaultsRepaired) {
+    const keys = Array.isArray(data.enabledMusicSources) ? data.enabledMusicSources : [];
+    const oldDefault = ['migu', 'kugou', 'pyncmd'];
+    const isOldDefault =
+      keys.length === oldDefault.length && oldDefault.every((key) => keys.includes(key));
+    settingsStore.setSetData({
+      ...(isOldDefault ? { enabledMusicSources: ['netease'] } : {}),
+      haruSourceDefaultsRepaired: true
+    });
+    data = settingsStore.setData;
+  }
 
   if (data[MIGRATED_FLAG]) return false;
 

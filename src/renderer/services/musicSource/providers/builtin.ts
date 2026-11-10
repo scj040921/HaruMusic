@@ -44,15 +44,29 @@ export const neteaseProvider: MusicSourceProvider = {
   color: '#ec4141',
   builtin: true,
   available: true,
-  resolve: async (song: SongResult, _quality: string, options) => {
-    // 下载场景走 VIP 下载口（getMusicUrl 内部按 isDownloaded 判定）
-    const res = await getMusicUrl(song.id as number, Boolean(options?.isDownload));
-    const detail = res?.data?.data?.[0];
-    if (!detail?.url || detail.freeTrialInfo) return null;
-    return toMediaSource(detail.url, {
-      format: detail.type,
-      br: detail.br ? Number(detail.br) * 1000 : undefined
-    });
+  resolve: async (song: SongResult, quality: string, options) => {
+    // Only request lower official tiers when the selected tier has no full URL.
+    const levels =
+      quality === 'standard'
+        ? ['standard']
+        : quality === 'higher'
+          ? ['higher', 'standard']
+          : [quality, 'higher', 'standard'];
+    for (const level of levels) {
+      try {
+        const res = await getMusicUrl(song.id as number, Boolean(options?.isDownload), level);
+        const detail = res?.data?.data?.[0];
+        if (!detail?.url || detail.freeTrialInfo) continue;
+        const media = toMediaSource(detail.url, {
+          format: detail.type,
+          br: detail.br ? Number(detail.br) : undefined
+        });
+        if (media) return media;
+      } catch {
+        // A failed tier should not prevent trying a lower official tier.
+      }
+    }
+    return null;
   }
 };
 
