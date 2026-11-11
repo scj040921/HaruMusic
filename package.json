@@ -233,6 +233,7 @@
     },
     "files": [
       "out/**/*",
+      "!node_modules/@capawesome/capacitor-nodejs/**",
       "resources/icons/**/*",
       "resources/icon.png",
       "resources/icon_16x16.png",
