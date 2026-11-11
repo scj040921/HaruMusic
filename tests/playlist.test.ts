@@ -18,7 +18,9 @@ vi.mock('@/hooks/usePlayerHooks', () => ({
   useSongDetail: () => ({ getSongDetail: mocks.getSongDetail })
 }));
 vi.mock('@/services/audioService', () => ({ audioService: {} }));
-vi.mock('@/services/preloadService', () => ({ preloadService: { load: mocks.preload } }));
+vi.mock('@/services/preloadService', () => ({
+  preloadService: { load: mocks.preload, getRevision: () => 0 }
+}));
 vi.mock('@/store/modules/settings', () => ({ useSettingsStore: () => mocks.settings }));
 vi.mock('@/store/modules/intelligenceMode', () => ({
   useIntelligenceModeStore: () => mocks.intelligence
