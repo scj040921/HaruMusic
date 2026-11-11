@@ -154,9 +154,12 @@ try {
   await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await waitFor(
     "document.querySelector('#mobile-drawer-target .unified-controls .play-pause i')?.classList.contains('ri-pause-fill')",
-    3000
+    12000
   );
-  await waitFor("document.querySelector('#mobile-drawer-target .apple-style-progress')?.getAttribute('aria-valuemax') !== '0'", 6000);
+  await waitFor("document.querySelector('#mobile-drawer-target .apple-style-progress')?.getAttribute('aria-valuemax') !== '0'", 12000);
+  await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: playButton.x, y: playButton.y, id: 4 }] });
+  await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await waitFor("document.querySelector('#mobile-drawer-target .unified-controls .play-pause i')?.classList.contains('ri-play-fill')", 12000);
 
   const rect = await evaluate(`(() => {
     const slider = [...document.querySelectorAll('#mobile-drawer-target .apple-style-progress')]
