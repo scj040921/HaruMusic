@@ -107,6 +107,14 @@ try {
   assert.equal(health.headers.get('access-control-allow-origin'), origin);
   assert.equal(health.headers.get('access-control-allow-credentials'), 'true');
 
+  const foreignOrigin = await fetch(`http://127.0.0.1:${gatewayPort}/__http`, {
+    method: 'POST',
+    headers: { Origin: 'https://untrusted.example', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: `http://127.0.0.1:${mockPort}/source.js` })
+  });
+  assert.equal(foreignOrigin.status, 403);
+  assert.equal(foreignOrigin.headers.get('access-control-allow-origin'), null);
+
   const preflight = await fetch(`http://127.0.0.1:${gatewayPort}/login/status`, {
     method: 'OPTIONS',
     headers: {

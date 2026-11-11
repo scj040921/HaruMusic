@@ -116,15 +116,20 @@ function asSong(track: AndroidLocalTrack): SongResult {
   };
 }
 
+let playAttempt = 0;
 async function play(track: AndroidLocalTrack) {
+  const attempt = ++playAttempt;
   const songs = tracks.value.map(asSong);
   const song = asSong(track);
   player.prepareSongPlayback(song, songs);
   error.value = '';
   try {
-    await playTrack(song, true);
+    if (!(await playTrack(song, true)) && attempt === playAttempt) {
+      error.value = '无法播放这首本地音乐，请检查文件是否仍可访问。';
+    }
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '无法播放这首本地音乐。';
+    if (attempt === playAttempt)
+      error.value = cause instanceof Error ? cause.message : '无法播放这首本地音乐。';
   }
 }
 

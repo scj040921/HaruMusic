@@ -305,9 +305,29 @@ export const useLyrics = () => {
 export const useSongDetail = () => {
   const getSongDetail = async (playMusic: SongResult, requestId?: string) => {
     if (playMusic.source === 'local' && String(playMusic.id).startsWith('android-local:')) {
-      const { getAndroidLocalUrl } = await import('@/services/androidLocalMusic');
+      const { getAndroidLocalUrl, getAndroidLocalMetadata } =
+        await import('@/services/androidLocalMusic');
+      const metadata = await getAndroidLocalMetadata(String(playMusic.id)).catch(() => ({
+        cover: undefined,
+        lyrics: undefined
+      }));
+      const parsed = metadata.lyrics ? parseLyrics(metadata.lyrics) : null;
+      const lyric = parsed
+        ? {
+            lrcTimeArray: parsed.times,
+            lrcArray: parsed.lyrics.length
+              ? parsed.lyrics
+              : metadata
+                  .lyrics!.split(/\r?\n/)
+                  .filter(Boolean)
+                  .map((text) => ({ text, trText: '' })),
+            hasWordByWord: parsed.lyrics.some((line) => line.hasWordByWord)
+          }
+        : playMusic.lyric;
       return {
         ...playMusic,
+        picUrl: metadata.cover || playMusic.picUrl,
+        lyric,
         playMusicUrl: await getAndroidLocalUrl(String(playMusic.id)),
         playLoading: false
       } as SongResult;

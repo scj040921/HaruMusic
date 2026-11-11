@@ -19,6 +19,7 @@ const nativeLibrary =
   Capacitor.getPlatform() === 'android'
     ? registerPlugin<{
         scanFlac(): Promise<{ tracks: ScannedFlac[] }>;
+        readMetadata(options: { uri: string }): Promise<{ cover?: string; lyrics?: string }>;
         copyToCache(options: { uri: string; size?: number }): Promise<{ path: string }>;
         removeCachedFile(options: { uri: string }): Promise<{ removed: boolean }>;
       }>('HaruLocalMusic')
@@ -99,4 +100,12 @@ export async function getAndroidLocalUrl(id: string): Promise<string> {
   const url = URL.createObjectURL(track.file);
   urls.set(id, url);
   return url;
+}
+
+export async function getAndroidLocalMetadata(
+  id: string
+): Promise<{ cover?: string; lyrics?: string }> {
+  const track = await run<AndroidLocalTrack | undefined>('readonly', (store) => store.get(id));
+  if (!track?.uri || !nativeLibrary) return {};
+  return nativeLibrary.readMetadata({ uri: track.uri });
 }

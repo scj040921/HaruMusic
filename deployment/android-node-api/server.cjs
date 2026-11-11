@@ -181,6 +181,9 @@ async function start() {
   app.disable('x-powered-by');
   app.use((request, response, next) => {
     const origin = request.headers.origin;
+    if (origin && origin !== 'https://localhost') {
+      return response.status(403).json({ error: 'Origin not allowed' });
+    }
     if (origin === 'https://localhost') {
       response.setHeader('Access-Control-Allow-Origin', origin);
       response.setHeader('Access-Control-Allow-Credentials', 'true');

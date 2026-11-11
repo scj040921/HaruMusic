@@ -194,7 +194,7 @@ export const playTrack = async (
       playerCore.playMusic.source !== originalMusic.source
     )
       return;
-    playerCore.playMusic.lyric = loadedMetadata.lyrics;
+    if (loadedMetadata.lyrics) playerCore.playMusic.lyric = loadedMetadata.lyrics;
     playerCore.playMusic.backgroundColor = loadedMetadata.backgroundColor;
     playerCore.playMusic.primaryColor = loadedMetadata.primaryColor;
     // 触发 watcher 更新
