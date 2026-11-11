@@ -141,7 +141,7 @@ onMounted(async () => {
       await StatusBar.setOverlaysWebView({ overlay: true });
 
       const syncStatusBar = () => {
-        const isDark = theme.value === 'dark';
+        const isDark = theme.value === 'dark' || playerStore.musicFull;
         void StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light });
         void import('@capacitor/core')
           .then(({ registerPlugin }) =>
@@ -152,7 +152,7 @@ onMounted(async () => {
           .catch(() => {});
       };
       syncStatusBar();
-      stopNativeStatusBarWatch = watch(theme, syncStatusBar);
+      stopNativeStatusBarWatch = watch([theme, () => playerStore.musicFull], syncStatusBar);
 
       nativeBackButtonListener = await NativeApp.addListener('backButton', () => {
         if (playerStore.musicFull) {

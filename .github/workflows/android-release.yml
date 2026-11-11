@@ -112,6 +112,7 @@ jobs:
 
       - name: Verify playback and update behavior
         run: |
+          npm run build
           npm run typecheck
           npm test
           npm ci --prefix deployment/android-node-api --omit=dev --ignore-scripts --no-audit --no-fund
