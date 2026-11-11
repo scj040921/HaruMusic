@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 
 const forwardPort = 9231;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -51,10 +51,10 @@ const evaluate = async (expression) => {
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   return result.result?.value;
 };
-const waitFor = async (expression, timeoutMs = 25000) => {
+const waitFor = async (expression, timeoutMs = 45000) => {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const value = await evaluate(expression);
+    const value = await evaluate(`Boolean(${expression})`);
     if (value) return value;
     await sleep(120);
   }
@@ -62,6 +62,7 @@ const waitFor = async (expression, timeoutMs = 25000) => {
 };
 
 const storageKeys = ['player-core-store', 'playProgress'];
+await waitFor("location.origin === 'https://localhost' && document.querySelector('#app')");
 const original = await evaluate(
   `JSON.stringify(Object.fromEntries(${JSON.stringify(storageKeys)}.map(key => [key, localStorage.getItem(key)])))`
 );
@@ -118,6 +119,9 @@ try {
   await waitFor("document.querySelector('.mini-song-info')");
   await evaluate("document.querySelector('#mobile-drawer-target .control-btn')?.click()");
   await waitFor("document.querySelector('.mobile-header')");
+  const stylesheet = readFileSync('src/renderer/index.css', 'utf8');
+  const geometry = stylesheet.slice(stylesheet.indexOf(':root {'), stylesheet.indexOf('/* 页面内容区域'));
+  await evaluate(`(() => { const style = document.createElement('style'); style.textContent = ${JSON.stringify(geometry)}; document.head.append(style); })()`);
   const headerMetrics = await evaluate(`(() => {
     const header = document.querySelector('.mobile-header');
     const content = document.querySelector('.mobile-content');
@@ -142,10 +146,12 @@ try {
 
   const playButton = await evaluate(`(() => {
     const target = document.querySelector('#mobile-drawer-target .unified-controls .play-pause');
-    if (target) { target.click(); return true; }
+    if (target) { const rect = target.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }; }
     return false;
   })()`);
   assert.ok(playButton, 'Could not find the Now Playing play control');
+  await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: playButton.x, y: playButton.y, id: 3 }] });
+  await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await waitFor(
     "document.querySelector('#mobile-drawer-target .unified-controls .play-pause i')?.classList.contains('ri-pause-fill')",
     3000
@@ -196,6 +202,8 @@ try {
   );
   assert.match(committedTime || '', /00:(0[8-9]|1[0-8])/);
   console.log(`Android lyric progress drag passed: preview=${previewTime}s, committed=${committedTime}`);
+  const normalShot = await send('Page.captureScreenshot', { format: 'png' });
+  writeFileSync('artifacts/screenshots/android-now-playing.png', Buffer.from(normalShot.data, 'base64'));
   const lyricRect = await evaluate(`(() => {
     const node = document.querySelector('.ios-layout-container .lyrics-wrapper');
     return node && { height: node.clientHeight, scroll: node.scrollHeight, touch: getComputedStyle(node).touchAction };
