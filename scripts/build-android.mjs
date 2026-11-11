@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stageMediaRangeCache } from './stage-media-range-cache.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const isWindows = process.platform === 'win32';
@@ -105,6 +106,7 @@ if (apiMode === 'embedded') {
     recursive: true,
     filter: (source) => !source.split(sep).includes('.git')
   });
+  stageMediaRangeCache(join(nodeProjectOutput, 'media-range-cache.cjs'));
 }
 
 run(npxCommand, ['cap', 'sync', 'android'], root, buildEnv);

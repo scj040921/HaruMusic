@@ -19,8 +19,12 @@ type PluginMediaPayload = {
 const encodePayload = (payload: PluginMediaPayload): string =>
   encodeURIComponent(JSON.stringify(payload));
 
-export const buildPluginMediaUrl = (url: string, headers?: Record<string, string>): string => {
-  if (!headers || Object.keys(headers).length === 0) return url;
+export const buildPluginMediaUrl = (
+  url: string,
+  headers?: Record<string, string>,
+  force = false
+): string => {
+  if (!force && (!headers || Object.keys(headers).length === 0)) return url;
   return `${PLUGIN_MEDIA_SCHEME}://p/?d=${encodePayload({ url, headers })}`;
 };
 

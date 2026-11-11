@@ -12,7 +12,7 @@
       <input
         ref="picker"
         type="file"
-        accept="audio/*,.flac,.m4a,.mp3,.wav,.ogg"
+        accept="audio/*,.flac,.m4a,.mp3,.wav,.ogg,.lrc,text/plain"
         multiple
         hidden
         @change="importFiles"
@@ -59,6 +59,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import {
+  ANDROID_LOCAL_METADATA_VERSION,
   type AndroidLocalTrack,
   getAndroidLocalMetadata,
   listAndroidLocalTracks,
@@ -86,7 +87,7 @@ const metadataObserver =
             const track = (entry.target as HTMLElement & { __androidTrack?: AndroidLocalTrack })
               .__androidTrack;
             metadataObserver?.unobserve(entry.target);
-            if (!track || track.metadataLoaded) continue;
+            if (!track || !needsMetadata(track)) continue;
             void getAndroidLocalMetadata(track.id)
               .then((metadata) => {
                 track.cover = metadata.cover;
@@ -102,9 +103,13 @@ const metadataObserver =
       );
 
 function observeTrack(element: unknown, track: AndroidLocalTrack) {
-  if (!(element instanceof HTMLElement) || !metadataObserver || track.metadataLoaded) return;
+  if (!(element instanceof HTMLElement) || !metadataObserver || !needsMetadata(track)) return;
   (element as HTMLElement & { __androidTrack?: AndroidLocalTrack }).__androidTrack = track;
   metadataObserver.observe(element);
+}
+
+function needsMetadata(track: AndroidLocalTrack) {
+  return !track.metadataLoaded || track.metadataVersion !== ANDROID_LOCAL_METADATA_VERSION;
 }
 
 async function refresh() {
@@ -122,17 +127,57 @@ async function importFiles(event: Event) {
   input.value = '';
   error.value = '';
   try {
+    const lyricFiles = files.filter((file) => /\.lrc$/i.test(file.name));
+    const audioFiles = files.filter((file) => !/\.lrc$/i.test(file.name));
+    const localName = (filename: string) => normalizeLocalName(filename.replace(/\.[^.]+$/, ''));
+    const lyricByBasename = new Map(
+      await Promise.all(
+        lyricFiles.map(async (file) => [localName(file.name), await file.text()] as const)
+      )
+    );
+    const isAudioFile = (file: File) =>
+      file.type.startsWith('audio/') || /\.(flac|mp3|m4a|wav|ogg|aac)$/i.test(file.name);
+    const supportedAudioFiles = audioFiles.filter(isAudioFile);
+
     await saveAndroidLocalTracks(
-      files.map((file) => ({
+      supportedAudioFiles.map((file) => ({
         id: `android-local:${file.name}:${file.size}:${file.lastModified}`,
         name: file.name.replace(/\.[^.]+$/, ''),
-        file
+        file,
+        lyrics: lyricByBasename.get(localName(file.name))
       }))
     );
+    if (lyricFiles.length) {
+      const existing = await listAndroidLocalTracks();
+      for (const lyricFile of lyricFiles) {
+        const track = existing.find(
+          (item) => normalizeLocalName(item.name) === localName(lyricFile.name)
+        );
+        if (track) {
+          track.lyrics = await lyricFile.text();
+          track.metadataLoaded = true;
+          track.metadataVersion = ANDROID_LOCAL_METADATA_VERSION;
+          await saveAndroidLocalTracks([track]);
+        }
+      }
+      if (
+        !supportedAudioFiles.length &&
+        !existing.some((item) => lyricByBasename.has(normalizeLocalName(item.name)))
+      ) {
+        error.value = '没有找到同名的本地歌曲，请同时选择音频文件和 .lrc 歌词文件。';
+      }
+    }
     await refresh();
   } catch {
     error.value = '导入失败，请检查可用存储空间并重试。';
   }
+}
+
+function normalizeLocalName(value: string) {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/[\s\p{P}\p{S}]/gu, '');
 }
 
 async function scanFlac() {

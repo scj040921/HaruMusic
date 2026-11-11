@@ -35,6 +35,7 @@ vi.mock('@/services/musicSource/registry', () => ({
 
 import { resolveSong } from '../src/renderer/services/musicSource/resolver';
 import { markUnplayableMedia } from '../src/renderer/services/unplayableMedia';
+import { parsePluginMediaUrl } from '../src/shared/musicSourcePlugin';
 
 describe('download quality', () => {
   beforeEach(() => {
@@ -64,7 +65,7 @@ describe('download quality', () => {
       url: quality === 'auto' ? 'https://example.com/high.flac' : 'https://example.com/playable.mp3'
     }));
     const result = await resolveSong({ id: 321, name: 'Fallback' } as any);
-    expect(result?.media.url).toBe('https://example.com/playable.mp3');
+    expect(parsePluginMediaUrl(result!.media.url)?.url).toBe('https://example.com/playable.mp3');
     expect(mocks.resolve.mock.calls.map((call) => call[1])).toEqual(['auto', 'hires']);
   });
 

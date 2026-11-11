@@ -7,6 +7,10 @@ const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const unblockMusic = require('@unblockneteasemusic/server');
 const { app: nodeApp, channel } = require('bridge');
+const { MediaRangeCache } = require(
+  process.env.HARUMUSIC_RANGE_CACHE_MODULE || './media-range-cache.cjs'
+);
+const mediaCache = new MediaRangeCache();
 
 const GATEWAY_PORT = Number(process.env.HARUMUSIC_GATEWAY_PORT || '30488');
 const API_BASE_PORT = Number(process.env.HARUMUSIC_API_BASE_PORT || String(GATEWAY_PORT + 1));
@@ -85,7 +89,8 @@ function safeRequestHeaders(value) {
       typeof content !== 'string' ||
       content.length > 2048 ||
       /^(host|connection|content-length|transfer-encoding|upgrade|proxy-.+)$/i.test(name)
-    ) continue;
+    )
+      continue;
     headers[name] = content;
   }
   return headers;
@@ -131,11 +136,12 @@ function normalizeSongData(data) {
     : Array.isArray(song.ar)
       ? song.ar.map((artist) => ({ name: artist?.name || '' }))
       : [];
-  song.album = song.album && typeof song.album === 'object'
-    ? song.album
-    : song.al && typeof song.al === 'object'
-      ? song.al
-      : { name: '' };
+  song.album =
+    song.album && typeof song.album === 'object'
+      ? song.album
+      : song.al && typeof song.al === 'object'
+        ? song.al
+        : { name: '' };
   return song;
 }
 
@@ -201,7 +207,8 @@ async function start() {
   app.post('/__http', express.json({ limit: '2mb' }), async (request, response) => {
     const body = request.body || {};
     const target = validateHttpUrl(body.url);
-    if (!target) return response.status(400).json({ error: '只支持有效的 HTTP 或 HTTPS 音源地址。' });
+    if (!target)
+      return response.status(400).json({ error: '只支持有效的 HTTP 或 HTTPS 音源地址。' });
 
     const options = body.options && typeof body.options === 'object' ? body.options : {};
     const method = String(options.method || 'GET').toUpperCase();
@@ -237,18 +244,31 @@ async function start() {
     try {
       const upstream = await fetch(target, init);
       const contentType = upstream.headers.get('content-type') || '';
-      const mediaProbe = options.responseType === 'media-probe' && /audio\/|octet-stream|video\/|mpeg/i.test(contentType);
+      const mediaProbe =
+        options.responseType === 'media-probe' &&
+        /audio\/|octet-stream|video\/|mpeg/i.test(contentType);
       if (mediaProbe && upstream.body) await upstream.body.cancel();
       const rawBody = method === 'HEAD' || mediaProbe ? '' : await readResponseText(upstream);
       let parsedBody = rawBody;
       if (contentType.includes('application/json') || /^[\s]*[\[{]/.test(rawBody)) {
-        try { parsedBody = JSON.parse(rawBody); } catch { /* Preserve a non-JSON response. */ }
+        try {
+          parsedBody = JSON.parse(rawBody);
+        } catch {
+          /* Preserve a non-JSON response. */
+        }
       }
       const responseHeaders = {};
-      upstream.headers.forEach((value, name) => { responseHeaders[name] = value; });
-      return response.json({ statusCode: upstream.status, headers: responseHeaders, body: parsedBody });
+      upstream.headers.forEach((value, name) => {
+        responseHeaders[name] = value;
+      });
+      return response.json({
+        statusCode: upstream.status,
+        headers: responseHeaders,
+        body: parsedBody
+      });
     } catch (error) {
-      return response.status(error?.name === 'AbortError' ? 504 : 502)
+      return response
+        .status(error?.name === 'AbortError' ? 504 : 502)
         .json({ error: error?.message || '音源请求失败。' });
     } finally {
       clearTimeout(timeout);
@@ -262,7 +282,8 @@ async function start() {
   });
   app.post('/__unblock', express.json({ limit: '256kb' }), async (request, response) => {
     const id = Number(request.body?.id);
-    if (!Number.isSafeInteger(id) || id <= 0) return response.status(400).json({ error: '歌曲 ID 无效。' });
+    if (!Number.isSafeInteger(id) || id <= 0)
+      return response.status(400).json({ error: '歌曲 ID 无效。' });
     const allowed = new Set(['migu', 'kugou', 'kuwo', 'pyncmd']);
     const platforms = Array.isArray(request.body?.sources)
       ? request.body.sources.filter((source) => allowed.has(source))
@@ -276,26 +297,61 @@ async function start() {
   });
   app.get('/__media', async (request, response) => {
     let descriptor;
-    try { descriptor = JSON.parse(String(request.query.d || '')); } catch { descriptor = null; }
+    try {
+      descriptor = JSON.parse(String(request.query.d || ''));
+    } catch {
+      descriptor = null;
+    }
     const target = validateHttpUrl(descriptor?.url);
     if (!target) return response.status(400).end();
     const headers = safeRequestHeaders(descriptor?.headers);
     const range = request.headers.range;
     if (range && /^bytes=\d*-\d*(,\s*\d*-\d*)*$/.test(range)) headers.Range = range;
     if (request.headers['if-range']) headers['If-Range'] = request.headers['if-range'];
+    headers['Accept-Encoding'] = 'identity';
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    response.once('close', abort);
+    const headerTimeout = setTimeout(abort, 8000);
     try {
-      const upstream = await fetch(target, { method: request.method === 'HEAD' ? 'HEAD' : 'GET', headers });
+      const upstream = await mediaCache.fetch(target, {
+        method: request.method === 'HEAD' ? 'HEAD' : 'GET',
+        headers,
+        signal: controller.signal
+      });
+      clearTimeout(headerTimeout);
       response.status(upstream.status);
-      for (const name of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified', 'etag', 'cache-control']) {
+      for (const name of [
+        'content-type',
+        'content-length',
+        'content-range',
+        'accept-ranges',
+        'last-modified',
+        'etag',
+        'cache-control'
+      ]) {
         const value = upstream.headers.get(name);
+        if (
+          name === 'content-length' &&
+          upstream.headers.get('content-encoding') &&
+          upstream.headers.get('content-encoding') !== 'identity'
+        )
+          continue;
         if (value) response.setHeader(name, value);
       }
-      response.setHeader('Access-Control-Expose-Headers', 'Content-Length,Content-Range,Accept-Ranges');
+      response.setHeader(
+        'Access-Control-Expose-Headers',
+        'Content-Length,Content-Range,Accept-Ranges'
+      );
       if (request.method === 'HEAD' || !upstream.body) return response.end();
-      Readable.fromWeb(upstream.body).on('error', (error) => response.destroy(error)).pipe(response);
+      Readable.fromWeb(upstream.body)
+        .on('error', (error) => response.destroy(error))
+        .pipe(response);
     } catch {
       if (!response.headersSent) response.status(502).end();
       else response.destroy();
+    } finally {
+      clearTimeout(headerTimeout);
     }
   });
   app.use(

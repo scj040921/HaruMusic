@@ -741,7 +741,7 @@ class AudioService {
       const tryPlay = () => {
         if (settled) return;
         this._isLoading = true;
-        loadTimer = setTimeout(() => failLoad(new Error('Audio loading timed out')), 15000);
+        loadTimer = setTimeout(() => failLoad(new Error('Audio loading timed out')), 8000);
         const onError = () => {
           if (settled) return;
           removeListeners();
@@ -763,10 +763,14 @@ class AudioService {
             retryTimer = setTimeout(() => {
               retryTimer = null;
               tryPlay();
-            }, 1000 * retryCount);
+            }, 150 * retryCount);
           } else {
             // 初次加载失败交给调用方恢复，避免与切歌失败处理同时抢占播放。
-            failLoad(new Error('音频加载失败，请尝试切换其他歌曲'));
+            failLoad(
+              Object.assign(new Error('音频加载失败，请尝试切换其他歌曲'), {
+                mediaCode: error?.code
+              })
+            );
           }
         };
 

@@ -3,7 +3,7 @@
     v-model:show="isVisible"
     height="100%"
     placement="bottom"
-    :style="{ background: playerStore.playMusic.primaryColor || background }"
+    :style="{ background: targetBackground }"
     :to="`#layout-main`"
     :z-index="9998"
   >
@@ -166,9 +166,33 @@
             </div>
 
             <!-- 歌词区域 -->
-            <div class="lyrics-container" v-if="!config.hideLyrics" @click="showFullLyricScreen">
-              <div v-if="lrcArray.length > 0" class="lyrics-wrapper">
-                <div v-for="(line, idx) in visibleLyrics" :key="idx" class="lyric-line">
+            <button
+              v-if="!config.hideLyrics"
+              class="lyrics-expand"
+              type="button"
+              @click="showFullLyricScreen"
+              aria-label="打开纯歌词页面"
+            >
+              <i class="ri-fullscreen-line" /> 纯歌词
+            </button>
+            <div class="lyrics-container" v-if="!config.hideLyrics">
+              <div
+                v-if="lrcArray.length > 0"
+                ref="lyricsScrollerRef"
+                class="lyrics-wrapper"
+                @touchstart.passive="handleTouchStart"
+                @touchmove.passive="handleTouchMove"
+                @touchend="handleTouchEnd"
+                @scroll.passive="handleScroll"
+              >
+                <div
+                  v-for="(line, idx) in visibleLyrics"
+                  :key="idx"
+                  :id="`lyric-line-${idx}`"
+                  class="lyric-line"
+                  :class="{ 'now-text': idx === nowIndex }"
+                  @click="!isTouchScrolling && setAudioTime(idx)"
+                >
                   <!-- 逐字歌词显示 -->
                   <div
                     v-if="line.hasWordByWord && line.words && line.words.length > 0"
@@ -640,7 +664,7 @@ watch(nowIndex, (newIndex, oldIndex) => {
   if (isSongChanging.value) return;
 
   // 在竖屏全屏歌词模式下滚动
-  if (showFullLyrics.value) {
+  if (!isLandscape.value) {
     nextTick(() => {
       scrollToCurrentLyric(false);
     });
@@ -665,19 +689,8 @@ watch(showFullLyrics, (newVal) => {
 });
 
 // 监听音乐播放时间变化，触发歌词滚动更新
-watch(nowTime, () => {
-  // 手动拖动播放进度时，保持歌词视图稳定，不抢回当前行。
-  if (!isProgressDragging.value && !isTouchScrolling.value) {
-    // 在竖屏全屏歌词模式下滚动
-    if (showFullLyrics.value) {
-      scrollToCurrentLyric(false);
-    }
-    // 在横屏模式下滚动
-    else if (isLandscape.value) {
-      scrollToCurrentLyric(false, landscapeLyricsRef.value);
-    }
-  }
-});
+// nowIndex is derived from the audio clock. Scroll once per line rather than
+// restarting a smooth scroll on every audio frame.
 
 // 处理滚动事件
 const handleScroll = () => {
@@ -745,7 +758,7 @@ const handleTouchEnd = () => {
     isTouchScrolling.value = false;
 
     // 恢复自动滚动到当前歌词
-    if (showFullLyrics.value) {
+    if (!isLandscape.value) {
       scrollToCurrentLyric(true);
     } else if (isLandscape.value) {
       scrollToCurrentLyric(true, landscapeLyricsRef.value);
@@ -876,7 +889,7 @@ const handleProgressClick = (event: MouseEvent) => {
 
 // 背景相关（由 composable 管理）
 const { isDark, applyBackground } = useLyricBackground({
-  writeBgColor: () => playerStore.playMusic.primaryColor || undefined
+  writeBgColor: () => playerStore.playMusic.backgroundColor || undefined
 });
 const config = ref<LyricConfig>({ ...DEFAULT_LYRIC_CONFIG });
 
@@ -887,33 +900,9 @@ const handleLyricConfigChange = () => {
 
 // 可见歌词计算
 const visibleLyrics = computed(() => {
-  const centerIndex = nowIndex.value;
-  const numLines = 3;
-  const halfLines = Math.floor(numLines / 2);
-
-  let startIdx = centerIndex - halfLines;
-  let endIdx = centerIndex + halfLines;
-
-  // 处理奇偶数行数的情况
-  if (numLines % 2 === 0) {
-    endIdx -= 1;
-  }
-
-  // 处理边界情况
-  if (startIdx < 0) {
-    startIdx = 0;
-    endIdx = Math.min(numLines - 1, lrcArray.value.length - 1);
-  }
-
-  if (endIdx >= lrcArray.value.length) {
-    endIdx = lrcArray.value.length - 1;
-    startIdx = Math.max(0, endIdx - numLines + 1);
-  }
-
-  // 返回带有原始索引的歌词数组
-  return lrcArray.value.slice(startIdx, endIdx + 1).map((item, idx) => ({
+  return lrcArray.value.map((item, idx) => ({
     ...item,
-    originalIndex: startIdx + idx
+    originalIndex: idx
   }));
 });
 
@@ -944,7 +933,7 @@ const targetBackground = computed(() => {
   if (config.value.theme !== 'default') {
     return themeMusic[config.value.theme] || props.background;
   }
-  return props.background;
+  return playerStore.playMusic.backgroundColor || props.background || '#19191c';
 });
 
 // 监听目标背景变化并更新文字颜色
@@ -2039,5 +2028,98 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
   .square-style {
     @apply shadow-2xl shadow-black/50;
   }
+}
+/* Keep the cover's character while giving the audio-clock lyrics most of the
+   remaining viewport. Both lyric modes retain native touch scrolling. */
+#mobile-drawer-target:not(.is-landscape) .ios-layout-container {
+  padding-top: calc(var(--safe-area-inset-top, 0px) + 56px);
+  padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + 156px);
+  gap: 12px;
+}
+#mobile-drawer-target:not(.is-landscape) .ios-layout-container .cover-container {
+  width: min(52vw, 220px);
+  height: min(52vw, 220px);
+  flex-shrink: 0;
+  margin: 0;
+}
+#mobile-drawer-target .ios-layout-container > .flex-1 {
+  min-height: 0;
+  justify-content: flex-start;
+  gap: 8px;
+}
+#mobile-drawer-target .ios-layout-container .song-info {
+  margin-bottom: 0;
+}
+.lyrics-expand {
+  align-self: flex-end;
+  color: var(--text-color-active);
+  background: transparent;
+  border: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+#mobile-drawer-target .ios-layout-container .lyrics-container {
+  min-height: 100px;
+  flex: 1;
+  margin: 0;
+}
+#mobile-drawer-target .ios-layout-container .lyrics-wrapper {
+  height: 100%;
+  overflow-y: auto;
+  display: block;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  padding: 48px 8px;
+  mask-image: linear-gradient(transparent, black 16%, black 84%, transparent);
+}
+#mobile-drawer-target .ios-layout-container .lyrics-wrapper .lyric-line {
+  font-size: clamp(20px, 5.5vw, 28px);
+  line-height: 1.5;
+  padding: 12px 0;
+  opacity: 0.45;
+  color: var(--text-color-primary);
+  transform: scale(0.96);
+  transition:
+    transform 380ms cubic-bezier(0.2, 1.3, 0.3, 1),
+    opacity 240ms;
+}
+#mobile-drawer-target .ios-layout-container .lyrics-wrapper .lyric-line.now-text {
+  opacity: 1;
+  color: var(--text-color-active);
+  transform: scale(1);
+  font-weight: 700;
+}
+#mobile-drawer-target:not(.is-landscape) .unified-controls {
+  height: calc(148px + var(--safe-area-inset-bottom, 0px));
+  padding: 8px 24px calc(16px + var(--safe-area-inset-bottom, 0px));
+}
+#mobile-drawer-target .unified-controls .progress-container {
+  margin-bottom: 0;
+}
+#mobile-drawer-target .fullscreen-lyrics {
+  background: transparent;
+}
+#mobile-drawer-target .fullscreen-lyrics .lyrics-scroller {
+  margin: 0;
+  padding: calc(var(--safe-area-inset-top, 0px) + 100px) 16px 0;
+  margin-bottom: calc(156px + var(--safe-area-inset-bottom, 0px));
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+#mobile-drawer-target .fullscreen-lyrics .lyrics-scroller .lyric-line {
+  font-size: clamp(24px, 7vw, 36px);
+  line-height: 1.5;
+  text-align: left;
+  padding: 16px;
+}
+#mobile-drawer-target .unified-controls .main-button.play-pause,
+#mobile-drawer-target .unified-controls .main-button.play-pause:hover {
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+#mobile-drawer-target .apple-style-progress:focus:not(:focus-visible) {
+  outline: none;
 }
 </style>

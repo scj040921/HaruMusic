@@ -9,6 +9,7 @@
 import { cloneDeep } from 'lodash';
 
 import { musicDB } from '@/hooks/MusicHook';
+import { mediaUrlExpiresAt } from '@/utils/mediaUrlExpiry';
 
 // musicDB 通过顶层 await 初始化，单 chunk 打包下模块作用域直接解构会命中
 // TDZ（Cannot access 'musicDB' before initialization），改为惰性访问。
@@ -42,7 +43,8 @@ export const MusicResolveCache = {
       const cached = await getData('music_url_cache', songId);
       if (
         cached?.createTime &&
-        Date.now() - cached.createTime < CACHE_CONFIG.MUSIC_URL_CACHE_TIME
+        Date.now() - cached.createTime < CACHE_CONFIG.MUSIC_URL_CACHE_TIME &&
+        mediaUrlExpiresAt(cached.entry?.url || '', cached.createTime) > Date.now() + 10_000
       ) {
         const cachedKeys: string[] = cached.sourceKeys || [];
         const currentKeys = [...(sourceKeys || [])].sort();

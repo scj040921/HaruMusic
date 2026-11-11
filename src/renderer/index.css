@@ -5,6 +5,91 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --radius-control: 24px;
+  --radius-container: 32px;
+  --radius-cover: 24px;
+}
+
+/* One geometry system across desktop Liquid Glass and Android. */
+:is(.android-native, .liquid-mode)
+  :is(.n-dialog, .n-modal, .n-card, .n-drawer, .n-dropdown-menu, .n-popover, .n-popover-shared) {
+  border-radius: var(--radius-container) !important;
+  corner-shape: superellipse(2);
+}
+:is(.android-native, .liquid-mode)
+  :is(
+    button,
+    .n-button,
+    .s-btn,
+    .n-input,
+    .n-base-selection,
+    .n-input-wrapper,
+    .n-input__border,
+    .n-input__state-border
+  ) {
+  border-radius: var(--radius-control);
+  corner-shape: superellipse(2);
+}
+:is(.android-native, .liquid-mode)
+  :is(.album-cover, .cover-wrapper, .cover-art, .track-art, .square-style) {
+  border-radius: var(--radius-cover) !important;
+  corner-shape: superellipse(2);
+}
+:is(.android-native, .liquid-mode)
+  :is(
+    .header-btn,
+    .control-btn,
+    .main-button,
+    .side-button,
+    .favorite-icon,
+    .mini-control-btn,
+    .n-button--circle
+  ) {
+  border-radius: 50% !important;
+  corner-shape: round;
+}
+:is(.android-native, .liquid-mode) :is(.n-button__border, .n-button__state-border) {
+  border-radius: inherit !important;
+  corner-shape: inherit;
+}
+:is(.android-native, .liquid-mode)
+  :is(.mobile-bottom-menu, .mobile-mini-controls, .liquid-tab-slider) {
+  corner-shape: superellipse(1.5);
+}
+
+/* A thin optical rim keeps the center clear and the lens treatment inexpensive. */
+:is(.android-native, .liquid-mode)
+  :is(.mobile-bottom-menu, .mobile-mini-controls, .header-btn, .liquid-tab-slider)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  corner-shape: inherit;
+  padding: 2px;
+  pointer-events: none;
+  background: linear-gradient(
+    145deg,
+    rgb(255 255 255 / 65%),
+    rgb(255 255 255 / 8%) 36%,
+    rgb(100 120 140 / 16%) 65%,
+    rgb(255 255 255 / 42%)
+  );
+  backdrop-filter: blur(2px) brightness(1.08) saturate(1.25);
+  -webkit-backdrop-filter: blur(2px) brightness(1.08) saturate(1.25);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+}
+.android-native .mobile-header .header-btn {
+  position: relative;
+}
+
 /* 页面内容区域统一边距工具类 */
 .page-padding {
   padding-left: var(--page-pl);
@@ -217,7 +302,7 @@ html.dark .android-native {
   z-index: 12000;
   min-height: 52px;
   height: 52px;
-  padding: 0 16px;
+  padding: 0 16px !important;
   background: transparent;
   border: 0;
   pointer-events: none;
@@ -238,7 +323,7 @@ html.dark .android-native {
   flex: none;
   /* Let each page paint behind the overlay while keeping its first control row
      below the floating toolbar and the system status icons. */
-  padding-top: calc(var(--safe-area-inset-top, 0px) + 64px);
+  padding-top: 0;
   padding-bottom: 0 !important;
 }
 
@@ -247,6 +332,26 @@ html.dark .android-native {
   font-size: 17px;
   font-weight: 650;
   letter-spacing: -0.025em;
+}
+
+.android-native .mobile-content > .mobile-page {
+  padding-top: calc(var(--safe-area-inset-top, 0px) + 64px);
+  box-sizing: border-box;
+}
+
+.android-native .mobile-header.android-hig-header.safe-area-top {
+  padding-top: 0 !important;
+}
+
+.android-native .mobile-layout .mobile-bottom-menu,
+.android-native .mobile-layout .android-native-player .mobile-mini-controls {
+  background:
+    linear-gradient(145deg, rgb(255 255 255 / 30%), rgb(255 255 255 / 8%)), var(--surface-glass);
+  border-color: rgb(255 255 255 / 58%);
+  box-shadow:
+    0 16px 32px rgb(0 0 0 / 14%),
+    0 2px 3px rgb(255 255 255 / 85%) inset,
+    0 -2px 4px rgb(0 0 0 / 9%) inset;
 }
 
 .android-native .mobile-header.android-hig-header .header-logo .logo-text {

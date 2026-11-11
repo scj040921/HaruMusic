@@ -6,6 +6,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stageMediaRangeCache } from './stage-media-range-cache.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const projectDir = join(root, 'deployment', 'android-node-api');
@@ -14,9 +15,20 @@ const apiBasePort = gatewayPort + 1;
 const origin = 'https://localhost';
 const temporaryDir = await mkdtemp(join(os.tmpdir(), 'harumusic-android-api-'));
 const bridgeShimPath = join(temporaryDir, 'bridge-shim.cjs');
+const rangeModulePath = join(temporaryDir, 'media-range-cache.cjs');
+stageMediaRangeCache(rangeModulePath);
 const serverPath = join(projectDir, 'server.cjs');
 const mockAudio = Buffer.from('0123456789');
+let cancelledStreamClosed = false;
 const mockUpstream = createServer((request, response) => {
+  if (request.url === '/slow-audio') {
+    response.writeHead(200, { 'Content-Type': 'audio/mpeg' });
+    response.write(Buffer.alloc(8192));
+    response.once('close', () => {
+      cancelledStreamClosed = true;
+    });
+    return;
+  }
   if (request.url === '/audio-no-range') {
     response.writeHead(200, { 'Content-Type': 'audio/mpeg' });
     response.end(Buffer.alloc(9 * 1024 * 1024));
@@ -31,7 +43,9 @@ const mockUpstream = createServer((request, response) => {
     const match = /^bytes=(\d+)-(\d*)$/.exec(request.headers.range || '');
     if (match) {
       const start = Number(match[1]);
-      const end = match[2] ? Math.min(Number(match[2]), mockAudio.length - 1) : mockAudio.length - 1;
+      const end = match[2]
+        ? Math.min(Number(match[2]), mockAudio.length - 1)
+        : mockAudio.length - 1;
       const body = mockAudio.subarray(start, end + 1);
       response.writeHead(206, {
         'Accept-Ranges': 'bytes',
@@ -74,6 +88,7 @@ const server = spawn(process.execPath, ['--require', bridgeShimPath, serverPath]
   cwd: projectDir,
   env: {
     ...process.env,
+    HARUMUSIC_RANGE_CACHE_MODULE: rangeModulePath,
     HARUMUSIC_GATEWAY_PORT: String(gatewayPort),
     HARUMUSIC_API_BASE_PORT: String(apiBasePort)
   },
@@ -172,6 +187,20 @@ try {
   assert.equal(rangedMedia.headers.get('content-range'), 'bytes 2-5/10');
   assert.equal(await rangedMedia.text(), '2345');
 
+  const streamingDescriptor = encodeURIComponent(
+    JSON.stringify({ url: `http://127.0.0.1:${mockPort}/slow-audio` })
+  );
+  const streaming = await fetch(
+    `http://127.0.0.1:${gatewayPort}/__media?d=${streamingDescriptor}`,
+    { headers: { Origin: origin } }
+  );
+  const reader = streaming.body.getReader();
+  await reader.read();
+  await reader.cancel();
+  for (let i = 0; i < 40 && !cancelledStreamClosed; i++)
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.ok(cancelledStreamClosed, 'switching away must cancel the upstream media download');
+
   const invalidUnblock = await fetch(`http://127.0.0.1:${gatewayPort}/__unblock`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -181,7 +210,9 @@ try {
 
   console.log('Android embedded API, plugin HTTP, and ranged media smoke checks passed.');
   assert.equal(
-    await import('node:fs/promises').then(({ access }) => access(join(temporaryDir, 'app-private', 'tmp', 'anonymous_token')).then(() => true)),
+    await import('node:fs/promises').then(({ access }) =>
+      access(join(temporaryDir, 'app-private', 'tmp', 'anonymous_token')).then(() => true)
+    ),
     true,
     'the API token file must stay inside the app-private data directory'
   );

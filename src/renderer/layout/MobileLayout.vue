@@ -5,7 +5,7 @@
     :class="{ 'has-safe-area': isPhone, 'android-liquidglass': isAndroidApp }"
   >
     <!-- 顶部头部 -->
-    <mobile-header />
+    <mobile-header v-if="!playerStore.musicFull" />
 
     <!-- 主内容区域 -->
     <div

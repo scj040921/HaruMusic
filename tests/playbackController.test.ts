@@ -122,6 +122,18 @@ describe('playback recovery ownership (#769)', () => {
     vi.unstubAllGlobals();
   });
 
+  it('refreshes an expired stream when replaying the current song fails', async () => {
+    mocks.audio.getCurrentSound.mockReturnValue({ ...mocks.sound, readyState: 2, ended: false });
+    mocks.audio.play.mockRejectedValueOnce(new Error('Expired stream'));
+    expect(await controller.resumeCurrentSong()).toBe(true);
+    expect(mocks.clearMusicCache).toHaveBeenCalledWith(1);
+    expect(mocks.getSongDetail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1, playMusicUrl: undefined }),
+      expect.any(String)
+    );
+    expect(mocks.core.isPlay).toBe(true);
+  });
+
   it('changes quality without losing paused state or progress', async () => {
     const song = makeSong(1);
     mocks.core.playMusic = song;

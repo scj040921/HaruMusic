@@ -14,6 +14,7 @@ on:
       - 'deployment/android-node-api/**'
       - 'scripts/android-api-smoke.mjs'
       - 'scripts/build-android.mjs'
+      - 'scripts/stage-media-range-cache.mjs'
       - '.github/workflows/android-release.yml'
   workflow_dispatch:
     inputs:
@@ -142,6 +143,10 @@ jobs:
           ANDROID_BUILD_TYPE: ${{ steps.release.outputs.build_type }}
           ANDROID_UPDATE_CHANNEL: ${{ steps.release.outputs.channel }}
         run: npm run build:android
+
+      - name: Verify native lyric metadata
+        working-directory: android
+        run: ./gradlew testReleaseUnitTest --no-daemon
 
       - name: Prepare update-channel manifest
         if: steps.release.outputs.publish == 'true'

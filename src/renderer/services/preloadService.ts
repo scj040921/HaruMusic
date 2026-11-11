@@ -171,7 +171,7 @@ class PreloadService {
   public async consumeSound(
     song: Pick<SongResult, 'id' | 'source'>,
     url: string,
-    waitMs = 900
+    waitMs = 0
   ): Promise<HTMLAudioElement | undefined> {
     const key = this.key(song);
     let entry = this.entries.get(key);
@@ -181,7 +181,7 @@ class PreloadService {
       return undefined;
     }
 
-    if (!entry.ready && !entry.settled) {
+    if (!entry.ready && !entry.settled && waitMs > 0) {
       const candidate = entry.audio;
       await new Promise<void>((resolve) => {
         let finished = false;
@@ -207,6 +207,7 @@ class PreloadService {
       entry.audio.error ||
       entry.audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
     ) {
+      entry?.cancel();
       return undefined;
     }
 

@@ -2,6 +2,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 const DB_NAME = 'harumusic-android-local';
 const STORE = 'tracks';
+export const ANDROID_LOCAL_METADATA_VERSION = 2;
 export type AndroidLocalTrack = {
   id: string;
   name: string;
@@ -16,6 +17,7 @@ export type AndroidLocalTrack = {
   cover?: string;
   lyrics?: string;
   metadataLoaded?: boolean;
+  metadataVersion?: number;
 };
 
 type ScannedFlac = Omit<AndroidLocalTrack, 'file'> & { uri: string };
@@ -66,11 +68,28 @@ export const saveAndroidLocalTrack = (track: AndroidLocalTrack) =>
   run('readwrite', (store) => store.put(track));
 export async function saveAndroidLocalTracks(tracks: AndroidLocalTrack[]): Promise<void> {
   if (!tracks.length) return;
+  const existingTracks = await listAndroidLocalTracks();
+  const existingById = new Map(existingTracks.map((track) => [track.id, track]));
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction(STORE, 'readwrite');
     const store = transaction.objectStore(STORE);
-    for (const track of tracks) store.put(track);
+    for (const track of tracks) {
+      const existing = existingById.get(track.id);
+      const sameFile = existing && existing.uri === track.uri && existing.size === track.size;
+      store.put(
+        sameFile
+          ? {
+              ...existing,
+              ...track,
+              cover: track.cover || existing.cover,
+              lyrics: track.lyrics || existing.lyrics,
+              metadataLoaded: existing.metadataLoaded || track.metadataLoaded,
+              metadataVersion: existing.metadataVersion || track.metadataVersion
+            }
+          : track
+      );
+    }
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () => reject(transaction.error);
@@ -110,11 +129,14 @@ export async function getAndroidLocalUrl(id: string): Promise<string> {
 async function loadAndroidLocalMetadata(id: string): Promise<{ cover?: string; lyrics?: string }> {
   const track = await run<AndroidLocalTrack | undefined>('readonly', (store) => store.get(id));
   if (!track) return {};
-  if (track.metadataLoaded) return { cover: track.cover, lyrics: track.lyrics };
+  if (track.metadataLoaded && track.metadataVersion === ANDROID_LOCAL_METADATA_VERSION) {
+    return { cover: track.cover, lyrics: track.lyrics };
+  }
 
   let metadata: { cover?: string; lyrics?: string } = {};
   if (track.uri && nativeLibrary) {
-    metadata = await nativeLibrary.readMetadata({ uri: track.uri });
+    const embedded = await nativeLibrary.readMetadata({ uri: track.uri });
+    metadata = { ...embedded, lyrics: track.lyrics || embedded.lyrics };
   } else if (track.file) {
     // music-metadata's browser entry parses Blob streams without copying a full
     // lossless file into memory, and supports the same common tags as desktop.
@@ -132,12 +154,13 @@ async function loadAndroidLocalMetadata(id: string): Promise<{ cover?: string; l
       metadata.cover = `data:${mime};base64,${btoa(binary)}`;
     }
     const embeddedLyrics = parsed.common.lyrics?.find((item) => item.text?.trim())?.text;
-    if (embeddedLyrics) metadata.lyrics = embeddedLyrics;
+    if (!metadata.lyrics && embeddedLyrics) metadata.lyrics = embeddedLyrics;
   }
 
   track.cover = metadata.cover;
   track.lyrics = metadata.lyrics;
   track.metadataLoaded = true;
+  track.metadataVersion = ANDROID_LOCAL_METADATA_VERSION;
   await saveAndroidLocalTrack(track).catch(() => undefined);
   return metadata;
 }

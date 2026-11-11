@@ -9,7 +9,10 @@ import { playbackRequestManager } from '@/services/playbackRequestManager';
 import { useSettingsStore } from '@/store';
 import type { ILyric, ILyricText, IWordData, SongResult } from '@/types/music';
 import { isElectron } from '@/utils';
+import { mediaUrlExpiresAt } from '@/utils/mediaUrlExpiry';
 import { parseLyrics as parseYrcLyrics } from '@/utils/yrcParser';
+
+import { buildPluginMediaUrl } from '../../shared/musicSourcePlugin';
 
 const { message } = createDiscreteApi(['message']);
 
@@ -338,7 +341,12 @@ export const useSongDetail = () => {
       throw new Error('Request cancelled');
     }
 
-    if (playMusic.expiredAt && playMusic.expiredAt < Date.now()) {
+    if (
+      (playMusic.expiredAt && playMusic.expiredAt < Date.now() + 10_000) ||
+      (playMusic.playMusicUrl &&
+        mediaUrlExpiresAt(playMusic.playMusicUrl, playMusic.createdAt || Date.now()) <
+          Date.now() + 10_000)
+    ) {
       // 本地音乐（local:// 协议）不会过期，跳过清除
       if (!playMusic.playMusicUrl?.startsWith('local://')) {
         console.info(`歌曲已过期，重新获取: ${playMusic.name}`);
@@ -358,11 +366,17 @@ export const useSongDetail = () => {
 
       playMusic.createdAt = Date.now();
       // 半小时后过期
-      playMusic.expiredAt = playMusic.createdAt + 1800000;
+      playMusic.expiredAt = mediaUrlExpiresAt(playMusicUrl || '', playMusic.createdAt);
 
       playMusic.playLoading = false;
       // 返回歌曲信息，背景色和歌词将在播放后异步加载
-      return { ...playMusic, playMusicUrl } as SongResult;
+      return {
+        ...playMusic,
+        playMusicUrl:
+          isElectron && /^https?:/i.test(playMusicUrl || '')
+            ? buildPluginMediaUrl(playMusicUrl!, undefined, true)
+            : playMusicUrl
+      } as SongResult;
     } catch (error) {
       if ((error as Error).message === 'Request cancelled') {
         throw error;

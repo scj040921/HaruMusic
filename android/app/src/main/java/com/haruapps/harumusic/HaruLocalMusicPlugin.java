@@ -178,7 +178,7 @@ public class HaruLocalMusicPlugin extends Plugin {
                 byte[] bytes = new byte[length];
                 input.readFully(bytes);
                 if (type == 4 && !metadata.has("lyrics")) {
-                    String lyrics = parseVorbisLyrics(bytes);
+                    String lyrics = FlacVorbisLyrics.parse(bytes);
                     if (lyrics != null && !lyrics.trim().isEmpty()) metadata.put("lyrics", lyrics);
                 } else if (type == 6 && !metadata.has("cover")) {
                     String cover = parseFlacPicture(bytes);
@@ -196,35 +196,6 @@ public class HaruLocalMusicPlugin extends Plugin {
             if ((header & 0x80) != 0) break;
         }
         return metadata;
-    }
-
-    private String parseVorbisLyrics(byte[] bytes) {
-        try {
-            ByteBuffer data = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-            if (data.remaining() < 8) return null;
-            int vendorLength = data.getInt();
-            if (vendorLength < 0 || vendorLength > data.remaining() - 4) return null;
-            data.position(data.position() + vendorLength);
-            int count = data.getInt();
-            if (count < 0 || count > 10000) return null;
-            for (int i = 0; i < count && data.remaining() >= 4; i++) {
-                int size = data.getInt();
-                if (size < 0 || size > data.remaining()) return null;
-                byte[] comment = new byte[size];
-                data.get(comment);
-                String value = new String(comment, StandardCharsets.UTF_8);
-                int separator = value.indexOf('=');
-                if (separator <= 0) continue;
-                String key = value.substring(0, separator).toUpperCase(java.util.Locale.ROOT);
-                if (key.equals("LYRICS") || key.equals("LYRIC") || key.equals("UNSYNCEDLYRICS") || key.equals("SYNCEDLYRICS")) {
-                    String lyrics = value.substring(separator + 1).trim();
-                    if (!lyrics.isEmpty()) return lyrics;
-                }
-            }
-        } catch (Exception ignored) {
-            // Invalid Vorbis comments are ignored without affecting playback.
-        }
-        return null;
     }
 
     private String parseFlacPicture(byte[] block) {

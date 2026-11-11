@@ -85,10 +85,17 @@ async function startEmbeddedApi(): Promise<string> {
   });
 
   try {
-    await withTimeout(
-      Nodejs.start({ script: 'server.cjs' }),
-      'Android 本地音乐服务启动超时，请重新打开应用。'
-    );
+    try {
+      await withTimeout(
+        Nodejs.start({ script: 'server.cjs' }),
+        'Android 本地音乐服务启动超时，请重新打开应用。'
+      );
+    } catch (error) {
+      if (/already running/i.test(String(error)) && (await waitForExistingApi())) {
+        return `http://127.0.0.1:${API_PORT}`;
+      }
+      throw error;
+    }
     const port = await withTimeout(
       ready.promise,
       'Android 本地音乐服务没有响应，请检查应用存储空间后重试。'

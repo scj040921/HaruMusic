@@ -18,8 +18,8 @@ import { useMusicSourceRegistry } from './registry';
 import { buildAndroidMediaProxyUrl, requestMusicSourceHttp } from './transport';
 import type { ResolveAttempt, ResolveSongResult } from './types';
 
-const STAGE_BUDGET_MS = 25_000;
-const CHAIN_BUDGET_MS = 40_000;
+const STAGE_BUDGET_MS = 6_000;
+const CHAIN_BUDGET_MS = 12_000;
 
 export type ResolveSongOptions = {
   /** 歌曲级音源覆盖（缺省取全局启用集合） */
@@ -111,11 +111,19 @@ const effectiveSourceKeys = (songId: number): string[] | undefined => {
   return undefined;
 };
 
-const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
-  Promise.race([
-    promise,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
-  ]);
+const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timeout')), ms);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
 
 /**
  * 统一解析入口。返回 null = 全部音源未命中。
@@ -150,7 +158,7 @@ export const resolveSong = async (
           url: isAndroidApp
             ? buildAndroidMediaProxyUrl(cached.url, cached.headers)
             : cached.headers
-              ? buildPluginMediaUrl(cached.url, cached.headers)
+              ? buildPluginMediaUrl(cached.url, cached.headers, true)
               : cached.url,
           format: cached.format,
           br: cached.br,
@@ -195,6 +203,7 @@ export const resolveSong = async (
     }
 
     try {
+      const stageDeadline = Math.min(chainDeadline, stageStart + STAGE_BUDGET_MS);
       let verifiedUrl: string | null = null;
       const raw = await withTimeout(
         (async () => {
@@ -204,6 +213,7 @@ export const resolveSong = async (
               : [quality];
           const seen = new Set<string>();
           for (const level of levels) {
+            if (Date.now() >= stageDeadline) break;
             try {
               const candidate = await provider.resolve(song, level, {
                 isDownload: options.isDownload,
@@ -234,7 +244,7 @@ export const resolveSong = async (
           }
           return null;
         })(),
-        provider.key === 'netease' ? STAGE_BUDGET_MS : 15_000
+        Math.max(1, stageDeadline - Date.now())
       );
       if (!raw) {
         attempts.push({
@@ -270,7 +280,7 @@ export const resolveSong = async (
         media: {
           url: isAndroidApp
             ? buildAndroidMediaProxyUrl(media.url, media.headers)
-            : buildPluginMediaUrl(media.url, media.headers),
+            : buildPluginMediaUrl(media.url, media.headers, !options.isDownload),
           format: media.format || inferPluginAudioFormat(media.url, media.br),
           br: media.br ?? (quality === 'auto' ? undefined : qualityToBitrate(quality)),
           headers: media.headers

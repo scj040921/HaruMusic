@@ -1,5 +1,6 @@
 import { net, protocol } from 'electron';
 
+import { MediaRangeCache } from '../../shared/mediaRangeCache';
 import { parsePluginMediaUrl, PLUGIN_MEDIA_SCHEME } from '../../shared/musicSourcePlugin';
 
 /**
@@ -10,6 +11,7 @@ import { parsePluginMediaUrl, PLUGIN_MEDIA_SCHEME } from '../../shared/musicSour
  * 条件请求头原样转发，响应流式透传，保证拖动进度条可用。
  */
 export const initPluginMediaProxy = (): void => {
+  const cache = new MediaRangeCache((url, options) => net.fetch(url, options));
   protocol.handle(PLUGIN_MEDIA_SCHEME, async (request) => {
     const target = parsePluginMediaUrl(request.url);
     if (!target) {
@@ -21,10 +23,11 @@ export const initPluginMediaProxy = (): void => {
     if (range) headers['Range'] = range;
 
     try {
-      const upstream = await net.fetch(target.url, {
+      const upstream = await cache.fetch(target.url, {
         method: 'GET',
         headers,
-        redirect: 'follow'
+        redirect: 'follow',
+        signal: request.signal
       });
 
       const responseHeaders: Record<string, string> = {};
@@ -38,7 +41,7 @@ export const initPluginMediaProxy = (): void => {
         headers: responseHeaders
       });
     } catch (error) {
-      console.error('[PluginMediaProxy] 代理请求失败:', target.url, error);
+      console.error('[PluginMediaProxy] 代理请求失败:', (error as Error).message);
       return new Response(null, { status: 502 });
     }
   });

@@ -72,6 +72,7 @@ const loadMetadata = async (
     if (String(music.id).startsWith('android-local:')) {
       const { getAndroidLocalMetadata } = await import('@/services/androidLocalMusic');
       const { parseLyrics } = await import('@/hooks/usePlayerHooks');
+      const { fetchLocalLyrics } = await import('@/services/localLyrics');
       const metadata = await getAndroidLocalMetadata(String(music.id));
       const parsed = metadata.lyrics ? parseLyrics(metadata.lyrics) : { lyrics: [], times: [] };
       const lyricRows = parsed.lyrics.length
@@ -80,13 +81,26 @@ const loadMetadata = async (
             text,
             trText: ''
           }));
-      const lyrics = lyricRows.length
+      let lyrics = lyricRows.length
         ? {
             lrcTimeArray: parsed.times,
             lrcArray: lyricRows,
             hasWordByWord: parsed.lyrics.some((line) => line.hasWordByWord)
           }
         : music.lyric;
+      if (!lyrics?.lrcTimeArray?.length) {
+        const artist =
+          music.ar
+            ?.map((item) => item.name)
+            .filter(Boolean)
+            .join(' / ') ||
+          music.song?.artists
+            ?.map((item) => item.name)
+            .filter(Boolean)
+            .join(' / ') ||
+          '';
+        lyrics = (await fetchLocalLyrics(music.name, artist, loadLrc)) || lyrics;
+      }
       return {
         lyrics,
         backgroundColor: '#29292d',
@@ -313,7 +327,9 @@ export const playTrack = async (
         name !== 'AbortError' &&
         name !== 'NotAllowedError'
       ) {
-        markUnplayableMedia(audioUrl);
+        if ((error as Error & { mediaCode?: number }).mediaCode === 4) {
+          markUnplayableMedia(audioUrl);
+        }
         await clearParsedUrlCache(music.id);
         if (gen !== getCurrentGeneration()) return false;
         candidate = { ...originalMusic, playMusicUrl: undefined, expiredAt: undefined };
@@ -382,6 +398,20 @@ export const resumeCurrentSong = async (): Promise<boolean> => {
     return true;
   } catch (error) {
     if (gen !== getCurrentGeneration()) return false;
+    if (
+      song.source !== 'local' &&
+      /^(https?:|pluginmedia:)/i.test(song.playMusicUrl || '') &&
+      !['AbortError', 'NotAllowedError'].includes((error as Error).name)
+    ) {
+      playbackRequestManager.failRequest(requestId);
+      await clearParsedUrlCache(song.id);
+      if (gen !== getCurrentGeneration()) return false;
+      return playTrack({ ...song, playMusicUrl: undefined, expiredAt: undefined }, true, {
+        startTime: sound.ended ? 0 : sound.currentTime,
+        recordHistory: false,
+        recovery: true
+      });
+    }
     core.setIsPlay(false);
     core.userPlayIntent = false;
     core.playMusic.playLoading = false;
