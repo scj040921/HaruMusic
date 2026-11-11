@@ -15,7 +15,7 @@ import { buildPluginMediaUrl, validatePluginMediaSource } from '../../../shared/
 import { inferPluginAudioFormat, qualityToBitrate } from '../musicSourcePluginProtocol';
 import { MusicResolveCache } from './cache';
 import { useMusicSourceRegistry } from './registry';
-import { buildAndroidMediaProxyUrl } from './transport';
+import { buildAndroidMediaProxyUrl, requestMusicSourceHttp } from './transport';
 import type { ResolveAttempt, ResolveSongResult } from './types';
 
 const STAGE_BUDGET_MS = 25_000;
@@ -44,43 +44,54 @@ export type ResolveSongOptions = {
  *  - 2xx/206 + audio|octet-stream|video|mpeg → 直链可用
  *  - 2xx + JSON → 提取内层 url 字段再验一层（限深 2，防循环）
  *  - 其余（HTML 错误页 / 403 / 404 / 5xx）→ 该源判失败，自动降级
- * 非 Electron 环境（Web 版）无主进程桥，乐观放行。
+ * Android 使用嵌入式 Node HTTP 桥走同一验证规则；纯 Web 端没有宿主 HTTP 桥，乐观放行。
  */
 const verifyMediaUrl = async (
   url: string,
   headers?: Record<string, string>,
   depth = 0
 ): Promise<string | null> => {
-  if (!isElectron || typeof window.api?.lxMusicHttpRequest !== 'function') return url;
+  if (!isElectron && !isAndroidApp) return url;
+  if (isElectron && typeof window.api?.lxMusicHttpRequest !== 'function') return url;
   if (depth > 2) return url;
 
   try {
     const requestId = `verify_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    const response = await window.api.lxMusicHttpRequest({
-      url,
-      options: {
-        method: 'GET',
-        headers: { ...(headers || {}), Range: 'bytes=0-8191' },
-        timeout: 10000
-      },
-      requestId
-    });
+    const options = {
+      method: 'GET',
+      headers: { ...(headers || {}), Range: 'bytes=0-8191' },
+      timeout: 10000
+    };
+    const response = isElectron
+      ? await window.api.lxMusicHttpRequest({ url, options, requestId })
+      : await requestMusicSourceHttp(url, options, requestId);
 
     const status = response?.statusCode ?? 0;
     if (status < 200 || status >= 400) return null;
 
-    const contentType = String(response?.headers?.['content-type'] || '');
+    const contentType = String(
+      Object.entries(response?.headers || {}).find(
+        ([name]) => name.toLowerCase() === 'content-type'
+      )?.[1] || ''
+    );
     if (/audio\/|octet-stream|video\/|mpeg/i.test(contentType)) {
       return url;
     }
 
     // JSON 端点：提取内层真实 URL 再验一层
-    const body = response?.body;
+    let body = response?.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        // Non-JSON responses are rejected below.
+      }
+    }
     if (body && typeof body === 'object') {
       const raw = body as Record<string, any>;
       const inner = raw.url || raw.data?.url || raw.audio_url || raw.link || raw.src;
       if (typeof inner === 'string' && /^https?:\/\//i.test(inner) && inner !== url) {
-        return verifyMediaUrl(inner, undefined, depth + 1);
+        return verifyMediaUrl(inner, headers, depth + 1);
       }
     }
     // 2xx 但既不是音频也提取不到 URL（HTML 跳转页/错误页）
@@ -129,12 +140,20 @@ export const resolveSong = async (
       sourceKeys ?? globalKeys,
       quality
     );
-    if (cached && !isUnplayableMedia(cached.url)) {
+    if (cached && cached.headers === undefined) {
+      // Older builds cached only the URL and dropped provider request headers.
+      await MusicResolveCache.clearMusicCache(songId);
+    } else if (cached && !isUnplayableMedia(cached.url)) {
       return {
         media: validatePluginMediaSource({
-          url: isAndroidApp ? buildAndroidMediaProxyUrl(cached.url) : cached.url,
+          url: isAndroidApp
+            ? buildAndroidMediaProxyUrl(cached.url, cached.headers)
+            : cached.headers
+              ? buildPluginMediaUrl(cached.url, cached.headers)
+              : cached.url,
           format: cached.format,
-          br: cached.br
+          br: cached.br,
+          headers: cached.headers
         })!,
         providerKey: cached.providerKey,
         providerName: cached.providerName,
@@ -266,6 +285,7 @@ export const resolveSong = async (
             url: media.url,
             format: result.media.format,
             br: result.media.br,
+            headers: media.headers || {},
             providerKey: provider.key,
             providerName: provider.name
           },

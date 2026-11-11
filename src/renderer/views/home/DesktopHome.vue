@@ -9,14 +9,19 @@
             <h1>{{ t('comp.haruHome.title') }}</h1>
             <p class="home-subtitle">{{ t('comp.haruHome.subtitle') }}</p>
           </div>
-          <button
-            v-if="isAndroidApp"
-            class="local-entry"
-            type="button"
-            @click="router.push('/device-music')"
-          >
-            <i class="ri-folder-music-line" /> 本地音乐
-          </button>
+          <div v-if="isAndroidApp" class="home-shortcuts">
+            <button
+              class="local-entry artist-entry"
+              type="button"
+              aria-label="浏览艺人分类"
+              @click="router.push('/artists')"
+            >
+              <i class="ri-user-voice-line" /> 艺人
+            </button>
+            <button class="local-entry" type="button" @click="router.push('/device-music')">
+              <i class="ri-folder-music-line" /> 本地音乐
+            </button>
+          </div>
         </div>
         <div class="content-sections">
           <home-album-section
@@ -101,6 +106,14 @@ const router = useRouter();
 .local-entry:active {
   transform: scale(0.96);
 }
+.home-shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.artist-entry {
+  color: var(--accent, #fa2d48);
+}
 .content-sections > * {
   padding: 32px 0;
   border-bottom: 1px solid var(--divider, #d9d9de);
@@ -144,6 +157,13 @@ const router = useRouter();
   }
   .home-heading h1 {
     font-size: 34px;
+  }
+  .home-shortcuts {
+    gap: 6px;
+  }
+  .local-entry {
+    padding: 9px 10px;
+    font-size: 11px;
   }
   :deep(.album-section > .grid) {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;

@@ -38,6 +38,22 @@
       >
         <n-spin size="large" stroke="#10b981" />
       </div>
+      <div
+        v-else-if="loadError"
+        class="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/70 px-6 text-center text-white"
+        role="alert"
+      >
+        <i class="ri-wifi-off-line text-3xl" aria-hidden="true"></i>
+        <p class="text-sm">{{ loadError }}</p>
+        <button
+          v-if="currentMv"
+          class="rounded-full border border-white/30 px-4 py-2 text-sm active:scale-95"
+          type="button"
+          @click.stop="loadMvUrl(currentMv)"
+        >
+          重试
+        </button>
+      </div>
 
       <!-- Mobile: Center Play Button Overlay -->
       <div
@@ -319,7 +335,9 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { getMvUrl } from '@/api/mv';
+import { buildAndroidMediaProxyUrl } from '@/services/musicSource/transport';
 import { IMvItem } from '@/types/mv';
+import { isAndroidApp } from '@/utils';
 
 const { t } = useI18n();
 const breakpoints = useBreakpoints(breakpointsTailwind);
@@ -356,6 +374,7 @@ const videoRef = ref<HTMLVideoElement | null>(null);
 
 // State
 const mvUrl = ref<string>();
+const loadError = ref('');
 const playMode = ref<PlayMode>(PLAY_MODE.Auto);
 const isPlaying = ref(false);
 const isBuffering = ref(false);
@@ -469,10 +488,16 @@ const handleClose = () => {
 
 const loadMvUrl = async (mv: IMvItem) => {
   playLoading.value = true;
+  loadError.value = '';
+  mvUrl.value = undefined;
   autoPlayBlocked.value = false;
   try {
     const res = await getMvUrl(mv.id);
-    mvUrl.value = res.data.data.url;
+    const url = res.data?.data?.url;
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+      throw new Error('视频源暂时不可用。');
+    }
+    mvUrl.value = isAndroidApp ? buildAndroidMediaProxyUrl(url) : url;
     await nextTick();
     if (videoRef.value) {
       try {
@@ -484,6 +509,7 @@ const loadMvUrl = async (mv: IMvItem) => {
     }
   } catch (error) {
     console.error('Failed to load MV:', error);
+    loadError.value = 'MV 加载失败，请检查网络后重试。';
   } finally {
     playLoading.value = false;
   }

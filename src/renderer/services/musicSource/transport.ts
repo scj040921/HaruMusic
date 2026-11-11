@@ -118,21 +118,91 @@ export const fetchMusicSourcePlugin = async (
   sourceUrl: string
 ): Promise<{ name: string; content: string; url: string }> => {
   if (isElectron) return window.api.fetchMusicSourcePlugin(sourceUrl);
-  const response = await requestMusicSourceHttp(sourceUrl, {
-    method: 'GET',
-    headers: { 'User-Agent': 'HaruMusic/0.1' },
-    timeout: 20000
-  });
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw new Error(`HTTP ${response.statusCode}`);
-  }
-  const content = typeof response.body === 'string' ? response.body : JSON.stringify(response.body);
-  if (!content.trim()) throw new Error('脚本内容为空。');
-  if (content.length > 2 * 1024 * 1024) throw new Error('音源脚本不能超过 2 MB。');
   const url = new URL(sourceUrl);
   let name = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() || 'online-source');
   name = name.replace(/\.(m?js|cjs)$/i, '') || 'online-source';
-  return { name, content, url: sourceUrl };
+  const candidates = [sourceUrl, ...getMusicSourceMirrorUrls(sourceUrl)];
+  const isManifest = /\.json$/i.test(url.pathname);
+  let lastError: unknown;
+
+  for (const candidate of candidates) {
+    try {
+      const response = await requestMusicSourceHttp(candidate, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json, text/javascript, */*',
+          'User-Agent': 'HaruMusic/0.1'
+        },
+        timeout: 20000
+      });
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new Error(`HTTP ${response.statusCode}`);
+      }
+      const content =
+        typeof response.body === 'string' ? response.body : JSON.stringify(response.body);
+      if (!content.trim()) throw new Error('服务器返回了空内容。');
+      if (content.length > 2 * 1024 * 1024) throw new Error('音源脚本不能超过 2 MB。');
+      if (isManifest) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(content);
+        } catch {
+          throw new Error('返回内容不是有效的 JSON 订阅清单。');
+        }
+        if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as any).plugins)) {
+          throw new Error('订阅清单缺少 plugins 列表。');
+        }
+      }
+      return { name, content, url: sourceUrl };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const detail = lastError instanceof Error ? lastError.message : '网络请求失败。';
+  throw new Error(`无法读取音源地址（已尝试 GitHub 内容镜像）：${detail}`);
+};
+
+/** GitHub Pages/CDN在部分 Android 网络中不可达时，尝试同仓库的 jsDelivr 与 raw 镜像。 */
+export const getMusicSourceMirrorUrls = (sourceUrl: string): string[] => {
+  try {
+    const source = new URL(sourceUrl);
+    const mirrors: string[] = [];
+    const githubPageMirrors: Record<string, { repo: string; prefix: string }> = {
+      'qwerwhr.github.io': { repo: 'qwerwhr/musicfree-plugins', prefix: '/musicfree-plugins/' },
+      'hebijunge.github.io': {
+        repo: 'hebijunge/musicfree-plugins',
+        prefix: '/musicfree-plugins/'
+      }
+    };
+    const githubPages = githubPageMirrors[source.hostname.toLowerCase()];
+
+    if (githubPages && source.pathname.startsWith(githubPages.prefix)) {
+      const path = source.pathname.slice(githubPages.prefix.length);
+      mirrors.push(
+        `https://cdn.jsdelivr.net/gh/${githubPages.repo}@main/${path}${source.search}`,
+        `https://raw.githubusercontent.com/${githubPages.repo}/main/${path}${source.search}`
+      );
+    }
+
+    const jsdelivr = source.pathname.match(/^\/gh\/([^/@]+\/[^/@]+)@([^/]+)\/(.+)$/);
+    if (source.hostname === 'cdn.jsdelivr.net' && jsdelivr) {
+      mirrors.push(
+        `https://raw.githubusercontent.com/${jsdelivr[1]}/${jsdelivr[2]}/${jsdelivr[3]}${source.search}`
+      );
+    }
+
+    const rawGithub = source.pathname.match(/^\/([^/]+\/[^/]+)\/([^/]+)\/(.+)$/);
+    if (source.hostname === 'raw.githubusercontent.com' && rawGithub) {
+      mirrors.push(
+        `https://cdn.jsdelivr.net/gh/${rawGithub[1]}@${rawGithub[2]}/${rawGithub[3]}${source.search}`
+      );
+    }
+
+    return [...new Set(mirrors.filter((mirror) => mirror !== sourceUrl))];
+  } catch {
+    return [];
+  }
 };
 
 export const resolveUnblockMusic = async (

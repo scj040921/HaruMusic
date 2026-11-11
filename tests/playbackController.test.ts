@@ -108,6 +108,7 @@ describe('playback recovery ownership (#769)', () => {
       await import('@/store/modules/playerCore');
     mocks.core = useFreshPlayerCoreStore();
     mocks.core.playMusic = makeSong(1);
+    mocks.audio.getCurrentTrack.mockImplementation(() => mocks.core.playMusic);
     mocks.core.play = true;
     mocks.core.isPlay = true;
     mocks.core.userPlayIntent = true;
@@ -134,7 +135,8 @@ describe('playback recovery ownership (#769)', () => {
       'https://example.com/new-quality.mp3',
       expect.anything(),
       false,
-      42
+      42,
+      undefined
     );
     expect(mocks.setQuality).toHaveBeenCalledWith(1, 'lossless');
   });
@@ -192,6 +194,23 @@ describe('playback recovery ownership (#769)', () => {
     expect(mocks.sound.pause).not.toHaveBeenCalled();
   });
 
+  it('keeps the current song playing while the next URL is resolving', async () => {
+    const previousTrack = mocks.core.playMusic;
+    const detail = deferred<SongResult>();
+    mocks.getSongDetail.mockReturnValueOnce(detail.promise);
+
+    const playback = controller.playTrack(makeSong(2));
+    await vi.waitFor(() => expect(mocks.getSongDetail).toHaveBeenCalledTimes(1));
+
+    expect(mocks.core.playMusic).toBe(previousTrack);
+    expect(mocks.core.isPlay).toBe(true);
+    expect(mocks.audio.stop).not.toHaveBeenCalled();
+
+    detail.resolve(makeSong(2));
+    expect(await playback).toBe(true);
+    expect(mocks.core.playMusic.id).toBe(2);
+  });
+
   it('still allows explicit source changes for online songs cached on disk', async () => {
     mocks.core.playMusic = makeSong(1, true);
 
@@ -217,14 +236,14 @@ describe('playback recovery ownership (#769)', () => {
     expect(mocks.core.playMusic.id).toBe(local.id);
   });
 
-  it('discards a stale request before stopping audio', async () => {
+  it('discards a stale request without stopping the current track', async () => {
     const results = await Promise.all([
       controller.playTrack(makeSong(1)),
       controller.playTrack(makeSong('local-song', true))
     ]);
 
     expect(results).toEqual([false, true]);
-    expect(mocks.audio.stop).toHaveBeenCalledTimes(1);
+    expect(mocks.audio.stop).not.toHaveBeenCalled();
   });
 
   it('discards a reparse result after the user selects another song', async () => {
@@ -320,14 +339,17 @@ describe('playback recovery ownership (#769)', () => {
     expect(mocks.core.playMusic.playLoading).toBe(false);
   });
 
-  it('clears playing state and the old URL when source resolution fails', async () => {
+  it('keeps the current track playing when the next source cannot be resolved', async () => {
+    const previousTrack = mocks.core.playMusic;
     mocks.core.playMusicUrl = 'https://example.com/previous.mp3';
     mocks.getSongDetail.mockRejectedValueOnce(new Error('Source unavailable'));
 
     expect(await controller.playTrack(makeSong(2))).toBe(false);
-    expect(mocks.core.isPlay).toBe(false);
-    expect(mocks.core.userPlayIntent).toBe(false);
-    expect(mocks.core.playMusicUrl).toBe('');
+    expect(mocks.core.isPlay).toBe(true);
+    expect(mocks.core.userPlayIntent).toBe(true);
+    expect(mocks.core.playMusic).toBe(previousTrack);
+    expect(mocks.core.playMusicUrl).toBe('https://example.com/previous.mp3');
+    expect(mocks.audio.pause).not.toHaveBeenCalled();
   });
 
   it('does not restore the previous progress for a new explicit playback', async () => {
@@ -340,11 +362,14 @@ describe('playback recovery ownership (#769)', () => {
     expect(mocks.audio.play.mock.calls[0][3]).toBe(0);
   });
 
-  it('does not mark a failed playerCore playback as successful', async () => {
+  it('preserves current playback when the next playerCore request fails', async () => {
+    const previousTrack = mocks.core.playMusic;
     mocks.getSongDetail.mockRejectedValueOnce(new Error('Source unavailable'));
     await mocks.core.setPlayMusic(makeSong(2));
 
-    expect(mocks.core.isPlay).toBe(false);
-    expect(mocks.core.userPlayIntent).toBe(false);
+    expect(mocks.core.isPlay).toBe(true);
+    expect(mocks.core.userPlayIntent).toBe(true);
+    expect(mocks.core.playMusic).toBe(previousTrack);
+    expect(mocks.audio.pause).not.toHaveBeenCalled();
   });
 });

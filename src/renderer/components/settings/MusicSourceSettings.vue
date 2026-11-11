@@ -38,16 +38,24 @@
               </p>
               <p class="mt-0.5 text-[10px] text-gray-400">选一个目录浏览，再逐个导入需要的音源</p>
             </div>
-            <button
-              v-if="activeSubscription"
-              class="shrink-0 rounded-xl px-2.5 py-1.5 text-xs text-primary transition active:scale-95 hover:bg-primary/10"
-              @click="
-                activeSubscription = null;
-                subscriptionPlugins = [];
-              "
-            >
-              返回订阅
-            </button>
+            <div v-if="activeSubscription" class="flex shrink-0 items-center gap-1">
+              <button
+                class="rounded-xl px-2.5 py-1.5 text-xs text-primary transition active:scale-95 hover:bg-primary/10"
+                :disabled="isLoadingSubscription"
+                @click="retryActiveSubscription"
+              >
+                {{ isLoadingSubscription ? '读取中' : '重试' }}
+              </button>
+              <button
+                class="rounded-xl px-2.5 py-1.5 text-xs text-gray-500 transition active:scale-95 hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10"
+                @click="
+                  activeSubscription = null;
+                  subscriptionPlugins = [];
+                "
+              >
+                返回
+              </button>
+            </div>
           </div>
           <template v-if="!activeSubscription">
             <button
@@ -70,6 +78,16 @@
           <template v-else>
             <div v-if="isLoadingSubscription" class="py-6 text-center text-xs text-gray-400">
               正在读取插件目录…
+            </div>
+            <div v-else-if="subscriptionError" class="space-y-2 py-4 text-center">
+              <p class="text-xs leading-relaxed text-red-500">{{ subscriptionError }}</p>
+              <button
+                class="rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary active:scale-95"
+                type="button"
+                @click="retryActiveSubscription"
+              >
+                重新读取
+              </button>
             </div>
             <div v-else-if="subscriptionPlugins.length" class="space-y-1">
               <div
@@ -380,6 +398,13 @@ const openMusicFreeSubscription = async (subscription: { name: string; url: stri
   } finally {
     isLoadingSubscription.value = false;
   }
+};
+
+const retryActiveSubscription = () => {
+  const subscription = musicFreeSubscriptions.value.find(
+    (item: any) => item.url === activeSubscription.value
+  );
+  if (subscription) void openMusicFreeSubscription(subscription);
 };
 
 const importSubscriptionPlugin = async (plugin: { name: string; url: string }) => {

@@ -5,6 +5,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override public void onCreate(android.os.Bundle savedInstanceState) {
         registerPlugin(HaruMediaPlugin.class);
+        registerPlugin(HaruLocalMusicPlugin.class);
         super.onCreate(savedInstanceState);
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);

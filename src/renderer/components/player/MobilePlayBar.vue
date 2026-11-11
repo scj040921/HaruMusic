@@ -72,19 +72,27 @@
 <script lang="ts" setup>
 import { useSwipe } from '@vueuse/core';
 import type { Ref } from 'vue';
-import { inject, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
 
 import MusicFullWrapper from '@/components/lyric/MusicFullWrapper.vue';
-import { artistList, playMusic, textColors } from '@/hooks/MusicHook';
+import { textColors } from '@/hooks/MusicHook';
 import { usePlaybackControl } from '@/hooks/usePlaybackControl';
 import { usePlayerStore } from '@/store/modules/player';
 import { useSettingsStore } from '@/store/modules/settings';
+import type { SongResult } from '@/types/music';
 import { getImgUrl, isAndroidApp, setAnimationClass } from '@/utils';
 
 const shouldShowMobileMenu = inject('shouldShowMobileMenu') as Ref<boolean>;
 
 const playerStore = usePlayerStore();
 const settingsStore = useSettingsStore();
+const playMusic = computed(() => playerStore.playMusic as SongResult);
+const artistList = computed(
+  () =>
+    (playerStore.playMusic?.ar || playerStore.playMusic?.song?.artists || []) as Array<{
+      name: string;
+    }>
+);
 
 // 播放控制
 const { isPlaying: play, playMusicEvent, handleNext, handlePrev } = usePlaybackControl();
@@ -129,8 +137,8 @@ onMounted(() => {
 
 watch(
   () => playerStore.playMusic,
-  async () => {
-    background.value = playMusic.value.backgroundColor as string;
+  (music) => {
+    background.value = (music?.backgroundColor as string) || '#000';
   },
   { immediate: true, deep: true }
 );
@@ -165,6 +173,28 @@ watch(
 
   &.play-bar-mini {
     @apply h-14 py-0;
+  }
+
+  &.android-native-player.play-bar-mini {
+    left: 50%;
+    width: min(500px, calc(100vw - 32px));
+    translate: -50% 0;
+    z-index: 10000;
+  }
+
+  &.android-native-player.play-bar-mini.is-menu-show {
+    bottom: calc(var(--safe-area-inset-bottom, 0px) + 88px);
+  }
+
+  &.android-native-player.play-bar-mini.is-menu-hide {
+    bottom: calc(var(--safe-area-inset-bottom, 0px) + 12px);
+  }
+
+  &.android-native-player.play-bar-expanded {
+    left: 0;
+    bottom: 0 !important;
+    width: 100%;
+    translate: none;
   }
 
   // 进度条
@@ -306,6 +336,63 @@ watch(
         @apply hover:text-green-500;
       }
     }
+  }
+
+  &.android-native-player .mobile-mini-controls {
+    height: 56px;
+    margin: 0;
+    padding-right: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.62);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.76);
+    box-shadow: 0 12px 34px rgba(18, 24, 22, 0.18);
+    backdrop-filter: blur(28px) saturate(1.7);
+    -webkit-backdrop-filter: blur(28px) saturate(1.7);
+
+    .mini-song-cover {
+      width: 42px;
+      height: 42px;
+      margin-left: 7px;
+      border: 0;
+      border-radius: 14px;
+      object-fit: cover;
+    }
+
+    .mini-song-text {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+
+    .mini-song-title {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mini-playback-controls .mini-control-btn.play {
+      width: 36px;
+      height: 40px;
+      margin-right: 4px;
+      border-radius: 0;
+      background: transparent;
+
+      .iconfont {
+        color: var(--accent, #fa2d48);
+      }
+    }
+
+    .mini-playback-controls .mini-list-icon {
+      color: var(--text-secondary, #77777c);
+    }
+  }
+
+  :global(.dark) &.android-native-player .mobile-mini-controls {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(28, 28, 30, 0.8);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
   }
 }
 

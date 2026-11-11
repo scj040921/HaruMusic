@@ -28,4 +28,16 @@ describe('quality-aware music cache', () => {
     expect(MusicResolveCache.isInFailedCache(77123, 'netease', 'standard')).toBe(true);
     expect(MusicResolveCache.isInFailedCache(77123, 'netease', 'auto')).toBe(false);
   });
+
+  it('keeps source headers in the cached playback entry', async () => {
+    const entry = {
+      url: 'https://example.com/audio',
+      headers: { Referer: 'https://example.com/', Authorization: 'Bearer token' },
+      providerKey: 'plugin:demo',
+      providerName: 'Demo'
+    };
+    await MusicResolveCache.setCachedMusicUrl(77123, entry, ['plugin:demo'], 'auto');
+    const saved = db.saveData.mock.calls[0][1].entry;
+    expect(saved.headers).toEqual(entry.headers);
+  });
 });

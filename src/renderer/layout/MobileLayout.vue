@@ -125,7 +125,7 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
   @apply h-full;
 }
 
-// 底部菜单固定在底部
+// Android uses separate floating surfaces for the mini player and tab bar.
 .mobile-bottom-menu {
   @apply bg-light dark:bg-black;
   @apply border-t border-gray-200 dark:border-gray-800;
@@ -133,5 +133,57 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
 
 .mobile-menu {
   @apply w-full;
+}
+
+.android-liquidglass .mobile-content.has-bottom-menu {
+  padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + 88px);
+}
+
+.android-liquidglass .mobile-content.has-bottom-menu.has-player {
+  padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + 156px);
+}
+
+.android-liquidglass .mobile-content.has-player:not(.has-bottom-menu) {
+  padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + 80px);
+}
+
+.android-liquidglass .mobile-bottom-menu {
+  position: fixed;
+  z-index: 10001;
+  left: 50%;
+  bottom: calc(var(--safe-area-inset-bottom, 0px) + 12px);
+  width: min(520px, calc(100vw - 32px));
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 12px 38px rgba(18, 24, 22, 0.16);
+  backdrop-filter: blur(28px) saturate(1.7);
+  -webkit-backdrop-filter: blur(28px) saturate(1.7);
+  transform: translateX(-50%);
+}
+
+:global(.dark) .android-liquidglass .mobile-bottom-menu {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(28, 28, 30, 0.78);
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.38);
+}
+
+.android-liquidglass .mobile-menu :deep(.app-menu) {
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  background: transparent !important;
+  border: 0;
+}
+
+.android-liquidglass .mobile-menu :deep(.app-menu-list) {
+  padding: 0 8px !important;
+}
+
+.android-liquidglass .mobile-menu :deep(.app-menu-item-link),
+.android-liquidglass .mobile-menu :deep(.app-menu-item-link.is-active) {
+  background: transparent !important;
+  box-shadow: none !important;
 }
 </style>

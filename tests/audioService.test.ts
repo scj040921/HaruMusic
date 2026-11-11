@@ -17,6 +17,11 @@ class TestAudio extends EventTarget {
   paused = true;
   ended = false;
   error: { code: number; message: string } | null = null;
+  readyState = 0;
+  muted = false;
+  volume = 1;
+  preload = 'auto';
+  crossOrigin = '';
   load = vi.fn();
   play = vi.fn(async () => {
     this.paused = false;
@@ -67,6 +72,8 @@ describe('audio loading ownership (#769)', () => {
     vi.stubGlobal('Audio', TestAudio);
     vi.stubGlobal('MediaError', { MEDIA_ERR_SRC_NOT_SUPPORTED: 4 });
     vi.stubGlobal('navigator', {});
+    vi.stubGlobal('document', { baseURI: 'https://app.local/' });
+    vi.stubGlobal('HTMLMediaElement', { HAVE_NOTHING: 0, HAVE_CURRENT_DATA: 2 });
     vi.stubGlobal('window', { addEventListener: vi.fn() });
     vi.stubGlobal('localStorage', { getItem: () => null, setItem: vi.fn() });
     service = (await import('@/services/audioService')).audioService;
@@ -235,6 +242,21 @@ describe('audio loading ownership (#769)', () => {
 
     await service.play(song.playMusicUrl!, song, true, 0);
     expect(audio.currentTime).toBe(0);
+  });
+
+  it('adopts a prebuffered audio element for the next track', async () => {
+    const song = makeSong(2, 'https://example.com/next.mp3');
+    const preloaded = new TestAudio();
+    preloaded.src = song.playMusicUrl!;
+    preloaded.readyState = 2;
+
+    const playback = service.play(song.playMusicUrl!, song, true, 0, preloaded as any);
+    await expect(playback).resolves.toBe(preloaded);
+
+    expect(service.getCurrentSound()).toBe(preloaded);
+    expect(service.getCurrentTrack()?.id).toBe(song.id);
+    expect(audio.pause).toHaveBeenCalledOnce();
+    expect(preloaded.play).toHaveBeenCalledOnce();
   });
 
   it('clamps seek targets and ignores non-finite values', async () => {

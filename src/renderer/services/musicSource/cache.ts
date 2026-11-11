@@ -20,6 +20,7 @@ export type CachedUrlEntry = {
   url: string;
   format?: string;
   br?: number;
+  headers?: Record<string, string>;
   providerKey: string;
   providerName: string;
 };

@@ -223,27 +223,33 @@
           <!-- 左侧进度条 -->
           <div class="landscape-progress-container">
             <div class="time-info">
-              <span class="current-time">{{ secondToMinute(nowTime) }}</span>
+              <span class="current-time">{{ secondToMinute(progressDisplayTime) }}</span>
               <span class="total-time">{{ secondToMinute(allTime) }}</span>
             </div>
             <div
               class="apple-style-progress"
-              @click="handleProgressBarClick"
-              @mousedown="handleMouseDown"
+              role="slider"
+              tabindex="0"
+              aria-label="播放进度"
+              :aria-valuemin="0"
+              :aria-valuemax="Math.round(allTime)"
+              :aria-valuenow="Math.round(progressDisplayTime)"
+              @pointerdown="handleProgressPointerDown"
+              @pointermove="handleProgressPointerMove"
+              @pointerup="handleProgressPointerUp"
+              @pointercancel="handleProgressPointerCancel"
+              @keydown="handleProgressKeyDown"
+              @click="handleProgressClick"
             >
               <div class="progress-track">
                 <div
                   class="progress-fill"
-                  :style="{ width: `${(nowTime / Math.max(1, allTime)) * 100}%` }"
+                  :style="{ width: `${(progressDisplayTime / Math.max(1, allTime)) * 100}%` }"
                 ></div>
                 <div
                   class="progress-thumb"
-                  :class="{ active: isThumbDragging || isMouseDragging }"
-                  :style="{ left: `${(nowTime / Math.max(1, allTime)) * 100}%` }"
-                  @touchstart="handleThumbTouchStart"
-                  @touchmove="handleThumbTouchMove"
-                  @touchend="handleThumbTouchEnd"
-                  @mousedown="handleMouseDown"
+                  :class="{ active: isProgressDragging }"
+                  :style="{ left: `${(progressDisplayTime / Math.max(1, allTime)) * 100}%` }"
                 ></div>
               </div>
             </div>
@@ -347,27 +353,33 @@
         <!-- 进度条 (苹果风格) -->
         <div class="progress-container">
           <div class="time-info">
-            <span class="current-time">{{ secondToMinute(nowTime) }}</span>
+            <span class="current-time">{{ secondToMinute(progressDisplayTime) }}</span>
             <span class="total-time">{{ secondToMinute(allTime) }}</span>
           </div>
           <div
             class="apple-style-progress"
-            @click="handleProgressBarClick"
-            @mousedown="handleMouseDown"
+            role="slider"
+            tabindex="0"
+            aria-label="播放进度"
+            :aria-valuemin="0"
+            :aria-valuemax="Math.round(allTime)"
+            :aria-valuenow="Math.round(progressDisplayTime)"
+            @pointerdown="handleProgressPointerDown"
+            @pointermove="handleProgressPointerMove"
+            @pointerup="handleProgressPointerUp"
+            @pointercancel="handleProgressPointerCancel"
+            @keydown="handleProgressKeyDown"
+            @click="handleProgressClick"
           >
             <div class="progress-track">
               <div
                 class="progress-fill"
-                :style="{ width: `${(nowTime / Math.max(1, allTime)) * 100}%` }"
+                :style="{ width: `${(progressDisplayTime / Math.max(1, allTime)) * 100}%` }"
               ></div>
               <div
                 class="progress-thumb"
-                :class="{ active: isThumbDragging || isMouseDragging }"
-                :style="{ left: `${(nowTime / Math.max(1, allTime)) * 100}%` }"
-                @touchstart="handleThumbTouchStart"
-                @touchmove="handleThumbTouchMove"
-                @touchend="handleThumbTouchEnd"
-                @mousedown="handleMouseDown"
+                :class="{ active: isProgressDragging }"
+                :style="{ left: `${(progressDisplayTime / Math.max(1, allTime)) * 100}%` }"
               ></div>
             </div>
           </div>
@@ -408,14 +420,11 @@ import { useI18n } from 'vue-i18n';
 import MobilePlayerSettings from '@/components/player/MobilePlayerSettings.vue';
 import {
   allTime,
-  artistList,
   correctionTime,
   lrcArray,
   nowIndex,
   nowTime,
-  playMusic,
   setAudioTime,
-  sound,
   textColors,
   useLyricProgress
 } from '@/hooks/MusicHook';
@@ -425,6 +434,7 @@ import { usePlayMode } from '@/hooks/usePlayMode';
 import { audioService } from '@/services/audioService';
 import { usePlayerStore } from '@/store/modules/player';
 import { DEFAULT_LYRIC_CONFIG, LyricConfig } from '@/types/lyric';
+import type { Artist, SongResult } from '@/types/music';
 import { getImgUrl, secondToMinute } from '@/utils';
 import { playFavoriteFeedback } from '@/utils/favoriteFeedback';
 import { getTextColors } from '@/utils/linearColor';
@@ -433,6 +443,10 @@ import { showBottomToast } from '@/utils/shortcutToast';
 
 const { t } = useI18n();
 const playerStore = usePlayerStore();
+const playMusic = computed(() => playerStore.playMusic as SongResult);
+const artistList = computed(
+  () => (playerStore.playMusic?.ar || playerStore.playMusic?.song?.artists || []) as Artist[]
+);
 
 // 播放控制相关
 const play = computed(() => playerStore.isPlay);
@@ -496,15 +510,18 @@ const showPlaylist = () => {
 
 // 喜欢歌曲
 const isFavorite = computed(() => {
-  return playerStore.favoriteList.includes(playMusic.value.id as number);
+  const id = Number(playMusic.value?.id);
+  return Number.isFinite(id) && playerStore.favoriteList.includes(id);
 });
 
 const toggleFavorite = (event: Event) => {
+  const id = Number(playMusic.value?.id);
+  if (!Number.isFinite(id)) return;
   const nextFavorite = !isFavorite.value;
   if (isFavorite.value) {
-    playerStore.removeFromFavorite(playMusic.value.id as number);
+    playerStore.removeFromFavorite(id);
   } else {
-    playerStore.addToFavorite(playMusic.value.id as number);
+    playerStore.addToFavorite(id);
   }
   playFavoriteFeedback(event.currentTarget, nextFavorite);
 };
@@ -649,8 +666,8 @@ watch(showFullLyrics, (newVal) => {
 
 // 监听音乐播放时间变化，触发歌词滚动更新
 watch(nowTime, () => {
-  // 只有当系统不是由于用户手动拖动进度条而更新时间时才触发滚动
-  if (!isThumbDragging.value && !isTouchScrolling.value) {
+  // 手动拖动播放进度时，保持歌词视图稳定，不抢回当前行。
+  if (!isProgressDragging.value && !isTouchScrolling.value) {
     // 在竖屏全屏歌词模式下滚动
     if (showFullLyrics.value) {
       scrollToCurrentLyric(false);
@@ -753,144 +770,108 @@ const cycleCoverStyle = () => {
   }
 };
 
-// 进度条相关
-const isThumbDragging = ref(false);
-const progressContainerWidth = ref(0);
+// Scrub the timeline with Pointer Events so touch and mouse use one path.
+// Capturing the pointer on the whole hit area also lets a finger start on the
+// thin track instead of having to land precisely on the small thumb.
+const isProgressDragging = ref(false);
+const progressPreviewTime = ref(0);
+const progressDisplayTime = computed(() =>
+  isProgressDragging.value ? progressPreviewTime.value : nowTime.value
+);
+let activeProgressPointerId: number | null = null;
+let lastPointerSeekAt = 0;
 
-// 鼠标拖动进度条相关变量
-const isMouseDragging = ref(false);
-
-// 处理进度条点击
-const handleProgressBarClick = (e: MouseEvent) => {
-  if (!sound.value) return;
-
-  e.stopPropagation(); // 阻止事件冒泡
-  const progressBar = e.currentTarget as HTMLElement;
-  const rect = progressBar.getBoundingClientRect();
-  const offsetX = e.clientX - rect.left;
-  progressContainerWidth.value = rect.width;
-
-  const percentage = offsetX / rect.width;
-  const newTime = Math.max(0, Math.min(percentage * allTime.value, allTime.value));
-
-  console.log(`进度条点击: ${percentage.toFixed(2)}, 新时间: ${newTime.toFixed(2)}`);
-
-  audioService.seek(newTime);
-  nowTime.value = newTime;
+const progressTimeAtPointer = (event: PointerEvent): number | null => {
+  const bar = event.currentTarget as HTMLElement | null;
+  const rect = bar?.getBoundingClientRect();
+  const duration = Number(allTime.value);
+  if (!rect || rect.width <= 0 || !Number.isFinite(duration) || duration <= 0) return null;
+  const progress = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  return progress * duration;
 };
 
-// 鼠标按下事件
-const handleMouseDown = (e: MouseEvent) => {
-  if (e.button !== 0) return; // 只处理左键点击
-
-  e.preventDefault();
-  e.stopPropagation();
-  isMouseDragging.value = true;
-
-  // 立即更新位置
-  const progressBar = (e.currentTarget as HTMLElement).closest(
-    '.apple-style-progress'
-  ) as HTMLElement;
-  if (progressBar) {
-    const rect = progressBar.getBoundingClientRect();
-    const offsetX = e.clientX - rect.left;
-    const percentage = Math.max(0, Math.min(1, offsetX / rect.width));
-    const newTime = percentage * allTime.value;
-
-    nowTime.value = newTime;
-    console.log(`鼠标按下，位置: ${percentage.toFixed(2)}, 时间: ${newTime.toFixed(2)}秒`);
-  }
-
-  // 添加全局鼠标事件监听
-  document.addEventListener('mousemove', handleMouseMove);
-  document.addEventListener('mouseup', handleMouseUp);
+const applyProgressPointerTime = (event: PointerEvent) => {
+  const time = progressTimeAtPointer(event);
+  if (time !== null) progressPreviewTime.value = time;
+  return time;
 };
 
-// 鼠标移动事件
-const handleMouseMove = (e: MouseEvent) => {
-  if (!isMouseDragging.value || !sound.value) return;
+const handleProgressPointerDown = (event: PointerEvent) => {
+  if ((event.pointerType === 'mouse' && event.button !== 0) || !playerStore.playMusic?.id) return;
+  const time = progressTimeAtPointer(event);
+  if (time === null) return;
 
-  e.preventDefault();
-
-  // 查找当前视图中的进度条元素
-  const progressBar = isLandscape.value
-    ? document.querySelector('.landscape-left-section .apple-style-progress')
-    : document.querySelector('.unified-controls .apple-style-progress');
-
-  if (!progressBar) return;
-
-  const rect = (progressBar as HTMLElement).getBoundingClientRect();
-  const offsetX = e.clientX - rect.left;
-  const percentage = Math.max(0, Math.min(1, offsetX / rect.width));
-  const newTime = percentage * allTime.value;
-
-  nowTime.value = newTime;
-  console.log(`鼠标移动，位置: ${percentage.toFixed(2)}, 时间: ${newTime.toFixed(2)}秒`);
-};
-
-// 鼠标释放事件
-const handleMouseUp = (e: MouseEvent) => {
-  if (!isMouseDragging.value || !sound.value) return;
-
-  e.preventDefault();
-
-  // 释放时跳转到指定位置
-  audioService.seek(nowTime.value);
-  console.log(`鼠标释放，跳转到: ${nowTime.value.toFixed(2)}秒`);
-
-  isMouseDragging.value = false;
-
-  // 移除全局事件监听
-  document.removeEventListener('mousemove', handleMouseMove);
-  document.removeEventListener('mouseup', handleMouseUp);
-};
-
-// 处理滑块拖动
-const handleThumbTouchStart = (e: TouchEvent) => {
-  e.preventDefault(); // 阻止默认行为
-  e.stopPropagation(); // 阻止事件冒泡
-  isThumbDragging.value = true;
-
-  // 获取进度条宽度
-  const target = e.currentTarget as HTMLElement;
-  const progressBar = target.parentElement?.parentElement as HTMLElement;
-  if (progressBar) {
-    progressContainerWidth.value = progressBar.getBoundingClientRect().width;
-    console.log(`进度条宽度: ${progressContainerWidth.value}px`);
+  event.preventDefault();
+  event.stopPropagation();
+  activeProgressPointerId = event.pointerId;
+  isProgressDragging.value = true;
+  progressPreviewTime.value = time;
+  try {
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  } catch {
+    // Pointer capture is not available on a few older WebView implementations.
   }
 };
 
-const handleThumbTouchMove = (e: TouchEvent) => {
-  if (!isThumbDragging.value || !sound.value) return;
-
-  e.preventDefault(); // 阻止默认行为
-
-  const touch = e.touches[0];
-  const target = e.currentTarget as HTMLElement;
-  const progressBar = target.parentElement?.parentElement as HTMLElement;
-  const rect = progressBar.getBoundingClientRect();
-  const offsetX = touch.clientX - rect.left;
-
-  // 计算百分比并限制在0-1之间
-  const percentage = Math.max(0, Math.min(1, offsetX / rect.width));
-  const newTime = percentage * allTime.value;
-
-  // 实时更新UI，但不频繁seek
-  nowTime.value = newTime;
-
-  console.log(`thumb拖动: ${percentage.toFixed(2)}, 时间: ${newTime.toFixed(2)}`);
+const handleProgressPointerMove = (event: PointerEvent) => {
+  if (!isProgressDragging.value || activeProgressPointerId !== event.pointerId) return;
+  const time = applyProgressPointerTime(event);
+  if (time === null) return;
+  event.preventDefault();
+  event.stopPropagation();
 };
 
-const handleThumbTouchEnd = (e: TouchEvent) => {
-  if (!isThumbDragging.value || !sound.value) return;
+const finishProgressPointer = (event: PointerEvent, commit: boolean) => {
+  if (!isProgressDragging.value || activeProgressPointerId !== event.pointerId) return;
+  applyProgressPointerTime(event);
 
-  e.preventDefault(); // 阻止默认行为
-  e.stopPropagation(); // 阻止事件冒泡
+  const sound = audioService.getCurrentSound();
+  if (commit && sound?.src && Number.isFinite(progressPreviewTime.value)) {
+    lastPointerSeekAt = Date.now();
+    audioService.seek(progressPreviewTime.value);
+  } else if (sound && Number.isFinite(sound.currentTime)) {
+    progressPreviewTime.value = sound.currentTime;
+  }
 
-  // 拖动结束时执行seek操作
-  console.log(`拖动结束，跳转到: ${nowTime.value.toFixed(2)}秒`);
-  audioService.seek(nowTime.value);
-  isThumbDragging.value = false;
+  isProgressDragging.value = false;
+  activeProgressPointerId = null;
+  event.preventDefault();
+  event.stopPropagation();
+};
+
+const handleProgressPointerUp = (event: PointerEvent) => finishProgressPointer(event, true);
+const handleProgressPointerCancel = (event: PointerEvent) => finishProgressPointer(event, false);
+const handleProgressKeyDown = (event: KeyboardEvent) => {
+  const duration = Number(allTime.value);
+  if (!Number.isFinite(duration) || duration <= 0) return;
+  const step = event.shiftKey ? 30 : 5;
+  const current = progressDisplayTime.value;
+  const next =
+    event.key === 'ArrowRight'
+      ? current + step
+      : event.key === 'ArrowLeft'
+        ? current - step
+        : event.key === 'PageUp'
+          ? current + 30
+          : event.key === 'PageDown'
+            ? current - 30
+            : event.key === 'Home'
+              ? 0
+              : event.key === 'End'
+                ? duration
+                : null;
+  if (next === null) return;
+  event.preventDefault();
+  audioService.seek(Math.max(0, Math.min(duration, next)));
+};
+const handleProgressClick = (event: MouseEvent) => {
+  if (Date.now() - lastPointerSeekAt < 400) return;
+  const bar = event.currentTarget as HTMLElement | null;
+  const rect = bar?.getBoundingClientRect();
+  const duration = Number(allTime.value);
+  if (!rect || rect.width <= 0 || !Number.isFinite(duration) || duration <= 0) return;
+  const progress = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  audioService.seek(progress * duration);
 };
 
 // 背景相关（由 composable 管理）
@@ -991,9 +972,8 @@ onBeforeUnmount(() => {
     sleepTimerInterval = null;
   }
 
-  // 清理鼠标事件监听
-  document.removeEventListener('mousemove', handleMouseMove);
-  document.removeEventListener('mouseup', handleMouseUp);
+  isProgressDragging.value = false;
+  activeProgressPointerId = null;
 });
 
 const { navigateToArtist } = useArtist();
@@ -1006,7 +986,7 @@ const handleArtistClick = (id: number) => {
 // 播放控制功能
 const togglePlay = () => {
   try {
-    playerStore.setPlay(playMusic.value);
+    if (playMusic.value?.id) playerStore.setPlay(playMusic.value);
   } catch (error) {
     console.error('播放出错:', error);
   }
@@ -1032,7 +1012,7 @@ const closeMusicFull = () => {
 
 // 添加对 playMusic.id 的监听，歌曲切换时滚动到顶部
 watch(
-  () => playMusic.value.id,
+  () => playMusic.value?.id,
   (newId, oldId) => {
     // 只在歌曲真正切换时滚动到顶部
     if (newId !== oldId && newId) {
@@ -1228,7 +1208,10 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
   // 通用进度条样式
   .apple-style-progress {
     @apply relative flex items-center cursor-pointer;
-    touch-action: none; // 确保触摸事件正常工作
+    min-height: 48px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
 
     .progress-track {
       @apply relative w-full h-2 bg-white bg-opacity-20 rounded-full;

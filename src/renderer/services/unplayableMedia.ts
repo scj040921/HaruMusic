@@ -1,6 +1,22 @@
 import { parsePluginMediaUrl } from '../../shared/musicSourcePlugin';
 const failed = new Map<string, number>();
-const canonical = (url: string) => parsePluginMediaUrl(url)?.url || url;
+const unwrapAndroidMediaProxy = (url: string): string | null => {
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname !== '/__media') return null;
+    const payload = parsed.searchParams.get('d');
+    if (!payload) return null;
+    const descriptor = JSON.parse(payload) as { url?: unknown };
+    return typeof descriptor.url === 'string' ? descriptor.url : null;
+  } catch {
+    return null;
+  }
+};
+
+const canonical = (url: string) => {
+  const mediaUrl = unwrapAndroidMediaProxy(url) || url;
+  return parsePluginMediaUrl(mediaUrl)?.url || mediaUrl;
+};
 export const markUnplayableMedia = (url: string) => {
   failed.set(canonical(url), Date.now() + 60_000);
 };

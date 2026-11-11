@@ -354,7 +354,7 @@
         class="liquid-now-playing"
         :class="{
           'desktop-audio-visuals': isElectron,
-          'focused-lyrics': isElectron && config.focusCurrentLyric
+          'focused-lyrics': isElectron
         }"
       >
         <div
@@ -1257,10 +1257,30 @@ const auroraField = ref<HTMLElement | null>(null);
 const recordCover = ref<HTMLImageElement | null>(null);
 const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 let visualFrame = 0;
+let lastCenteredLyricIndex = -1;
+const centerLiquidLyric = (index: number) => {
+  const container = liquidLyricsElement.value;
+  if (!container || index !== displayLyricIndex.value) return;
+  const active = container.querySelector('.liquid-lyric-line.active') as HTMLElement | null;
+  if (!active) return;
+  const containerRect = container.getBoundingClientRect();
+  const activeRect = active.getBoundingClientRect();
+  const top =
+    container.scrollTop +
+    activeRect.top -
+    containerRect.top -
+    container.clientHeight / 2 +
+    activeRect.height / 2;
+  container.scrollTo({
+    top,
+    behavior: reducedMotionQuery.matches ? 'auto' : 'smooth'
+  });
+};
 const renderAudioVisuals = () => {
   const sound = audioService.getCurrentSound();
   const time = sound && Number.isFinite(sound.currentTime) ? sound.currentTime : nowTime.value;
   const times = lrcTimeArray.value;
+  let audioLyricIndex = nowIndex.value;
   if (times.length) {
     const correctedTime = time + correctionTime.value;
     let low = 0;
@@ -1270,8 +1290,13 @@ const renderAudioVisuals = () => {
       if (times[middle] <= correctedTime) low = middle + 1;
       else high = middle;
     }
-    visualLyricIndex.value = Math.max(0, low - 1);
-  } else visualLyricIndex.value = nowIndex.value;
+    audioLyricIndex = Math.max(0, low - 1);
+  }
+  visualLyricIndex.value = audioLyricIndex;
+  if (audioLyricIndex !== lastCenteredLyricIndex) {
+    lastCenteredLyricIndex = audioLyricIndex;
+    nextTick(() => centerLiquidLyric(audioLyricIndex));
+  }
   const reduced = reducedMotionQuery.matches;
   if (recordCover.value)
     recordCover.value.style.transform = reduced ? '' : `rotate(${(time * 12) % 360}deg)`;
@@ -1293,7 +1318,6 @@ const renderAudioVisuals = () => {
       Math.min(1, (time + correctionTime.value - start) / (end - start))
     );
     active.style.setProperty('--lyric-progress', `${progress * 100}%`);
-    active.style.setProperty('--line-scale', `${1 + 0.055 * (1 - Math.min(progress / 0.24, 1))}`);
     active.style.setProperty('--line-glow', `${0.15 + 0.22 * (1 - Math.min(progress / 0.3, 1))}`);
   }
 };
@@ -1454,8 +1478,8 @@ const shareCurrentSong = async () => {
 const isDuetLine = (text: string) => /^(男|女|合|女声|男声|[♀♂])\s*[:：]/.test(text);
 const liquidLyricStyle = (_index: number, text: string) => {
   const duetSide = /^(女|♀)/.test(text) ? 'right' : 'left';
-  const active = _index === nowIndex.value;
-  const focus = config.value.focusCurrentLyric;
+  const active = _index === displayLyricIndex.value;
+  const focus = isElectron || config.value.focusCurrentLyric;
   return {
     ...(!isElectron
       ? {
@@ -1466,7 +1490,7 @@ const liquidLyricStyle = (_index: number, text: string) => {
       : {}),
     textAlign: (isDuetLine(text) ? duetSide : config.value.centerLyrics ? 'center' : 'left') as
       'left' | 'right' | 'center',
-    fontSize: `${config.value.fontSize + (!isElectron && focus && active ? 4 : 0)}px`,
+    fontSize: `${config.value.fontSize + (!isElectron && focus && active ? 5 : 0)}px`,
     fontWeight: config.value.fontWeight,
     letterSpacing: `${config.value.letterSpacing}px`,
     lineHeight: String(config.value.lineHeight),
@@ -2205,6 +2229,10 @@ defineExpose({
 .liquid-lyrics {
   height: 100%;
   overflow: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  scroll-padding-block: 42%;
+  padding-block: 42%;
   scrollbar-width: none;
   mask-image: linear-gradient(transparent, #000 14%, #000 88%, transparent);
 }
@@ -2214,12 +2242,15 @@ defineExpose({
 .liquid-lyric-line {
   display: flex;
   flex-direction: column;
+  align-items: center;
   width: min(100%, 640px);
-  min-height: 48px;
-  padding: 8px;
-  text-align: left;
+  min-height: 68px;
+  gap: 6px;
+  margin: 0 auto;
+  padding: 14px 12px;
+  text-align: center;
   color: #f5ded8;
-  border-radius: 8px;
+  border-radius: 14px;
   font:
     600 22px/1.4 system-ui,
     -apple-system,
@@ -2227,36 +2258,33 @@ defineExpose({
     sans-serif;
   background: transparent;
   cursor: pointer;
-  transform-origin: left center;
+  transform-origin: center;
+  scroll-snap-align: center;
   transition:
-    transform 240ms cubic-bezier(0.2, 1.35, 0.35, 1),
-    opacity 240ms;
+    opacity 280ms ease,
+    filter 280ms ease,
+    transform 520ms cubic-bezier(0.2, 0.85, 0.25, 1),
+    font-size 280ms ease;
 }
 .liquid-lyric-line.active {
   color: #fff !important;
   opacity: 1 !important;
-  font-size: 26px;
   background: transparent;
   text-shadow: 0 0 20px #fff3;
 }
 .desktop-audio-visuals .liquid-lyric-line {
-  opacity: 0.7;
-  transition:
-    transform 320ms cubic-bezier(0.2, 1.2, 0.3, 1),
-    opacity 240ms,
-    filter 240ms;
+  will-change: opacity, filter;
 }
-.desktop-audio-visuals.focused-lyrics .liquid-lyric-line:not(.active) {
-  opacity: 0.5;
-  filter: blur(1px);
+.desktop-audio-visuals .liquid-lyric-line:not(.active) {
+  opacity: 0.42;
+  filter: blur(1.8px);
+  transform: scale(0.96);
 }
 .desktop-audio-visuals .liquid-lyric-line.active {
   filter: none;
-  font-size: 22px;
-  text-shadow: 0 1px 10px rgba(255, 213, 207, 0.18);
-}
-.desktop-audio-visuals.focused-lyrics .liquid-lyric-line.active {
-  transform: scale(var(--line-scale, 1));
+  opacity: 1;
+  text-shadow: 0 1px 12px rgba(255, 213, 207, 0.2);
+  animation: lyric-focus-settle 720ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
 }
 .desktop-audio-visuals .liquid-lyric-line.active .liquid-lyric-text {
   background: linear-gradient(
@@ -2267,7 +2295,7 @@ defineExpose({
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 5px rgba(250, 45, 72, var(--line-glow, 0.2)));
+  filter: drop-shadow(0 0 7px rgba(250, 45, 72, var(--line-glow, 0.2)));
 }
 .liquid-lyric-line.duet {
   max-width: 78%;
@@ -2521,7 +2549,22 @@ defineExpose({
     transition: none;
   }
   .desktop-audio-visuals.focused-lyrics .liquid-lyric-line.active {
+    animation: none;
     transform: none;
+  }
+}
+@keyframes lyric-focus-settle {
+  0% {
+    transform: scale(1.055);
+  }
+  48% {
+    transform: scale(0.992);
+  }
+  72% {
+    transform: scale(1.012);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 @keyframes round {

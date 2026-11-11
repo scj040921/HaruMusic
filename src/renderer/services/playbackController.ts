@@ -15,6 +15,7 @@ import { getParsingMusicUrl } from '@/api/music';
 import { loadLrc, useSongDetail } from '@/hooks/usePlayerHooks';
 import { audioService } from '@/services/audioService';
 import { playbackRequestManager } from '@/services/playbackRequestManager';
+import { preloadService } from '@/services/preloadService';
 import { setSongQuality, type SongQuality } from '@/services/songQuality';
 import { SongSourceConfigManager } from '@/services/SongSourceConfigManager';
 import { markUnplayableMedia } from '@/services/unplayableMedia';
@@ -99,9 +100,10 @@ const loadAndPlayAudio = async (
     throw new Error('歌曲没有播放URL');
   }
 
-  // 直接通过 audioService 播放（单一 audio 元素，换 src 即可）
+  // 优先切换到下一首已预热的媒体元素，未预热时继续沿用常规加载路径。
   console.log(`[playbackController] 开始播放: ${song.name}`);
-  await audioService.play(song.playMusicUrl, song, shouldPlay, startTime);
+  const preloadedSound = await preloadService.consumeSound(song.id, song.playMusicUrl);
+  await audioService.play(song.playMusicUrl, song, shouldPlay, startTime, preloadedSound);
 };
 
 /**
@@ -165,22 +167,24 @@ export const playTrack = async (
   const gen = getCurrentGeneration();
   const playerCore = await getPlayerCoreStore();
   if (gen !== getCurrentGeneration()) return false;
+  const audioTrackBeforeSwitch = audioService.getCurrentTrack();
+  const wasPlayingBeforeSwitch = playerCore.play;
+  const previousPlayIntent = playerCore.userPlayIntent;
   if (music.id !== playerCore.playMusic.id) {
     SongSourceConfigManager.clearTriedSources(music.id);
   }
   if (!options.recovery) resetUrlExpiredRetry();
 
-  audioService.stop();
-  playerCore.setIsPlay(false);
-  playerCore.userPlayIntent = shouldPlay;
-  playerCore.playMusic = { ...music, playLoading: true };
-  playerCore.playMusicUrl = '';
-  updateDocumentTitle(music);
-
   const originalMusic = { ...music };
   let loadedMetadata: Awaited<ReturnType<typeof loadMetadata>> | null = null;
   const applyLoadedMetadata = () => {
-    if (!loadedMetadata || gen !== getCurrentGeneration()) return;
+    if (
+      !loadedMetadata ||
+      gen !== getCurrentGeneration() ||
+      playerCore.playMusic.id !== originalMusic.id ||
+      playerCore.playMusic.source !== originalMusic.source
+    )
+      return;
     playerCore.playMusic.lyric = loadedMetadata.lyrics;
     playerCore.playMusic.backgroundColor = loadedMetadata.backgroundColor;
     playerCore.playMusic.primaryColor = loadedMetadata.primaryColor;
@@ -208,8 +212,12 @@ export const playTrack = async (
       if (gen !== getCurrentGeneration()) return false;
       if (!song.playMusicUrl) throw new Error('歌曲没有播放URL');
       audioUrl = song.playMusicUrl;
+      // Resolve the next source while the current track continues. Only switch
+      // the visible song/audio element once the new URL is ready.
+      playerCore.userPlayIntent = shouldPlay;
       playerCore.playMusic = { ...song, playLoading: true };
       playerCore.playMusicUrl = audioUrl;
+      updateDocumentTitle(song);
       applyLoadedMetadata();
       audioService.setVolume(playerCore.isMuted ? 0 : playerCore.volume);
       audioService.setPlaybackRate(playerCore.playbackRate);
@@ -259,10 +267,17 @@ export const playTrack = async (
       }
 
       console.error('[playbackController] 播放失败:', error);
-      playerCore.setIsPlay(false);
-      playerCore.userPlayIntent = false;
-      playerCore.playMusic.playLoading = false;
-      audioService.pause();
+      const previousAudioIsIntact =
+        !!audioTrackBeforeSwitch && audioService.getCurrentTrack() === audioTrackBeforeSwitch;
+      if (previousAudioIsIntact) {
+        playerCore.userPlayIntent = previousPlayIntent;
+        playerCore.setIsPlay(wasPlayingBeforeSwitch);
+      } else {
+        playerCore.setIsPlay(false);
+        playerCore.userPlayIntent = false;
+        playerCore.playMusic.playLoading = false;
+        audioService.pause();
+      }
       if (name !== 'AbortError') {
         message.error(
           i18n.global.t(name === 'NotAllowedError' ? 'player.resumeFailed' : 'player.playFailed')

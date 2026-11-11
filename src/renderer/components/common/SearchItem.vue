@@ -98,7 +98,7 @@ const getCurrentMv = () => {
 };
 
 const handleClick = async () => {
-  if (props.item.type === '专辑') {
+  if (props.item.type === '专辑' || props.item.type === 'album') {
     navigateToMusicList(router, {
       id: props.item.id,
       type: 'album',

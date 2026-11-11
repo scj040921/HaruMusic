@@ -1,8 +1,14 @@
 <template>
-  <n-scrollbar class="h-full"
-    ><main class="local-page">
-      <h1>本地音乐</h1>
-      <p>将设备里的音频导入音乐库，离线也可播放。</p>
+  <n-scrollbar class="h-full">
+    <main class="local-page">
+      <header class="page-heading">
+        <div>
+          <p class="eyebrow">ON DEVICE</p>
+          <h1>本地音乐</h1>
+          <p>自动整理设备中的 FLAC，也可手动导入其它音频。</p>
+        </div>
+        <span v-if="tracks.length" class="track-count">{{ tracks.length }} 首</span>
+      </header>
       <input
         ref="picker"
         type="file"
@@ -11,18 +17,34 @@
         hidden
         @change="importFiles"
       />
-      <button class="import" @click="picker?.click()"><i class="ri-add-line" /> 导入音频</button>
-      <p v-if="error" class="error">{{ error }}</p>
-      <p v-if="!tracks.length" class="empty">还没有导入的音乐</p>
-      <div v-for="track in tracks" :key="track.id" class="track">
-        <button class="track-main" @click="play(track)">
-          <i class="ri-music-2-line" /><span>{{ track.name }}</span>
+      <div class="local-actions">
+        <button class="scan" type="button" :disabled="scanning" @click="scanFlac">
+          <i :class="scanning ? 'ri-loader-4-line spin' : 'ri-refresh-line'" />
+          {{ scanning ? '正在扫描 FLAC…' : '扫描设备 FLAC' }}
         </button>
-        <button class="remove" aria-label="移除歌曲" @click="remove(track.id)">
+        <button class="import" type="button" @click="picker?.click()">
+          <i class="ri-add-line" /> 导入音频
+        </button>
+      </div>
+      <p v-if="scanning" class="scan-status">正在读取设备音乐媒体库…</p>
+      <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <p v-if="!tracks.length && !scanning" class="empty">
+        还没有找到音乐。首次扫描时请允许访问音乐和音频。
+      </p>
+      <div v-for="track in tracks" :key="track.id" class="track">
+        <button class="track-main" type="button" @click="play(track)">
+          <span class="track-art"><i class="ri-music-2-line" /></span>
+          <span class="track-copy">
+            <strong>{{ track.name }}</strong>
+            <small>{{ track.artist || (track.uri ? '设备中的 FLAC' : '本地导入') }}</small>
+          </span>
+        </button>
+        <button class="remove" type="button" aria-label="移除歌曲" @click="remove(track.id)">
           <i class="ri-delete-bin-line" />
         </button>
-      </div></main
-  ></n-scrollbar>
+      </div>
+    </main>
+  </n-scrollbar>
 </template>
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
@@ -31,123 +53,256 @@ import {
   type AndroidLocalTrack,
   listAndroidLocalTracks,
   removeAndroidLocalTrack,
-  saveAndroidLocalTrack
+  saveAndroidLocalTracks,
+  scanAndroidFlacTracks
 } from '@/services/androidLocalMusic';
 import { playTrack } from '@/services/playbackController';
 import { usePlayerStore } from '@/store';
 import type { SongResult } from '@/types/music';
+
 const picker = ref<HTMLInputElement | null>(null);
 const tracks = ref<AndroidLocalTrack[]>([]);
 const error = ref('');
+const scanning = ref(false);
 const player = usePlayerStore();
+
 async function refresh() {
   tracks.value = await listAndroidLocalTracks();
 }
+
 async function importFiles(event: Event) {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files || []);
   input.value = '';
   error.value = '';
   try {
-    for (const file of files) {
-      const id = `android-local:${file.name}:${file.size}:${file.lastModified}`;
-      await saveAndroidLocalTrack({ id, name: file.name.replace(/\.[^.]+$/, ''), file });
-    }
+    await saveAndroidLocalTracks(
+      files.map((file) => ({
+        id: `android-local:${file.name}:${file.size}:${file.lastModified}`,
+        name: file.name.replace(/\.[^.]+$/, ''),
+        file
+      }))
+    );
     await refresh();
   } catch {
     error.value = '导入失败，请检查可用存储空间并重试。';
   }
 }
+
+async function scanFlac() {
+  scanning.value = true;
+  error.value = '';
+  try {
+    const scanned = await scanAndroidFlacTracks();
+    await saveAndroidLocalTracks(scanned);
+    await refresh();
+    if (!scanned.length) error.value = '设备存储中没有找到 FLAC 文件。';
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '扫描存储中的 FLAC 文件失败。';
+  } finally {
+    scanning.value = false;
+  }
+}
+
 function asSong(track: AndroidLocalTrack): SongResult {
   return {
     id: track.id,
     name: track.name,
     picUrl: '',
     source: 'local',
-    ar: [],
-    al: { id: 0, name: '', picUrl: '' } as SongResult['al'],
+    ar: track.artist ? ([{ id: 0, name: track.artist }] as SongResult['ar']) : [],
+    al: { id: 0, name: track.album || '', picUrl: '' } as SongResult['al'],
     count: 0
   };
 }
+
 async function play(track: AndroidLocalTrack) {
   const songs = tracks.value.map(asSong);
   const song = asSong(track);
   player.prepareSongPlayback(song, songs);
-  await playTrack(song, true);
+  error.value = '';
+  try {
+    await playTrack(song, true);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '无法播放这首本地音乐。';
+  }
 }
+
 async function remove(id: string) {
   await removeAndroidLocalTrack(id);
   await refresh();
 }
-onMounted(() => {
-  void refresh().catch(() => {
+
+onMounted(async () => {
+  try {
+    await refresh();
+    await scanFlac();
+  } catch {
     error.value = '无法读取本地音乐库。';
-  });
+  }
 });
 </script>
 <style scoped>
 .local-page {
   max-width: 960px;
   margin: auto;
-  padding: 32px 24px 160px;
+  padding: 32px 24px 176px;
+}
+.page-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--divider);
+}
+.eyebrow {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
 }
 h1 {
+  margin: 8px 0;
   font-size: 34px;
   font-weight: 700;
 }
 p {
+  margin: 8px 0 0;
   color: var(--text-secondary);
-  margin-top: 8px;
 }
+.track-count {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.local-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0 12px;
+}
+.scan,
 .import,
 .remove {
   border: 1px solid color-mix(in srgb, var(--divider) 60%, transparent);
+  border-radius: 18px;
   background: var(--surface-glass);
   backdrop-filter: blur(20px) saturate(1.4);
-  border-radius: 18px;
-  padding: 12px 16px;
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
   transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+.scan,
 .import {
-  margin: 24px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: var(--text-primary);
+  font-weight: 600;
 }
+.scan {
+  color: var(--accent, #fa2d48);
+}
+.scan:disabled {
+  opacity: 0.7;
+}
+.scan:active,
 .import:active,
 .remove:active,
 .track-main:active {
   transform: scale(0.97);
 }
+.scan-status {
+  margin: 12px 0;
+  font-size: 12px;
+}
 .track {
   display: flex;
   align-items: center;
+  gap: 12px;
   border-bottom: 1px solid var(--divider);
 }
 .track-main {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
   flex: 1;
-  text-align: left;
+  padding: 12px 0;
   border: 0;
   background: transparent;
   color: inherit;
-  padding: 16px 0;
+  text-align: left;
 }
-.track-main span {
+.track-art {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  flex: none;
+  border-radius: 16px;
+  background: var(--surface-secondary, #f2f2f7);
+  color: var(--text-secondary);
+}
+.track-art i {
+  font-size: 22px;
+}
+.track-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  text-align: left;
+}
+.track-copy strong,
+.track-copy small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.track-main i {
-  font-size: 24px;
+.track-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.track-copy small {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 .remove {
+  flex: none;
   padding: 10px;
 }
 .empty {
   padding: 32px 0;
 }
 .error {
+  margin: 12px 0;
   color: #fa2d48;
+}
+.spin {
+  animation: spin 900ms linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (max-width: 600px) {
+  .local-page {
+    padding: 24px 16px 176px;
+  }
+  .local-actions {
+    gap: 8px;
+  }
+  .scan,
+  .import {
+    padding: 11px 12px;
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
 }
 </style>

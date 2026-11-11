@@ -83,6 +83,14 @@ export const usePlaylistStore = defineStore(
         if (playList.value !== targetList) return;
 
         const nextSong = detailedSongs[0];
+        // Start warming the next audio URL as soon as parsing returns it. Lyrics
+        // and cover color are independent work and must not delay the handoff.
+        if (nextSong?.playMusicUrl) {
+          preloadService.load(nextSong).catch((err) => {
+            console.warn('预加载下一首失败:', err);
+          });
+        }
+
         if (nextSong && !(nextSong.lyric && nextSong.lyric.lrcTimeArray.length > 0)) {
           try {
             const { useLyrics } = await import('@/hooks/usePlayerHooks');
@@ -118,14 +126,8 @@ export const usePlaylistStore = defineStore(
         // 触发 shallowRef 响应式更新（直接修改元素不会自动触发）
         triggerRef(playList);
 
-        // 预加载下一首歌曲的音频和封面
+        // 预热下一首封面，音频请求已在详情返回后并行启动。
         if (nextSong) {
-          if (nextSong.playMusicUrl) {
-            // 预加载失败（URL 验证不过）不应影响主流程，捕获避免未处理的 Promise rejection
-            preloadService.load(nextSong).catch((err) => {
-              console.warn('预加载下一首失败:', err);
-            });
-          }
           if (nextSong.picUrl) {
             preloadCoverImage(nextSong.picUrl, getImgUrl);
           }
@@ -147,7 +149,7 @@ export const usePlaylistStore = defineStore(
         preloadDebounceTimer = null;
         if (list !== playList.value || currentIndex !== playListIndex.value) return;
         doPreloadNextSongs(currentIndex);
-      }, 800);
+      }, 120);
     };
 
     const doPreloadNextSongs = (currentIndex: number) => {

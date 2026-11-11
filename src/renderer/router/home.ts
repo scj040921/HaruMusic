@@ -126,6 +126,19 @@ const layoutRouter = [
       back: true
     },
     component: () => import('@/views/set/index.vue')
+  },
+  {
+    path: '/artists',
+    name: 'artists',
+    meta: {
+      title: 'comp.haruHome.artists',
+      icon: 'ri-user-voice-line',
+      keepAlive: true,
+      isMobile: true,
+      androidOnly: true,
+      back: true
+    },
+    component: () => import('@/views/artist/index.vue')
   }
 ];
 export default layoutRouter;

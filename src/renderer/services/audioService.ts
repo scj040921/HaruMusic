@@ -28,6 +28,8 @@ class AudioService {
 
   private context: AudioContext | null = null;
   private sourceNode: MediaElementAudioSourceNode | null = null;
+  private sourceNodes = new Map<HTMLAudioElement, MediaElementAudioSourceNode>();
+  private audioEventCleanup: (() => void) | null = null;
   private filters: BiquadFilterNode[] = [];
   private gainNode: GainNode | null = null;
   private bypass = false;
@@ -101,43 +103,48 @@ class AudioService {
   // ==================== Native DOM Event Binding ====================
 
   private bindAudioEvents() {
-    this.audio.addEventListener('play', () => {
-      if (this.audio.paused || !this.currentTrack) return;
+    this.audioEventCleanup?.();
+    const audio = this.audio;
+    const isCurrent = () => this.audio === audio;
+    const onPlay = () => {
+      if (!isCurrent() || audio.paused || !this.currentTrack) return;
       this.updateMediaSessionState(true);
       this.emit('play');
-    });
+    };
 
-    this.audio.addEventListener('pause', () => {
-      if (!this.audio.paused) return;
+    const onPause = () => {
+      if (!isCurrent() || !audio.paused) return;
       this.updateMediaSessionState(false);
       this.emit('pause');
-    });
+    };
 
-    this.audio.addEventListener('ended', () => {
-      if (!this.audio.ended || !this.currentTrack) return;
+    const onEnded = () => {
+      if (!isCurrent() || !audio.ended || !this.currentTrack) return;
       this.updateMediaSessionState(false);
       this.emit('end', this.currentTrack);
-    });
+    };
 
-    this.audio.addEventListener('seeked', () => {
+    const onSeeked = () => {
+      if (!isCurrent()) return;
       this.updateMediaSessionPositionState();
       this.emit('seek');
-    });
+    };
 
-    this.audio.addEventListener('timeupdate', () => {
-      this.emit('timeupdate', this.audio.currentTime);
-    });
+    const onTimeUpdate = () => {
+      if (isCurrent()) this.emit('timeupdate', audio.currentTime);
+    };
 
-    this.audio.addEventListener('waiting', () => {
-      this._isLoading = true;
-    });
+    const onWaiting = () => {
+      if (isCurrent()) this._isLoading = true;
+    };
 
-    this.audio.addEventListener('canplay', () => {
-      this._isLoading = false;
-    });
+    const onCanPlay = () => {
+      if (isCurrent()) this._isLoading = false;
+    };
 
-    this.audio.addEventListener('error', () => {
-      const error = this.audio.error;
+    const onError = () => {
+      if (!isCurrent()) return;
+      const error = audio.error;
       console.error('Audio element error:', error?.code, error?.message);
       this.emit('audio_error', { type: 'media_error', error });
       if (!this.pendingLoadCleanup && this.currentTrack) {
@@ -148,7 +155,49 @@ class AudioService {
           this.currentTrack
         );
       }
-    });
+    };
+
+    const listeners: Array<[string, EventListener]> = [
+      ['play', onPlay],
+      ['pause', onPause],
+      ['ended', onEnded],
+      ['seeked', onSeeked],
+      ['timeupdate', onTimeUpdate],
+      ['waiting', onWaiting],
+      ['canplay', onCanPlay],
+      ['error', onError]
+    ];
+    for (const [name, listener] of listeners) audio.addEventListener(name, listener);
+    this.audioEventCleanup = () => {
+      for (const [name, listener] of listeners) audio.removeEventListener(name, listener);
+    };
+  }
+
+  /** Replace the active element with a prebuffered one without leaving stale listeners. */
+  private adoptAudioElement(audio: HTMLAudioElement): void {
+    if (audio === this.audio) return;
+    const previous = this.audio;
+    this.audioEventCleanup?.();
+    this.audioEventCleanup = null;
+    try {
+      previous.pause();
+    } catch {
+      // The outgoing element may already have ended.
+    }
+    const previousNode = this.sourceNodes.get(previous);
+    previousNode?.disconnect();
+    this.sourceNodes.delete(previous);
+    try {
+      previous.removeAttribute('src');
+      previous.load();
+    } catch {
+      // Ignore cleanup failures from a browser-discarded resource.
+    }
+
+    this.audio = audio;
+    this.audio.muted = false;
+    this.audio.volume = 1;
+    this.bindAudioEvents();
   }
 
   // ==================== MediaSession ====================
@@ -298,43 +347,42 @@ class AudioService {
   // ==================== EQ ====================
 
   private setupEQ() {
-    if (this.sourceNode) return; // Already initialized
-
     if (!isElectron) {
-      console.log('Web环境中跳过EQ设置，避免CORS问题');
+      // WebView/Electron is the only supported Web Audio EQ path. Keep the
+      // regular media element volume path on Android and in the browser.
       this.bypass = true;
       return;
     }
 
     try {
-      this.context = new AudioContext();
-      this.sourceNode = this.context.createMediaElementSource(this.audio);
-      this.gainNode = this.context.createGain();
+      if (!this.context) {
+        this.context = new AudioContext();
+        this.gainNode = this.context.createGain();
 
-      // Create 10-band filter chain
-      const savedSettings = this.loadEQSettings();
-      this.filters = this.frequencies.map((freq) => {
-        const filter = this.context!.createBiquadFilter();
-        filter.type = 'peaking';
-        filter.frequency.value = freq;
-        filter.Q.value = 1;
-        filter.gain.value = savedSettings[freq.toString()] || 0;
-        return filter;
-      });
+        // Create 10-band filter chain once; newly adopted audio elements are
+        // connected to the same current EQ graph.
+        const savedSettings = this.loadEQSettings();
+        this.filters = this.frequencies.map((freq) => {
+          const filter = this.context!.createBiquadFilter();
+          filter.type = 'peaking';
+          filter.frequency.value = freq;
+          filter.Q.value = 1;
+          filter.gain.value = savedSettings[freq.toString()] || 0;
+          return filter;
+        });
+        this.setupContextStateMonitoring();
+        this.restoreSavedAudioDevice();
+      }
 
-      // Wire up the graph
+      let source = this.sourceNodes.get(this.audio);
+      if (!source) {
+        source = this.context.createMediaElementSource(this.audio);
+        this.sourceNodes.set(this.audio, source);
+      }
+      this.sourceNode = source;
+      this.audio.volume = 1;
       this.applyBypassState();
-
-      // Apply saved volume
       this.applyVolume(this.volume);
-
-      // Monitor context state
-      this.setupContextStateMonitoring();
-
-      // Restore saved audio device
-      this.restoreSavedAudioDevice();
-
-      console.log('EQ initialization successful');
     } catch (error) {
       console.error('EQ initialization failed:', error);
       // Fallback: connect audio directly (no EQ)
@@ -347,11 +395,12 @@ class AudioService {
     if (!this.sourceNode || !this.gainNode || !this.context) return;
 
     try {
-      // Disconnect all
-      try {
-        this.sourceNode.disconnect();
-      } catch {
-        /* already disconnected */
+      for (const node of this.sourceNodes.values()) {
+        try {
+          node.disconnect();
+        } catch {
+          /* already disconnected */
+        }
       }
       this.filters.forEach((filter) => {
         try {
@@ -495,6 +544,16 @@ class AudioService {
   ): Promise<HTMLAudioElement> {
     if (!url || !track) {
       return Promise.reject(new Error('缺少必要参数: url和track'));
+    }
+
+    if (
+      _existingSound &&
+      _existingSound !== this.audio &&
+      _existingSound.src === new URL(url, document.baseURI).href &&
+      _existingSound.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+      !_existingSound.error
+    ) {
+      this.adoptAudioElement(_existingSound);
     }
 
     const currentSrc = this.audio.src;
