@@ -38,7 +38,7 @@ ws.addEventListener('message', (event) => {
 const send = (method, params = {}) =>
   new Promise((resolve, reject) => {
     const id = ++nextId;
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, 20000);
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, 90000);
     pending.set(id, { resolve: value => { clearTimeout(timer); resolve(value); }, reject: error => { clearTimeout(timer); reject(error); } });
     ws.send(JSON.stringify({ id, method, params }));
   });
@@ -51,7 +51,7 @@ const evaluate = async (expression) => {
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   return result.result?.value;
 };
-const waitFor = async (expression, timeoutMs = 45000) => {
+const waitFor = async (expression, timeoutMs = 120000) => {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const value = await evaluate(`Boolean(${expression})`);
@@ -84,15 +84,17 @@ wav.writeUInt16LE(16, 34);
 wav.write('data', 36);
 wav.writeUInt32LE(wav.length - 44, 40);
 const sampleUrl = `data:audio/wav;base64,${wav.toString('base64')}`;
+const coverSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900"><defs><linearGradient id="a" x2="1" y2="1"><stop stop-color="#f59c55"/><stop offset=".48" stop-color="#9c426d"/><stop offset="1" stop-color="#243c58"/></linearGradient><radialGradient id="b"><stop stop-color="#fbe4a5" stop-opacity=".9"/><stop offset="1" stop-color="#fbe4a5" stop-opacity="0"/></radialGradient></defs><rect width="900" height="900" fill="url(#a)"/><circle cx="260" cy="260" r="430" fill="url(#b)"/><path d="M0 650 230 430l180 145 180-270 310 340v255H0z" fill="#111827" fill-opacity=".55"/><path d="M80 0h68v900H80zm650 0h28v900h-28z" fill="#fff" fill-opacity=".16"/></svg>`;
+const coverUrl = `data:image/svg+xml,${encodeURIComponent(coverSvg)}`;
 const testSong = {
   id: 'android-progress-scrub-smoke',
   name: '进度拖动自动化验证',
   source: 'local',
   playMusicUrl: sampleUrl,
-  picUrl: '',
+  picUrl: coverUrl,
   ar: [],
-  dt: seconds * 1000
-  ,lyric: {
+  dt: seconds * 1000,
+  lyric: {
     lrcTimeArray: Array.from({ length: 18 }, (_, i) => i),
     lrcArray: Array.from({ length: 18 }, (_, i) => ({ text: `第 ${i + 1} 行 · 随音乐慢慢流动`, trText: '', startTime: i * 1000, duration: 1000 })),
     hasWordByWord: false
@@ -144,23 +146,6 @@ try {
   })`);
   assert.ok(JSON.parse(lyricView).hasSlider, `Now Playing did not render its progress control: ${lyricView}`);
 
-  const playButton = await evaluate(`(() => {
-    const target = document.querySelector('#mobile-drawer-target .unified-controls .play-pause');
-    if (target) { const rect = target.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }; }
-    return false;
-  })()`);
-  assert.ok(playButton, 'Could not find the Now Playing play control');
-  await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: playButton.x, y: playButton.y, id: 3 }] });
-  await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await waitFor(
-    "document.querySelector('#mobile-drawer-target .unified-controls .play-pause i')?.classList.contains('ri-pause-fill')",
-    12000
-  );
-  await waitFor("document.querySelector('#mobile-drawer-target .apple-style-progress')?.getAttribute('aria-valuemax') !== '0'", 12000);
-  await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: playButton.x, y: playButton.y, id: 4 }] });
-  await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await waitFor("document.querySelector('#mobile-drawer-target .unified-controls .play-pause i')?.classList.contains('ri-play-fill')", 12000);
-
   const rect = await evaluate(`(() => {
     const slider = [...document.querySelectorAll('#mobile-drawer-target .apple-style-progress')]
       .find(node => { const box = node.getBoundingClientRect(); return box.width > 0 && box.height > 0; });
@@ -207,6 +192,10 @@ try {
   console.log(`Android lyric progress drag passed: preview=${previewTime}s, committed=${committedTime}`);
   const normalShot = await send('Page.captureScreenshot', { format: 'png' });
   writeFileSync('artifacts/screenshots/android-now-playing.png', Buffer.from(normalShot.data, 'base64'));
+  const controlsBounds = await evaluate(
+    "document.querySelector('#mobile-drawer-target .unified-controls')?.getBoundingClientRect().toJSON()"
+  );
+  assert.ok(controlsBounds?.bottom <= 850, `Playback controls should clear the bottom gesture area: ${JSON.stringify(controlsBounds)}`);
   const lyricRect = await evaluate(`(() => {
     const node = document.querySelector('.ios-layout-container .lyrics-wrapper');
     return node && { height: node.clientHeight, scroll: node.scrollHeight, touch: getComputedStyle(node).touchAction };

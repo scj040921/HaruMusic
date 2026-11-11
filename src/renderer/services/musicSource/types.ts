@@ -11,9 +11,17 @@ import type { MusicSourcePlugin, PluginMediaSource } from '@/types/musicSourcePl
 
 export type MusicSourceKind = 'builtin' | 'plugin';
 
+export class SourceAccessRejected extends Error {
+  constructor(readonly code: number) {
+    super(`source-access-rejected:${code}`);
+    this.name = 'SourceAccessRejected';
+  }
+}
+
 export type ResolveCallOptions = {
   /** 下载场景：netease provider 切换 VIP 下载口 */
   isDownload?: boolean;
+  deadline?: number;
   verifyMedia?: (url: string, headers?: Record<string, string>) => Promise<string | null>;
 };
 

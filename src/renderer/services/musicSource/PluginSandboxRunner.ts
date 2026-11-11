@@ -13,6 +13,7 @@ import type {
   MusicSourcePluginVar,
   PluginMediaSource
 } from '@/types/musicSourcePlugin';
+import { matchMusicFreeItem, musicCatalog } from '@/utils/musicFreeMatch';
 import { parseMusicFreeVars, parseMusicSourcePluginMeta } from '@/utils/musicSourcePlugin';
 
 import {
@@ -175,6 +176,7 @@ export class PluginSandboxRunner {
   private pendingInvocations = new Map<string, PendingInvocation>();
   private pendingHttpCancels = new Map<string, () => void>();
   private callSequence = 0;
+  private matchedItems = new Map<string, { item: Record<string, any>; expires: number }>();
 
   private initResolver: ((value: SandboxPluginRuntime) => void) | null = null;
   private initRejecter: ((error: Error) => void) | null = null;
@@ -356,7 +358,12 @@ export class PluginSandboxRunner {
    * 统一解析入口：SongResult + 音质 → 校验过的 MediaSource。
    * 方言差异（条目形状/ctx 注入/音质档位）已由 worker 适配层处理。
    */
-  async getMediaSource(song: SongResult, quality: string): Promise<PluginMediaSource | null> {
+  async getMediaSource(
+    song: SongResult,
+    quality: string,
+    deadline = Date.now() + 15000,
+    verifyMedia?: (url: string, headers?: Record<string, string>) => Promise<string | null>
+  ): Promise<PluginMediaSource | null> {
     const runtime = await this.initialize();
     if (!runtime.methods.includes('getMediaSource')) return null;
 
@@ -364,13 +371,57 @@ export class PluginSandboxRunner {
     const songPlatform = song.source || 'netease';
 
     if (this.plugin.dialect === 'musicfree') {
-      const item = toMusicFreeItem(song, songPlatform);
+      let item = toMusicFreeItem(song, songPlatform);
+      const foreignCatalog =
+        musicCatalog(runtime.platform || this.plugin.platform) !== musicCatalog(songPlatform);
+      if (runtime.methods.includes('search') && foreignCatalog) {
+        const key = `${songPlatform}:${song.id}:${song.name}`;
+        const cached = this.matchedItems.get(key);
+        if (cached && cached.expires > Date.now()) item = cached.item;
+        else {
+          const artist = (song.ar || song.artists || [])
+            .map((value) => value.name)
+            .filter(Boolean)
+            .join(' ');
+          const result = (await this.invoke(
+            'search',
+            [[song.name, artist].filter(Boolean).join(' '), 1, 'music'],
+            Math.max(1, Math.min(4000, deadline - Date.now()))
+          )) as any;
+          const items = Array.isArray(result) ? result : result?.data || result?.songs || [];
+          let matched = matchMusicFreeItem(song, Array.isArray(items) ? items : []);
+          if (!matched && artist && deadline - Date.now() > 1500) {
+            const titleResults = (await this.invoke(
+              'search',
+              [song.name, 1, 'music'],
+              Math.max(1, Math.min(3000, deadline - Date.now()))
+            )) as any;
+            const candidates = Array.isArray(titleResults)
+              ? titleResults
+              : titleResults?.data || titleResults?.songs || [];
+            matched = matchMusicFreeItem(song, Array.isArray(candidates) ? candidates : []);
+          }
+          if (!matched) return null;
+          item = matched;
+          this.matchedItems.set(key, { item: matched, expires: Date.now() + 5 * 60_000 });
+          if (this.matchedItems.size > 128)
+            this.matchedItems.delete(this.matchedItems.keys().next().value!);
+        }
+      }
       let lastError: unknown = null;
       for (const candidateQuality of getMusicFreeQualityLadder(quality)) {
+        if (Date.now() >= deadline) break;
         try {
-          const result = await this.invoke('getMediaSource', [item, candidateQuality]);
+          const result = await this.invoke(
+            'getMediaSource',
+            [item, candidateQuality],
+            Math.max(1, Math.min(4000, deadline - Date.now()))
+          );
           const media = adaptRawMediaSource(result);
-          if (media) return media;
+          if (media) {
+            const url = verifyMedia ? await verifyMedia(media.url, media.headers) : media.url;
+            if (url) return { ...media, url };
+          }
         } catch (error) {
           lastError = error;
         }
@@ -396,9 +447,19 @@ export class PluginSandboxRunner {
         ? ['jymaster', 'hires', 'lossless', 'exhigh', 'higher', 'standard']
         : [quality];
     for (const level of levels) {
+      if (Date.now() >= deadline) break;
       try {
-        const media = adaptRawMediaSource(await this.invoke('getMediaSource', [item, level]));
-        if (media) return media;
+        const media = adaptRawMediaSource(
+          await this.invoke(
+            'getMediaSource',
+            [item, level],
+            Math.max(1, Math.min(4000, deadline - Date.now()))
+          )
+        );
+        if (media) {
+          const url = verifyMedia ? await verifyMedia(media.url, media.headers) : media.url;
+          if (url) return { ...media, url };
+        }
       } catch {
         /* The next supported quality may still be playable. */
       }
@@ -419,6 +480,7 @@ export class PluginSandboxRunner {
       }
     }
     this.pendingHttpCancels.clear();
+    this.matchedItems.clear();
     this.rejectAllInvocations(new Error('音源插件已销毁'));
     this.clearInitializationState();
     this.worker?.terminate();

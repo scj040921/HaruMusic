@@ -4,7 +4,7 @@ import { createDiscreteApi } from 'naive-ui';
 import i18n from '@/../i18n/renderer';
 import { getMusicLrc } from '@/api/music';
 import { useMusicSourceRegistry } from '@/services/musicSource/registry';
-import { resolveSong } from '@/services/musicSource/resolver';
+import { getMusicResolveFailure,resolveSong } from '@/services/musicSource/resolver';
 import { playbackRequestManager } from '@/services/playbackRequestManager';
 import { useSettingsStore } from '@/store';
 import type { ILyric, ILyricText, IWordData, SongResult } from '@/types/music';
@@ -122,7 +122,9 @@ export const getSongUrl = async (
       console.warn(`[getSongUrl] 全部音源未命中: ${songData.name}(${numericId})`);
       // 官方受限歌曲 + 没有任何可用解析源：提醒用户去配置音源
       warnIfNoSourceConfigured();
-      return null;
+      throw Object.assign(new Error(getMusicResolveFailure(songData)), {
+        name: 'MusicSourceError'
+      });
     }
 
     console.log(
@@ -133,6 +135,7 @@ export const getSongUrl = async (
     }
     return await resolveCachedPlaybackUrl(result.media.url, songData);
   } catch (error) {
+    if ((error as Error).name === 'MusicSourceError') throw error;
     if ((error as Error).message === 'Request cancelled') {
       throw error;
     }

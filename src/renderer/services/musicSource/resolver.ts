@@ -17,6 +17,13 @@ import { MusicResolveCache } from './cache';
 import { useMusicSourceRegistry } from './registry';
 import { buildAndroidMediaProxyUrl, requestMusicSourceHttp } from './transport';
 import type { ResolveAttempt, ResolveSongResult } from './types';
+import { SourceAccessRejected } from './types';
+
+const accessCooldowns = new Map<string, { until: number; code: number }>();
+const failures = new Map<string, string>();
+const failureKey = (song: Pick<SongResult, 'source' | 'id'>) => `${song.source}:${song.id}`;
+export const getMusicResolveFailure = (song: Pick<SongResult, 'source' | 'id'>): string =>
+  failures.get(failureKey(song)) || '已启用音源均未返回可播放音轨，请检查音源配置和访问权限。';
 
 const STAGE_BUDGET_MS = 6_000;
 const CHAIN_BUDGET_MS = 12_000;
@@ -201,6 +208,22 @@ export const resolveSong = async (
       attempts.push({ providerKey: provider.key, ok: false, reason: 'skipped' });
       continue;
     }
+    const cooldown = accessCooldowns.get(provider.key);
+    if (
+      !options.force &&
+      !options.isDownload &&
+      !sourceKeys &&
+      cooldown &&
+      cooldown.until > Date.now()
+    ) {
+      attempts.push({
+        providerKey: provider.key,
+        ok: false,
+        reason: 'skipped',
+        detail: `source-access-rejected:${cooldown.code}`
+      });
+      continue;
+    }
 
     try {
       const stageDeadline = Math.min(chainDeadline, stageStart + STAGE_BUDGET_MS);
@@ -217,16 +240,26 @@ export const resolveSong = async (
             try {
               const candidate = await provider.resolve(song, level, {
                 isDownload: options.isDownload,
+                deadline: stageDeadline - 1000,
                 verifyMedia:
-                  provider.key === 'netease'
+                  provider.key === 'netease' || !!provider.plugin
                     ? async (url, headers) => {
                         verifiedUrl = isUnplayableMedia(url)
                           ? null
-                          : await withTimeout(verifyMediaUrl(url, headers), 4000);
+                          : await withTimeout(
+                              verifyMediaUrl(url, headers),
+                              Math.max(1, Math.min(4000, stageDeadline - Date.now() - 500))
+                            );
                         return verifiedUrl;
                       }
                     : undefined
               });
+              if (
+                !candidate &&
+                level === 'auto' &&
+                (provider.plugin || provider.key === 'customApi')
+              )
+                break;
               if (!candidate || seen.has(candidate.url) || isUnplayableMedia(candidate.url))
                 continue;
               seen.add(candidate.url);
@@ -238,7 +271,8 @@ export const resolveSong = async (
                 verifiedUrl = url;
                 return { ...candidate, url };
               }
-            } catch {
+            } catch (error) {
+              if (error instanceof SourceAccessRejected) throw error;
               /* A lower supported tier may still work. */
             }
           }
@@ -305,6 +339,8 @@ export const resolveSong = async (
         );
       return result;
     } catch (error) {
+      if (error instanceof SourceAccessRejected)
+        accessCooldowns.set(provider.key, { until: Date.now() + 30_000, code: error.code });
       const isTimeout = (error as Error).message === 'timeout';
       attempts.push({
         providerKey: provider.key,
@@ -323,6 +359,28 @@ export const resolveSong = async (
       attempts.map((a) => `${a.providerKey}:${a.reason}`).join(', ')
     );
   }
+  const reasons = attempts
+    .filter(
+      (attempt) =>
+        attempt.reason !== 'skipped' || attempt.detail?.startsWith('source-access-rejected:')
+    )
+    .slice(0, 3)
+    .map((attempt) => {
+      const name =
+        candidates.find((provider) => provider.key === attempt.providerKey)?.name ||
+        attempt.providerKey;
+      const rejected = attempt.detail?.match(/source-access-rejected:(-?\d+)/);
+      return `${name}：${rejected ? `接口拒绝访问（${rejected[1]}）` : attempt.reason === 'timeout' ? '响应超时' : '未匹配到有效音轨'}`;
+    });
+  failures.set(
+    failureKey(song),
+    reasons.length
+      ? `取源失败。${reasons.join('；')}`
+      : attempts.length
+        ? failures.get(failureKey(song)) || '音源暂时不可用，请稍后重试或切换音源。'
+        : '没有启用可用的音乐源，请检查音源配置。'
+  );
+  if (failures.size > 64) failures.delete(failures.keys().next().value!);
   return null;
 };
 

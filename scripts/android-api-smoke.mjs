@@ -19,6 +19,8 @@ const rangeModulePath = join(temporaryDir, 'media-range-cache.cjs');
 stageMediaRangeCache(rangeModulePath);
 const serverPath = join(projectDir, 'server.cjs');
 const mockAudio = Buffer.from('0123456789');
+const largeAudio = Buffer.alloc(300 * 1024, 42);
+let firstLargeRange = '';
 let cancelledStreamClosed = false;
 const mockUpstream = createServer((request, response) => {
   if (request.url === '/slow-audio') {
@@ -62,6 +64,21 @@ const mockUpstream = createServer((request, response) => {
       'Content-Type': 'audio/mpeg'
     });
     response.end(mockAudio);
+    return;
+  }
+  if (request.url === '/audio-large') {
+    const match = /^bytes=(\d+)-(\d*)$/.exec(request.headers.range || '');
+    const start = match ? Number(match[1]) : 0;
+    const end = match?.[2] ? Math.min(Number(match[2]), largeAudio.length - 1) : largeAudio.length - 1;
+    firstLargeRange ||= request.headers.range || '';
+    const body = largeAudio.subarray(start, end + 1);
+    response.writeHead(206, {
+      'Accept-Ranges': 'bytes',
+      'Content-Length': String(body.length),
+      'Content-Range': `bytes ${start}-${end}/${largeAudio.length}`,
+      'Content-Type': 'audio/mpeg'
+    });
+    response.end(body);
     return;
   }
   response.writeHead(404).end();
@@ -187,6 +204,18 @@ try {
   assert.equal(rangedMedia.headers.get('content-range'), 'bytes 2-5/10');
   assert.equal(await rangedMedia.text(), '2345');
 
+  const largeDescriptor = encodeURIComponent(
+    JSON.stringify({ url: `http://127.0.0.1:${mockPort}/audio-large` })
+  );
+  const firstMobileBlock = await fetch(
+    `http://127.0.0.1:${gatewayPort}/__media?d=${largeDescriptor}`,
+    { headers: { Range: 'bytes=0-8191', Origin: origin } }
+  );
+  assert.equal(firstMobileBlock.status, 206);
+  assert.equal(firstMobileBlock.headers.get('content-range'), `bytes 0-8191/${largeAudio.length}`);
+  assert.equal((await firstMobileBlock.arrayBuffer()).byteLength, 8192);
+  assert.equal(firstLargeRange, 'bytes=0-131071', 'Android should prefetch a 128 KiB first block');
+
   const streamingDescriptor = encodeURIComponent(
     JSON.stringify({ url: `http://127.0.0.1:${mockPort}/slow-audio` })
   );
@@ -208,7 +237,7 @@ try {
   });
   assert.equal(invalidUnblock.status, 400);
 
-  console.log('Android embedded API, plugin HTTP, and ranged media smoke checks passed.');
+  console.log('Android embedded API, plugin HTTP, 128 KiB mobile range prefetch, and cancellation smoke checks passed.');
   assert.equal(
     await import('node:fs/promises').then(({ access }) =>
       access(join(temporaryDir, 'app-private', 'tmp', 'anonymous_token')).then(() => true)

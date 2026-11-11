@@ -1,7 +1,9 @@
 # Playback transport 0.1.6
 
 The shared Fetch transport implements foreground-first range scheduling for
-Electron and the Android embedded API. It uses 512 KiB blocks, a 24 MiB LRU
+Electron and the Android embedded API. Electron uses 512 KiB blocks; Android
+uses 128 KiB foreground blocks to reduce first-audio latency on mobile links.
+Both use a 24 MiB LRU
 memory budget, five-minute block expiry, at most two speculative future blocks,
 and one speculative worker. Foreground requests may bypass speculative work
 after 150 ms. Each block is verified before caching or responding with 206;

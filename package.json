@@ -1,6 +1,6 @@
 {
   "name": "harumusic",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "HaruMusic desktop music player",
   "author": "HaruMusic contributors",
   "main": "./out/main/index.js",

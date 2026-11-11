@@ -1,4 +1,4 @@
-import { clearTimeout,setTimeout } from 'node:timers';
+import { clearTimeout, setTimeout } from 'node:timers';
 
 /** Bounded range transport. Inspired by Salt Extend Online's foreground-first
  * range scheduling; implemented for Fetch streams and HTML audio. */
@@ -21,7 +21,8 @@ export class MediaRangeCache {
   private unranged = new Map<string, number>();
   constructor(
     private fetcher: typeof fetch = fetch,
-    private limit = 24 * 1024 * 1024
+    private limit = 24 * 1024 * 1024,
+    private blockSize = BLOCK
   ) {}
 
   clear(): void {
@@ -102,7 +103,10 @@ export class MediaRangeCache {
       for (let attempt = 0; attempt < (speculative ? 1 : 2); attempt++) {
         try {
           const requestHeaders = new Headers(headers);
-          requestHeaders.set('Range', `bytes=${index * BLOCK}-${(index + 1) * BLOCK - 1}`);
+          requestHeaders.set(
+            'Range',
+            `bytes=${index * this.blockSize}-${(index + 1) * this.blockSize - 1}`
+          );
           requestHeaders.set('Accept-Encoding', 'identity');
           const response = await this.fetcher(url, {
             headers: requestHeaders,
@@ -121,8 +125,8 @@ export class MediaRangeCache {
           if (
             !range ||
             !Number.isSafeInteger(Number(range[3])) ||
-            Number(range[1]) !== index * BLOCK ||
-            Number(range[2]) !== Math.min((index + 1) * BLOCK - 1, Number(range[3]) - 1) ||
+            Number(range[1]) !== index * this.blockSize ||
+            Number(range[2]) !== Math.min((index + 1) * this.blockSize - 1, Number(range[3]) - 1) ||
             Number(range[2]) < Number(range[1]) ||
             Number(range[2]) >= Number(range[3]) ||
             (response.headers.get('content-encoding') &&
@@ -139,7 +143,7 @@ export class MediaRangeCache {
             const part = await reader.read();
             if (part.done) break;
             size += part.value.length;
-            if (size > BLOCK) {
+            if (size > this.blockSize) {
               await reader.cancel();
               throw new Error('Oversized media range');
             }
@@ -184,12 +188,12 @@ export class MediaRangeCache {
   }
 
   private ahead(url: string, headers: Headers, key: string, index: number, total: number) {
-    if (this.speculative || (index + 1) * BLOCK >= total) return;
+    if (this.speculative || (index + 1) * this.blockSize >= total) return;
     const revision = this.revision;
     const controller = new AbortController();
     this.speculative = controller;
     void (async () => {
-      for (let next = index + 1; next <= index + 2 && next * BLOCK < total; next++) {
+      for (let next = index + 1; next <= index + 2 && next * this.blockSize < total; next++) {
         if (revision !== this.revision) return;
         await this.read(url, headers, key, next, controller.signal, true);
       }
@@ -214,7 +218,7 @@ export class MediaRangeCache {
       return this.fetcher(url, options);
     if (
       this.plan?.key !== key ||
-      Math.abs(start - this.plan.first) > 2 * BLOCK ||
+      Math.abs(start - this.plan.first) > 2 * this.blockSize ||
       start < this.plan.first
     )
       this.cancelSpeculation();
@@ -226,7 +230,13 @@ export class MediaRangeCache {
     const cleanup = () => options.signal?.removeEventListener('abort', abort);
     let first: Block;
     try {
-      first = await this.read(url, headers, key, Math.floor(start / BLOCK), controller.signal);
+      first = await this.read(
+        url,
+        headers,
+        key,
+        Math.floor(start / this.blockSize),
+        controller.signal
+      );
     } catch (error) {
       cleanup();
       if (error instanceof Unranged) {
@@ -250,17 +260,17 @@ export class MediaRangeCache {
       {
         pull: async (target) => {
           try {
-            const index = Math.floor(cursor / BLOCK);
+            const index = Math.floor(cursor / this.blockSize);
             const block =
-              index === Math.floor(start / BLOCK)
+              index === Math.floor(start / this.blockSize)
                 ? first
                 : await this.read(url, headers, key, index, controller.signal);
             if (controller.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
             if (block.total !== first.total) throw new Error('Media changed during playback');
-            const offset = cursor - index * BLOCK;
+            const offset = cursor - index * this.blockSize;
             const bytes = block.bytes.subarray(
               offset,
-              Math.min(block.bytes.length, end - index * BLOCK + 1)
+              Math.min(block.bytes.length, end - index * this.blockSize + 1)
             );
             if (!bytes.length) throw new Error('Truncated media');
             cursor += bytes.length;

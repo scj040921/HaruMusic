@@ -16,6 +16,12 @@
         { 'is-dark': isDark }
       ]"
     >
+      <div
+        v-if="config.theme !== 'light'"
+        class="mobile-atmosphere"
+        :style="mobileAtmosphereStyle"
+        aria-hidden="true"
+      />
       <!-- 顶部控制按钮 -->
       <div v-if="playMusic?.playLoading" class="loading-overlay">
         <i class="ri-loader-4-line loading-icon"></i>
@@ -933,7 +939,22 @@ const targetBackground = computed(() => {
   if (config.value.theme !== 'default') {
     return themeMusic[config.value.theme] || props.background;
   }
-  return playerStore.playMusic.backgroundColor || props.background || '#19191c';
+  return props.background || playerStore.playMusic.backgroundColor || '#19191c';
+});
+
+// Quantize the audio clock to 2 Hz so Vue does not patch a full-screen blurred
+// layer for every media timeupdate. The visual phase still pauses/seeks with audio.
+const atmosphereAudioPhase = computed(() => Math.floor(nowTime.value * 2) / 2);
+const mobileAtmosphereStyle = computed(() => {
+  const audioPhase = atmosphereAudioPhase.value;
+  return {
+    '--art-tone': playerStore.playMusic.primaryColor || '#71695a',
+    '--art-cover': playMusic.value.picUrl
+      ? `url(${JSON.stringify(getImgUrl(playMusic.value.picUrl, '600y600'))})`
+      : 'none',
+    '--ambient-x': `${Math.sin(audioPhase / 9) * 3}%`,
+    '--ambient-scale': String(1.08 + Math.sin(audioPhase / 13) * 0.02)
+  };
 });
 
 // 监听目标背景变化并更新文字颜色
@@ -2091,8 +2112,9 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
   font-weight: 700;
 }
 #mobile-drawer-target:not(.is-landscape) .unified-controls {
-  height: calc(148px + var(--safe-area-inset-bottom, 0px));
-  padding: 8px 24px calc(16px + var(--safe-area-inset-bottom, 0px));
+  bottom: calc(48px + var(--safe-area-inset-bottom, 0px));
+  height: 140px;
+  padding: 8px 24px 16px;
 }
 #mobile-drawer-target .unified-controls .progress-container {
   margin-bottom: 0;
@@ -2113,13 +2135,103 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
   text-align: left;
   padding: 16px;
 }
-#mobile-drawer-target .unified-controls .main-button.play-pause,
-#mobile-drawer-target .unified-controls .main-button.play-pause:hover {
+#mobile-drawer-target:not(.is-landscape) .unified-controls .control-buttons .main-button.play-pause,
+#mobile-drawer-target:not(.is-landscape)
+  .unified-controls
+  .control-buttons
+  .main-button.play-pause:hover {
   background: transparent;
   backdrop-filter: none;
   box-shadow: none;
 }
 #mobile-drawer-target .apple-style-progress:focus:not(:focus-visible) {
   outline: none;
+}
+.mobile-atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      ellipse at 15% 55%,
+      color-mix(in srgb, var(--art-tone) 36%, transparent),
+      transparent 75%
+    ),
+    #18181c;
+}
+.mobile-atmosphere::before {
+  content: '';
+  position: absolute;
+  inset: -12%;
+  background-image: var(--art-cover);
+  background-size: cover;
+  background-position: center;
+  filter: blur(64px) saturate(1.35) brightness(0.6);
+  opacity: 0.5;
+  transform: translateX(var(--ambient-x)) scale(var(--ambient-scale));
+  transition: transform 1200ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+#mobile-drawer-target .ios-layout-container,
+#mobile-drawer-target .fullscreen-lyrics {
+  position: relative;
+  z-index: 1;
+}
+#mobile-drawer-target.cover-style-full:not(.is-landscape) .ios-layout-container {
+  padding-top: 0;
+  gap: 0;
+  padding-bottom: calc(180px + var(--safe-area-inset-bottom, 0px));
+}
+#mobile-drawer-target.cover-style-full:not(.is-landscape)
+  .ios-layout-container
+  .cover-container.full-style {
+  width: 100%;
+  height: clamp(240px, 43svh, 480px);
+  max-height: none;
+  border-radius: 0;
+  overflow: hidden;
+}
+#mobile-drawer-target.cover-style-full .full-style::after {
+  display: none;
+}
+#mobile-drawer-target.cover-style-full .full-style .img-wrapper,
+#mobile-drawer-target.cover-style-full .full-style .cover-image {
+  width: 100%;
+  height: 100%;
+}
+#mobile-drawer-target.cover-style-full .full-style .cover-image.full-blend {
+  mix-blend-mode: normal;
+  mask-image: linear-gradient(black 0%, black 62%, rgb(0 0 0 / 80%) 76%, transparent 100%);
+}
+#mobile-drawer-target.cover-style-full .full-style :deep(img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 35%;
+}
+#mobile-drawer-target.cover-style-full .ios-layout-container > .flex-1 {
+  width: calc(100% - 48px);
+  margin-top: -8px;
+}
+#mobile-drawer-target.cover-style-full .ios-layout-container .song-info {
+  position: relative;
+  align-items: flex-start;
+  padding-right: 56px;
+}
+#mobile-drawer-target.cover-style-full .song-info .song-title-container {
+  text-align: left;
+}
+#mobile-drawer-target.cover-style-full .song-info .favorite-icon {
+  position: absolute;
+  right: 0;
+  top: 8px;
+}
+#mobile-drawer-target .ios-layout-container .lyrics-wrapper .lyric-line {
+  font-size: clamp(20px, var(--lyric-font-size, 5.5vw), 36px);
+}
+#mobile-drawer-target .fullscreen-lyrics .lyrics-scroller .lyric-line {
+  font-size: clamp(24px, var(--lyric-font-size, 7vw), 48px);
 }
 </style>

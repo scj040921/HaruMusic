@@ -36,10 +36,10 @@ export const pluginToProvider = (plugin: MusicSourcePlugin, index = 0): MusicSou
   available: plugin.enabled,
   configHint: plugin.enabled ? undefined : 'settings.playback.pluginSources.disabled',
   plugin,
-  resolve: async (song, quality) => {
+  resolve: async (song, quality, options) => {
     if (!plugin.enabled) return null;
     const runner = await getPluginSandboxRunner(plugin);
-    return runner.getMediaSource(song, quality);
+    return runner.getMediaSource(song, quality, options?.deadline, options?.verifyMedia);
   }
 });
 

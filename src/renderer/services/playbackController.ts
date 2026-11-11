@@ -211,6 +211,7 @@ export const playTrack = async (
   options: PlaybackOptions = {}
 ): Promise<boolean> => {
   if (!music?.id) return false;
+  const playbackStartedAt = Date.now();
   const requestId = playbackRequestManager.createRequest(music);
   const gen = getCurrentGeneration();
   const playerCore = await getPlayerCoreStore();
@@ -259,6 +260,7 @@ export const playTrack = async (
     Number.isFinite(options.startTime) && options.startTime! >= 0 ? options.startTime! : 0;
   let candidate = originalMusic;
   for (let attempt = 0; attempt < 2; attempt++) {
+    const attemptStartedAt = Date.now();
     let audioUrl: string | undefined;
     try {
       let detailTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -288,8 +290,17 @@ export const playTrack = async (
       applyLoadedMetadata();
       audioService.setVolume(playerCore.isMuted ? 0 : playerCore.volume);
       audioService.setPlaybackRate(playerCore.playbackRate);
+      const audioStartedAt = Date.now();
       await loadAndPlayAudio(playerCore.playMusic, shouldPlay, startTime);
       if (gen !== getCurrentGeneration()) return false;
+      console.info('[playback-timing]', {
+        songId: music.id,
+        source: music.source,
+        attempt,
+        prepareMs: audioStartedAt - attemptStartedAt,
+        audioReadyMs: Date.now() - audioStartedAt,
+        totalMs: Date.now() - playbackStartedAt
+      });
 
       playerCore.setIsPlay(shouldPlay);
       playerCore.playMusic.playLoading = false;
@@ -354,7 +365,11 @@ export const playTrack = async (
       playerCore.playMusic.playLoading = false;
       if (name !== 'AbortError') {
         message.error(
-          i18n.global.t(name === 'NotAllowedError' ? 'player.resumeFailed' : 'player.playFailed')
+          name === 'MusicSourceError'
+            ? (error as Error).message
+            : i18n.global.t(
+                name === 'NotAllowedError' ? 'player.resumeFailed' : 'player.playFailed'
+              )
         );
       }
       playbackRequestManager.failRequest(requestId);

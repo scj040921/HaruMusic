@@ -7,6 +7,7 @@ const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8' });
 const bytes = Buffer.alloc(3 * 512 * 1024, 42);
 let requests = 0;
 let foregroundReads = 0;
+let firstRangeLength = 0;
 let slowStarted = false;
 let cancelled = false;
 const server = createServer((request, response) => {
@@ -18,7 +19,10 @@ const server = createServer((request, response) => {
   }
   const match = /bytes=(\d+)-(\d*)/.exec(request.headers.range || '');
   const start = match ? Number(match[1]) : 0;
-  if (start === 0) foregroundReads++;
+  if (start === 0) {
+    foregroundReads++;
+    if (!firstRangeLength && match?.[2]) firstRangeLength = Number(match[2]) - start + 1;
+  }
   const end = match?.[2] ? Math.min(Number(match[2]), bytes.length - 1) : bytes.length - 1;
   response.writeHead(206, { 'Content-Type': 'audio/flac', 'Accept-Ranges': 'bytes',
     'Content-Range': `bytes ${start}-${end}/${bytes.length}`, 'Content-Length': end - start + 1 });
@@ -42,6 +46,7 @@ try {
   }
   const afterReplay = requests;
   assert.equal(foregroundReads, 3, `20 repeated plays must reuse the three tracks' initial blocks`);
+  assert.equal(firstRangeLength, 128 * 1024, 'Android should fetch a 128 KiB first media block');
   const controller = new AbortController();
   const stalled = fetch(endpoint('slow'), {
     headers: { Origin: 'https://localhost', Range: 'bytes=0-8191' }, signal: controller.signal
@@ -54,7 +59,7 @@ try {
   assert.ok(cancelled, 'Cancelling a stalled track must close its upstream request');
   const next = await fetch(endpoint('track-0'), { headers: { Origin: 'https://localhost', Range: 'bytes=0-8191' } });
   assert.equal((await next.arrayBuffer()).byteLength, 8192);
-  console.log(`Android native gateway passed: 20 repeat/switch requests, ${foregroundReads} foreground initial-block downloads (${afterReplay} total including speculative blocks), stalled-request cancellation and subsequent playback read.`);
+  console.log(`Android native gateway passed: 20 repeat/switch requests, ${foregroundReads} foreground initial-block downloads (${afterReplay} total including speculative blocks), first block=${firstRangeLength} bytes, stalled-request cancellation and subsequent playback read.`);
 } finally {
   adb('reverse', '--remove', `tcp:${port}`);
   server.closeAllConnections(); server.close();

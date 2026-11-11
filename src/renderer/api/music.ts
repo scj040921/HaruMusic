@@ -31,7 +31,12 @@ export const getMusicQualityDetail = (id: number) => {
 };
 
 // 根据音乐Id获取音乐播放URl
-export const getMusicUrl = async (id: number, isDownloaded: boolean = false, quality?: string) => {
+export const getMusicUrl = async (
+  id: number,
+  isDownloaded: boolean = false,
+  quality?: string,
+  timeoutMs = 2500
+) => {
   const userStore = useUserStore();
   const settingStore = useSettingsStore();
   const level = quality || settingStore.setData.musicQuality || 'higher';
@@ -57,7 +62,7 @@ export const getMusicUrl = async (id: number, isDownloaded: boolean = false, qua
   }
 
   return await request.get('/song/url/v1', {
-    timeout: 2500,
+    timeout: timeoutMs,
     noRetry: true,
     params: {
       id,

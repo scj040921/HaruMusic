@@ -13,7 +13,7 @@ import type { SongResult } from '@/types/music';
 import type { PluginMediaSource } from '@/types/musicSourcePlugin';
 
 import { validatePluginHttpUrl } from '../../../../shared/musicSourcePlugin';
-import type { MusicSourceProvider } from '../types';
+import { type MusicSourceProvider,SourceAccessRejected } from '../types';
 
 const toMediaSource = (
   url: unknown,
@@ -59,8 +59,25 @@ export const neteaseProvider: MusicSourceProvider = {
     let bestFallback: PluginMediaSource | null = null;
     let bestRank = Number.POSITIVE_INFINITY;
     for (const level of levels) {
+      if (options?.deadline && Date.now() >= options.deadline) break;
+      if (bestFallback && stereoLevels.indexOf(level) >= bestRank) break;
       try {
-        const res = await getMusicUrl(song.id as number, Boolean(options?.isDownload), level);
+        const timeout = options?.deadline
+          ? Math.max(1, Math.min(2500, options.deadline - Date.now() - 250))
+          : 2500;
+        const res = await getMusicUrl(
+          song.id as number,
+          Boolean(options?.isDownload),
+          level,
+          timeout
+        );
+        // Authorization/risk rejection is independent of quality. Repeating it
+        // for every tier only delays a different configured source.
+        if ([-460, 301, 401, 429].includes(Number(res?.data?.code))) {
+          if (bestFallback) return bestFallback;
+          throw new SourceAccessRejected(Number(res.data.code));
+        }
+        if (res?.data?.code && res.data.code !== 200) return bestFallback;
         const detail = res?.data?.data?.[0];
         if (!detail?.url || detail.freeTrialInfo) continue;
         const media = toMediaSource(detail.url, {
@@ -75,8 +92,8 @@ export const neteaseProvider: MusicSourceProvider = {
         const playable = { ...media, url };
         const requestedRank = stereoLevels.indexOf(level);
         const actualRank = stereoLevels.indexOf(detail.level);
-        // Some responses silently downgrade the requested level. Keep the
-        // playable fallback but continue checking the intervening tiers.
+        // Preserve a playable fallback while checking higher intervening tiers.
+        // The deadline returns that fallback instead of losing it to an outer timeout.
         if (requestedRank >= 0 && actualRank > requestedRank) {
           if (actualRank < bestRank) {
             bestFallback = playable;
@@ -85,7 +102,18 @@ export const neteaseProvider: MusicSourceProvider = {
           continue;
         }
         return playable;
-      } catch {
+      } catch (error) {
+        if (error instanceof SourceAccessRejected) {
+          if (bestFallback) return bestFallback;
+          throw error;
+        }
+        const status = Number(
+          (error as any)?.response?.data?.code || (error as any)?.response?.status
+        );
+        if ([-460, 301, 401, 429].includes(status)) {
+          if (bestFallback) return bestFallback;
+          throw new SourceAccessRejected(status);
+        }
         // A failed tier should not prevent trying a lower official tier.
       }
     }

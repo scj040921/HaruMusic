@@ -3,6 +3,27 @@ import { describe, expect, it, vi } from 'vitest';
 import { MediaRangeCache } from '../src/shared/mediaRangeCache';
 
 describe('foreground-first media range transport', () => {
+  it('uses a smaller initial range when configured for mobile playback', async () => {
+    const mobileBlock = 128 * 1024;
+    const ranges: string[] = [];
+    const upstream = vi.fn(async (_url, options) => {
+      const range = new Headers(options.headers).get('range')!;
+      ranges.push(range);
+      return new Response(new Uint8Array(mobileBlock), {
+        status: 206,
+        headers: {
+          'Content-Range': `bytes 0-${mobileBlock - 1}/${mobileBlock * 2}`
+        }
+      });
+    });
+    const cache = new MediaRangeCache(upstream as typeof fetch, undefined, mobileBlock);
+    const response = await cache.fetch('https://cdn.test/mobile', {
+      headers: { Range: 'bytes=0-8191' }
+    });
+    expect((await response.arrayBuffer()).byteLength).toBe(8192);
+    expect(ranges[0]).toBe(`bytes=0-${mobileBlock - 1}`);
+  });
+
   it('bypasses a stalled speculative block for foreground playback', async () => {
     const blockSize = 512 * 1024;
     let nextBlockCalls = 0;
