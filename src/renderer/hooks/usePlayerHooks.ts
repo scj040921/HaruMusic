@@ -148,7 +148,7 @@ export const useSongUrl = () => {
 /**
  * 使用新的yrcParser解析歌词（独立函数）
  */
-const parseLyrics = (lyricsString: string): { lyrics: ILyricText[]; times: number[] } => {
+export const parseLyrics = (lyricsString: string): { lyrics: ILyricText[]; times: number[] } => {
   if (!lyricsString || typeof lyricsString !== 'string') {
     return { lyrics: [], times: [] };
   }

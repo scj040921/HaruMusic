@@ -12,6 +12,10 @@ export type AndroidLocalTrack = {
   duration?: number;
   size?: number;
   mimeType?: string;
+  /** Extracted once from embedded tags and cached with the local library entry. */
+  cover?: string;
+  lyrics?: string;
+  metadataLoaded?: boolean;
 };
 
 type ScannedFlac = Omit<AndroidLocalTrack, 'file'> & { uri: string };
@@ -25,6 +29,7 @@ const nativeLibrary =
       }>('HaruLocalMusic')
     : null;
 const urls = new Map<string, string>();
+const metadataRequests = new Map<string, Promise<{ cover?: string; lyrics?: string }>>();
 const openDb = (): Promise<IDBDatabase> =>
   new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
@@ -102,10 +107,49 @@ export async function getAndroidLocalUrl(id: string): Promise<string> {
   return url;
 }
 
+async function loadAndroidLocalMetadata(id: string): Promise<{ cover?: string; lyrics?: string }> {
+  const track = await run<AndroidLocalTrack | undefined>('readonly', (store) => store.get(id));
+  if (!track) return {};
+  if (track.metadataLoaded) return { cover: track.cover, lyrics: track.lyrics };
+
+  let metadata: { cover?: string; lyrics?: string } = {};
+  if (track.uri && nativeLibrary) {
+    metadata = await nativeLibrary.readMetadata({ uri: track.uri });
+  } else if (track.file) {
+    // music-metadata's browser entry parses Blob streams without copying a full
+    // lossless file into memory, and supports the same common tags as desktop.
+    const { parseBlob } = await import('music-metadata');
+    const parsed = await parseBlob(track.file);
+    const picture = parsed.common.picture?.find((item) => item.data.length <= 3 * 1024 * 1024);
+    if (picture) {
+      const bytes = new Uint8Array(picture.data);
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+      }
+      const mime = picture.format?.startsWith('image/') ? picture.format : 'image/jpeg';
+      metadata.cover = `data:${mime};base64,${btoa(binary)}`;
+    }
+    const embeddedLyrics = parsed.common.lyrics?.find((item) => item.text?.trim())?.text;
+    if (embeddedLyrics) metadata.lyrics = embeddedLyrics;
+  }
+
+  track.cover = metadata.cover;
+  track.lyrics = metadata.lyrics;
+  track.metadataLoaded = true;
+  await saveAndroidLocalTrack(track).catch(() => undefined);
+  return metadata;
+}
+
 export async function getAndroidLocalMetadata(
   id: string
 ): Promise<{ cover?: string; lyrics?: string }> {
-  const track = await run<AndroidLocalTrack | undefined>('readonly', (store) => store.get(id));
-  if (!track?.uri || !nativeLibrary) return {};
-  return nativeLibrary.readMetadata({ uri: track.uri });
+  const pending = metadataRequests.get(id);
+  if (pending) return pending;
+  const request = loadAndroidLocalMetadata(id).finally(() => {
+    if (metadataRequests.get(id) === request) metadataRequests.delete(id);
+  });
+  metadataRequests.set(id, request);
+  return request;
 }

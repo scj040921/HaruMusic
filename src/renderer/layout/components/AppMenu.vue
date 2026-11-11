@@ -24,7 +24,14 @@
           <span v-if="settingsStore.setData.isMenuExpanded" class="haru-name">HaruMusic</span>
         </button>
       </div>
-      <div class="app-menu-list">
+      <div ref="menuListRef" class="app-menu-list">
+        <span
+          v-if="isAndroidApp && isMobile"
+          class="liquid-tab-slider"
+          :class="{ 'is-swapping': sliderSwapping }"
+          :style="sliderStyle"
+          aria-hidden="true"
+        />
         <div v-for="item in visibleMenus" :key="item.path" class="app-menu-item">
           <n-tooltip
             :delay="200"
@@ -60,7 +67,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 
@@ -89,6 +96,18 @@ const props = defineProps({
 const route = useRoute();
 const path = ref(route.path);
 const settingsStore = useSettingsStore();
+const menuListRef = ref<HTMLElement | null>(null);
+const sliderSwapping = ref(false);
+const sliderStyle = ref<Record<string, string>>({
+  opacity: '0',
+  left: '0px',
+  top: '0px',
+  width: '0px',
+  height: '0px'
+});
+let sliderFrame = 0;
+let menuResizeObserver: ResizeObserver | null = null;
+const handleSliderResize = () => updateLiquidSlider();
 const visibleMenus = computed(() =>
   isAndroidApp && isMobile.value
     ? props.menus.filter((item: any) => item.path !== '/album')
@@ -98,8 +117,52 @@ watch(
   () => route.path,
   async (newParams) => {
     path.value = newParams;
+    await nextTick();
+    updateLiquidSlider(true);
   }
 );
+
+function updateLiquidSlider(animate = false) {
+  if (!isAndroidApp || !isMobile.value || !menuListRef.value) return;
+  const list = menuListRef.value;
+  const active = list.querySelector<HTMLElement>('.app-menu-item-link.is-active');
+  if (!active) {
+    sliderStyle.value = { ...sliderStyle.value, opacity: '0' };
+    return;
+  }
+  const listRect = list.getBoundingClientRect();
+  const activeRect = active.getBoundingClientRect();
+  if (!activeRect.width || !activeRect.height) return;
+
+  if (animate) {
+    sliderSwapping.value = true;
+    cancelAnimationFrame(sliderFrame);
+  }
+  sliderStyle.value = {
+    opacity: '1',
+    left: `${activeRect.left - listRect.left}px`,
+    top: `${activeRect.top - listRect.top}px`,
+    width: `${activeRect.width}px`,
+    height: `${activeRect.height}px`
+  };
+  if (animate) sliderFrame = requestAnimationFrame(() => (sliderSwapping.value = false));
+}
+
+onMounted(async () => {
+  await nextTick();
+  updateLiquidSlider();
+  if (typeof ResizeObserver !== 'undefined' && menuListRef.value) {
+    menuResizeObserver = new ResizeObserver(() => updateLiquidSlider());
+    menuResizeObserver.observe(menuListRef.value);
+  }
+  window.addEventListener('resize', handleSliderResize);
+});
+
+onBeforeUnmount(() => {
+  cancelAnimationFrame(sliderFrame);
+  menuResizeObserver?.disconnect();
+  window.removeEventListener('resize', handleSliderResize);
+});
 
 const { t } = useI18n();
 
@@ -286,10 +349,13 @@ const toggleMenu = () => {
     justify-content: space-around;
     align-items: stretch;
     gap: 4px;
+    position: relative;
     padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px));
   }
 
   .app-menu-item {
+    position: relative;
+    z-index: 1;
     flex: 1 1 0;
     min-width: 0;
     margin: 0;
@@ -343,6 +409,45 @@ const toggleMenu = () => {
   }
 }
 
+.app-menu.android-hig-tabs .liquid-tab-slider {
+  position: absolute;
+  z-index: 0;
+  border: 1px solid rgba(255, 255, 255, 0.56);
+  border-radius: 22px;
+  background:
+    radial-gradient(ellipse at 24% 10%, rgba(255, 255, 255, 0.68), transparent 62%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.12));
+  box-shadow:
+    0 4px 14px rgba(80, 72, 70, 0.1),
+    0 1px 0 rgba(255, 255, 255, 0.72) inset,
+    0 -1px 0 rgba(255, 255, 255, 0.2) inset;
+  backdrop-filter: blur(18px) saturate(1.55);
+  -webkit-backdrop-filter: blur(18px) saturate(1.55);
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    left 480ms cubic-bezier(0.2, 1.28, 0.3, 1),
+    top 480ms cubic-bezier(0.2, 1.28, 0.3, 1),
+    width 480ms cubic-bezier(0.2, 1.28, 0.3, 1),
+    height 360ms cubic-bezier(0.2, 1.28, 0.3, 1),
+    opacity 140ms ease,
+    transform 360ms cubic-bezier(0.2, 1.28, 0.3, 1);
+}
+
+.app-menu.android-hig-tabs .liquid-tab-slider.is-swapping {
+  transform: scaleX(0.84) scaleY(0.92);
+}
+
+:global(.dark) .app-menu.android-hig-tabs .liquid-tab-slider {
+  border-color: rgba(255, 255, 255, 0.2);
+  background:
+    radial-gradient(ellipse at 24% 10%, rgba(255, 255, 255, 0.25), transparent 62%),
+    linear-gradient(145deg, rgba(92, 92, 98, 0.58), rgba(40, 40, 44, 0.4));
+  box-shadow:
+    0 5px 16px rgba(0, 0, 0, 0.22),
+    0 1px 0 rgba(255, 255, 255, 0.2) inset;
+}
+
 :global(.dark) .app-menu.android-hig-tabs {
   --haru-nav-icon: #a1a1a6;
   --haru-nav-active: #ff5268;
@@ -360,6 +465,10 @@ const toggleMenu = () => {
 
 @media (prefers-reduced-motion: reduce) {
   .app-menu.android-hig-tabs .app-menu-item-link {
+    transition: none;
+  }
+
+  .app-menu.android-hig-tabs .liquid-tab-slider {
     transition: none;
   }
 

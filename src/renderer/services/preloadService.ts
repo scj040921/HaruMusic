@@ -1,105 +1,137 @@
 import type { SongResult } from '@/types/music';
 
+type PreloadEntry = {
+  key: string;
+  url: string;
+  audio: HTMLAudioElement;
+  promise: Promise<string>;
+  settled: boolean;
+  ready: boolean;
+  cancel: () => void;
+};
+
 /**
- * Preloads the next track into a muted HTMLAudioElement. When that track is
- * selected, AudioService can adopt the already-buffered element instead of
- * waiting for the same URL to become playable a second time.
+ * Keeps at most two isolated warm audio elements. Entries are keyed by both
+ * source and song ID, and an URL change cancels the previous warmup before a
+ * new one can take ownership of the cache slot.
  */
 class PreloadService {
-  private validatedUrls = new Map<string | number, string>();
-  private loadingPromises = new Map<string | number, Promise<string>>();
-  private preloadedSounds = new Map<string | number, HTMLAudioElement>();
-  private static readonly MAX_VALIDATED_URLS = 100;
+  private entries = new Map<string, PreloadEntry>();
+  private revision = 0;
   private static readonly MAX_PRELOADED_SOUNDS = 2;
+  private static readonly WARMUP_TIMEOUT_MS = 5000;
 
-  public async load(song: SongResult): Promise<string> {
-    if (!song?.id) throw new Error('无效的歌曲对象');
-    if (!song.playMusicUrl) throw new Error('歌曲没有 URL');
-
-    if (
-      this.validatedUrls.get(song.id) === song.playMusicUrl &&
-      this.preloadedSounds.has(song.id)
-    ) {
-      return song.playMusicUrl;
-    }
-    const pending = this.loadingPromises.get(song.id);
-    if (pending) return pending;
-
-    const promise = this.warmAudio(song.playMusicUrl, song)
-      .then((url) => {
-        this.validatedUrls.delete(song.id);
-        this.validatedUrls.set(song.id, url);
-        while (this.validatedUrls.size > PreloadService.MAX_VALIDATED_URLS) {
-          const oldest = this.validatedUrls.keys().next().value;
-          if (oldest === undefined) break;
-          this.validatedUrls.delete(oldest);
-        }
-        return url;
-      })
-      .finally(() => this.loadingPromises.delete(song.id));
-    this.loadingPromises.set(song.id, promise);
-    return promise;
+  private key(song: Pick<SongResult, 'id' | 'source'>): string {
+    return `${song.source || 'unknown'}:${typeof song.id}:${String(song.id)}`;
   }
 
-  private warmAudio(url: string, song: SongResult): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-      const audio = new Audio();
-      audio.crossOrigin = 'anonymous';
-      audio.preload = 'auto';
-      audio.muted = true;
-      audio.volume = 0;
-      this.preloadedSounds.set(song.id, audio);
-      while (this.preloadedSounds.size > PreloadService.MAX_PRELOADED_SOUNDS) {
-        const oldest = this.preloadedSounds.keys().next().value;
-        if (oldest === undefined) break;
-        this.disposeSound(this.preloadedSounds.get(oldest));
-        this.preloadedSounds.delete(oldest);
-      }
+  public getRevision(): number {
+    return this.revision;
+  }
 
-      let settled = false;
-      const timeoutId = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        if (audio.readyState === HTMLMediaElement.HAVE_NOTHING) {
-          if (this.preloadedSounds.get(song.id) === audio) this.preloadedSounds.delete(song.id);
-          this.disposeSound(audio);
-        }
-        resolve(url);
-      }, 5000);
-      const cleanup = () => {
-        clearTimeout(timeoutId);
-        audio.removeEventListener('loadedmetadata', onLoaded);
-        audio.removeEventListener('canplay', onLoaded);
-        audio.removeEventListener('error', onError);
-      };
-      const finishLoaded = () => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        this.checkDuration(audio, song);
-        resolve(url);
-      };
-      const onLoaded = () => finishLoaded();
-      const onError = () => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        if (this.preloadedSounds.get(song.id) === audio) {
-          this.preloadedSounds.delete(song.id);
-        }
-        this.disposeSound(audio);
-        reject(new Error(`URL 验证失败: ${song.name}`));
-      };
+  public async load(song: SongResult, expectedRevision = this.revision): Promise<string> {
+    if (!song?.id) throw new Error('无效的歌曲对象');
+    if (!song.playMusicUrl) throw new Error('歌曲没有 URL');
+    if (expectedRevision !== this.revision) return song.playMusicUrl;
 
-      audio.addEventListener('loadedmetadata', onLoaded);
-      audio.addEventListener('canplay', onLoaded);
-      audio.addEventListener('error', onError);
-      audio.src = url;
-      audio.load();
-      // Some hosts throttle preload=auto. Keep the normal URL path available
-      // instead of making a slow warmup block playlist navigation.
+    const key = this.key(song);
+    const existing = this.entries.get(key);
+    if (existing?.url === song.playMusicUrl) return existing.promise;
+    if (existing) existing.cancel();
+
+    let audio: HTMLAudioElement;
+    try {
+      audio = new Audio();
+    } catch {
+      return song.playMusicUrl;
+    }
+
+    audio.crossOrigin = 'anonymous';
+    audio.preload = 'auto';
+    audio.muted = true;
+    audio.volume = 0;
+
+    let resolvePromise!: (url: string) => void;
+    const promise = new Promise<string>((resolve) => {
+      resolvePromise = resolve;
     });
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const cleanup = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = null;
+      audio.removeEventListener('canplay', onCanPlay);
+      audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('error', onError);
+    };
+    const entry: PreloadEntry = {
+      key,
+      url: song.playMusicUrl,
+      audio,
+      promise,
+      settled: false,
+      ready: false,
+      cancel: () => {
+        const shouldResolve = !settled;
+        settled = true;
+        entry.settled = true;
+        cleanup();
+        if (this.entries.get(key) === entry) this.entries.delete(key);
+        this.disposeSound(audio);
+        if (shouldResolve) resolvePromise(song.playMusicUrl!);
+      }
+    };
+
+    const finishUnavailable = () => {
+      if (settled) return;
+      settled = true;
+      entry.settled = true;
+      cleanup();
+      if (this.entries.get(key) === entry) this.entries.delete(key);
+      this.disposeSound(audio);
+      resolvePromise(song.playMusicUrl!);
+    };
+    const onLoadedMetadata = () => this.checkDuration(audio, song);
+    const onCanPlay = () => {
+      if (settled) return;
+      settled = true;
+      entry.settled = true;
+      entry.ready = audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && !audio.error;
+      cleanup();
+      if (!entry.ready || this.entries.get(key) !== entry) {
+        if (this.entries.get(key) === entry) this.entries.delete(key);
+        this.disposeSound(audio);
+      } else {
+        this.checkDuration(audio, song);
+      }
+      resolvePromise(song.playMusicUrl!);
+    };
+    const onError = () => finishUnavailable();
+
+    this.entries.set(key, entry);
+    while (this.entries.size > PreloadService.MAX_PRELOADED_SOUNDS) {
+      const oldestKey = this.entries.keys().next().value;
+      if (!oldestKey || oldestKey === key) break;
+      this.entries.get(oldestKey)?.cancel();
+    }
+
+    audio.addEventListener('canplay', onCanPlay);
+    audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('error', onError);
+    timeoutId = setTimeout(() => {
+      if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && !audio.error) {
+        onCanPlay();
+      } else {
+        finishUnavailable();
+      }
+    }, PreloadService.WARMUP_TIMEOUT_MS);
+    try {
+      audio.src = song.playMusicUrl;
+      audio.load();
+    } catch {
+      finishUnavailable();
+    }
+    return promise;
   }
 
   private checkDuration(audio: HTMLAudioElement, song: SongResult): void {
@@ -131,77 +163,110 @@ class PreloadService {
       sound.removeAttribute('src');
       sound.load();
     } catch {
-      // The browser can discard a warm media resource while the queue changes.
+      // The browser may have already discarded the warm media resource.
     }
   }
 
-  /** Wait briefly for a queued warmup, then transfer only a ready audio node. */
+  /** Transfer only a ready element that still belongs to this exact source. */
   public async consumeSound(
-    songId: string | number,
+    song: Pick<SongResult, 'id' | 'source'>,
     url: string,
     waitMs = 900
   ): Promise<HTMLAudioElement | undefined> {
-    const isSameUrl = (audio: HTMLAudioElement) => {
-      try {
-        return audio.src === new URL(url, document.baseURI).href;
-      } catch {
-        return audio.src === url;
-      }
-    };
-    let audio = this.preloadedSounds.get(songId);
-    if (audio && isSameUrl(audio) && audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    const key = this.key(song);
+    let entry = this.entries.get(key);
+    if (!entry) return undefined;
+    if (entry.url !== url) {
+      entry.cancel();
+      return undefined;
+    }
+
+    if (!entry.ready && !entry.settled) {
+      const candidate = entry.audio;
       await new Promise<void>((resolve) => {
+        let finished = false;
         const finish = () => {
+          if (finished) return;
+          finished = true;
           clearTimeout(timeoutId);
-          audio!.removeEventListener('canplay', finish);
-          audio!.removeEventListener('error', finish);
+          candidate.removeEventListener('canplay', finish);
+          candidate.removeEventListener('error', finish);
           resolve();
         };
-        audio!.addEventListener('canplay', finish, { once: true });
-        audio!.addEventListener('error', finish, { once: true });
         const timeoutId = setTimeout(finish, waitMs);
+        candidate.addEventListener('canplay', finish, { once: true });
+        candidate.addEventListener('error', finish, { once: true });
       });
-      audio = this.preloadedSounds.get(songId);
+      entry = this.entries.get(key);
     }
 
     if (
-      !audio ||
-      !isSameUrl(audio) ||
-      audio.error ||
-      audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
+      !entry ||
+      entry.url !== url ||
+      !entry.ready ||
+      entry.audio.error ||
+      entry.audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
     ) {
       return undefined;
     }
 
-    this.preloadedSounds.delete(songId);
-    this.validatedUrls.delete(songId);
-    audio.muted = false;
-    return audio;
+    this.entries.delete(key);
+    entry.audio.muted = false;
+    entry.audio.volume = 1;
+    return entry.audio;
   }
 
-  /** Remove a cached URL and release a warm decoder/buffer. */
-  public cancel(songId: string | number): void {
-    this.validatedUrls.delete(songId);
-    this.disposeSound(this.preloadedSounds.get(songId));
-    this.preloadedSounds.delete(songId);
+  /** Remove stale URLs for one source/song pair, or all matching IDs. */
+  public cancel(songId: string | number, source?: string): void {
+    const idPart = `${typeof songId}:${String(songId)}`;
+    for (const [key, entry] of this.entries) {
+      if (key.endsWith(`:${idPart}`) && (!source || key.startsWith(`${source}:`))) {
+        entry.cancel();
+      }
+    }
   }
 
-  public consume(songId: string | number): string | undefined {
-    const url = this.validatedUrls.get(songId);
-    if (!url) return undefined;
-    this.validatedUrls.delete(songId);
-    return url;
+  /** Keep the selected track's warm element and release stale queue work. */
+  public retain(song: Pick<SongResult, 'id' | 'source'>): void {
+    this.revision++;
+    const keepKey = this.key(song);
+    for (const [key, entry] of this.entries) {
+      if (key !== keepKey) entry.cancel();
+    }
   }
 
-  public getPreloadedSound(songId: string | number): string | undefined {
-    return this.validatedUrls.get(songId);
+  public consume(songId: string | number, source?: string): string | undefined {
+    for (const [key, entry] of this.entries) {
+      if (
+        key.endsWith(`:${typeof songId}:${String(songId)}`) &&
+        (!source || key.startsWith(`${source}:`)) &&
+        entry.ready
+      ) {
+        const url = entry.url;
+        entry.cancel();
+        return url;
+      }
+    }
+    return undefined;
+  }
+
+  public getPreloadedSound(songId: string | number, source?: string): string | undefined {
+    for (const [key, entry] of this.entries) {
+      if (
+        key.endsWith(`:${typeof songId}:${String(songId)}`) &&
+        (!source || key.startsWith(`${source}:`)) &&
+        entry.ready
+      ) {
+        return entry.url;
+      }
+    }
+    return undefined;
   }
 
   public clearAll(): void {
-    this.validatedUrls.clear();
-    this.loadingPromises.clear();
-    for (const sound of this.preloadedSounds.values()) this.disposeSound(sound);
-    this.preloadedSounds.clear();
+    this.revision++;
+    for (const entry of [...this.entries.values()]) entry.cancel();
+    this.entries.clear();
   }
 }
 

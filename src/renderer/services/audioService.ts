@@ -45,6 +45,7 @@ class AudioService {
 
   // 取消整轮加载（包括重试等待），并结算旧 Promise，防止旧歌曲抢回共享 audio。
   private pendingLoadCleanup: (() => void) | null = null;
+  private stallTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly frequencies = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
@@ -104,8 +105,29 @@ class AudioService {
 
   private bindAudioEvents() {
     this.audioEventCleanup?.();
+    if (this.stallTimer) clearTimeout(this.stallTimer);
+    this.stallTimer = null;
     const audio = this.audio;
     const isCurrent = () => this.audio === audio;
+    const clearStallTimer = () => {
+      if (this.stallTimer) clearTimeout(this.stallTimer);
+      this.stallTimer = null;
+    };
+    const armStallTimer = () => {
+      if (!isCurrent() || audio.paused || this.pendingLoadCleanup || !this.currentTrack) return;
+      clearStallTimer();
+      this._isLoading = true;
+      this.stallTimer = setTimeout(() => {
+        this.stallTimer = null;
+        if (!isCurrent() || audio.paused || this.pendingLoadCleanup || !this.currentTrack) return;
+        this._isLoading = false;
+        this.updateMediaSessionState(false);
+        this.emit(
+          this.currentTrack.source === 'local' ? 'playback_error' : 'url_expired',
+          this.currentTrack
+        );
+      }, 15000);
+    };
     const onPlay = () => {
       if (!isCurrent() || audio.paused || !this.currentTrack) return;
       this.updateMediaSessionState(true);
@@ -131,15 +153,26 @@ class AudioService {
     };
 
     const onTimeUpdate = () => {
-      if (isCurrent()) this.emit('timeupdate', audio.currentTime);
+      if (!isCurrent()) return;
+      clearStallTimer();
+      if (!this.pendingLoadCleanup) this._isLoading = false;
+      this.emit('timeupdate', audio.currentTime);
     };
 
     const onWaiting = () => {
-      if (isCurrent()) this._isLoading = true;
+      armStallTimer();
+    };
+
+    const onPlaying = () => {
+      if (!isCurrent()) return;
+      clearStallTimer();
+      if (!this.pendingLoadCleanup) this._isLoading = false;
     };
 
     const onCanPlay = () => {
-      if (isCurrent()) this._isLoading = false;
+      if (!isCurrent()) return;
+      clearStallTimer();
+      if (!this.pendingLoadCleanup) this._isLoading = false;
     };
 
     const onError = () => {
@@ -151,7 +184,7 @@ class AudioService {
         this._isLoading = false;
         this.updateMediaSessionState(false);
         this.emit(
-          this.currentTrack.playMusicUrl?.startsWith('local://') ? 'playback_error' : 'url_expired',
+          this.currentTrack.source === 'local' ? 'playback_error' : 'url_expired',
           this.currentTrack
         );
       }
@@ -164,19 +197,22 @@ class AudioService {
       ['seeked', onSeeked],
       ['timeupdate', onTimeUpdate],
       ['waiting', onWaiting],
+      ['stalled', armStallTimer],
+      ['playing', onPlaying],
       ['canplay', onCanPlay],
       ['error', onError]
     ];
     for (const [name, listener] of listeners) audio.addEventListener(name, listener);
     this.audioEventCleanup = () => {
+      clearStallTimer();
       for (const [name, listener] of listeners) audio.removeEventListener(name, listener);
     };
   }
 
-  /** Replace the active element with a prebuffered one without leaving stale listeners. */
-  private adoptAudioElement(audio: HTMLAudioElement): void {
-    if (audio === this.audio) return;
+  /** Make a warmed/staged element active while keeping the previous one recoverable. */
+  private activateAudioElement(audio: HTMLAudioElement): HTMLAudioElement {
     const previous = this.audio;
+    if (audio === previous) return previous;
     this.audioEventCleanup?.();
     this.audioEventCleanup = null;
     try {
@@ -184,20 +220,23 @@ class AudioService {
     } catch {
       // The outgoing element may already have ended.
     }
-    const previousNode = this.sourceNodes.get(previous);
-    previousNode?.disconnect();
-    this.sourceNodes.delete(previous);
+    this.audio = audio;
+    this.audio.muted = false;
+    this.bindAudioEvents();
+    return previous;
+  }
+
+  private disposeAudioElement(audio: HTMLAudioElement): void {
+    const node = this.sourceNodes.get(audio);
+    node?.disconnect();
+    this.sourceNodes.delete(audio);
     try {
-      previous.removeAttribute('src');
-      previous.load();
+      if (!audio.paused) audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
     } catch {
       // Ignore cleanup failures from a browser-discarded resource.
     }
-
-    this.audio = audio;
-    this.audio.muted = false;
-    this.audio.volume = 1;
-    this.bindAudioEvents();
   }
 
   // ==================== MediaSession ====================
@@ -546,27 +585,44 @@ class AudioService {
       return Promise.reject(new Error('缺少必要参数: url和track'));
     }
 
-    const hadPendingLoad = Boolean(this.pendingLoadCleanup);
     this.pendingLoadCleanup?.();
-
-    let adoptedPreloaded = false;
-    if (
-      _existingSound &&
-      _existingSound !== this.audio &&
-      _existingSound.src === new URL(url, document.baseURI).href &&
-      _existingSound.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-      !_existingSound.error
-    ) {
-      this.adoptAudioElement(_existingSound);
-      adoptedPreloaded = true;
+    const previousAudio = this.audio;
+    const previousTrack = this.currentTrack;
+    const previousWasPlaying = !previousAudio.paused && !previousAudio.ended;
+    let canonicalUrl = url;
+    try {
+      canonicalUrl = new URL(url, document.baseURI).href;
+    } catch {
+      // Keep custom media schemes as supplied when URL normalization is unavailable.
     }
 
-    const currentSrc = this.audio.src;
-    const isSameUrl =
-      currentSrc &&
-      currentSrc === url &&
-      (!hadPendingLoad || adoptedPreloaded) &&
-      !this.audio.error;
+    const sameActiveUrl = previousAudio.src === canonicalUrl && !previousAudio.error;
+    const preserveActive = !!previousTrack && !sameActiveUrl;
+    const canUsePreloaded =
+      !!_existingSound &&
+      _existingSound !== previousAudio &&
+      _existingSound.src === canonicalUrl &&
+      _existingSound.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+      !_existingSound.error;
+    if (_existingSound && _existingSound !== previousAudio && !canUsePreloaded) {
+      this.disposeAudioElement(_existingSound);
+    }
+
+    let candidate: HTMLAudioElement;
+    try {
+      candidate = canUsePreloaded
+        ? _existingSound!
+        : sameActiveUrl || !preserveActive
+          ? previousAudio
+          : new Audio();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    candidate.crossOrigin = 'anonymous';
+    candidate.preload = 'auto';
+    candidate.muted = false;
+    const staged = candidate !== previousAudio;
+    let switched = false;
 
     this.forceResetOperationLock();
     this.setOperationLock();
@@ -578,6 +634,37 @@ class AudioService {
       let retryTimer: ReturnType<typeof setTimeout> | null = null;
       let loadTimer: ReturnType<typeof setTimeout> | null = null;
       let removeListeners = () => {};
+
+      const restorePreviousAudio = () => {
+        if (switched) {
+          this.audioEventCleanup?.();
+          this.audioEventCleanup = null;
+          try {
+            candidate.pause();
+          } catch {
+            // Ignore an element that was already stopped by the browser.
+          }
+          this.disposeAudioElement(candidate);
+          this.audio = previousAudio;
+          this.bindAudioEvents();
+          switched = false;
+          this.currentTrack = previousTrack;
+          this.setupEQ();
+          this.applyVolume(this.volume);
+          if (previousTrack) {
+            this.updateMediaSessionMetadata(previousTrack);
+            this.updateMediaSessionPositionState();
+          }
+          if (previousWasPlaying && !previousAudio.ended) {
+            void previousAudio.play().catch((error) => {
+              console.warn('恢复上一首播放失败:', error);
+            });
+          }
+        } else {
+          if (staged) this.disposeAudioElement(candidate);
+          this.currentTrack = previousTrack;
+        }
+      };
 
       const cleanup = () => {
         if (retryTimer) {
@@ -597,6 +684,7 @@ class AudioService {
       const failLoad = (error: Error) => {
         if (settled) return;
         settled = true;
+        restorePreviousAudio();
         cleanup();
         this._isLoading = false;
         this.releaseOperationLock();
@@ -610,23 +698,34 @@ class AudioService {
         if (settled) return;
         removeListeners();
         try {
-          this._isLoading = false;
+          if (candidate !== this.audio) {
+            this.activateAudioElement(candidate);
+            switched = true;
+          }
+          this.currentTrack = track;
+          this.setupEQ();
           this.applyVolume(this.volume);
-          this.audio.playbackRate = this.playbackRate;
-          if (seekTime !== undefined) {
-            this.seek(seekTime);
+          candidate.playbackRate = this.playbackRate;
+          if (seekTime !== undefined && Number.isFinite(seekTime) && seekTime >= 0) {
+            try {
+              candidate.currentTime = seekTime;
+            } catch {
+              // Metadata may not expose a seekable range yet; playback can still start.
+            }
           }
 
           if (isPlay && this.context?.state === 'suspended') {
             await this.context.resume();
           }
           if (settled) return;
-          if (isPlay) await this.audio.play();
-          else this.audio.pause();
+          if (isPlay) await candidate.play();
+          else candidate.pause();
           if (settled) return;
 
           settled = true;
           cleanup();
+          if (candidate !== previousAudio) this.disposeAudioElement(previousAudio);
+          this._isLoading = false;
           this.updateMediaSessionMetadata(track);
           this.updateMediaSessionPositionState();
           this.emit('load');
@@ -642,16 +741,13 @@ class AudioService {
       const tryPlay = () => {
         if (settled) return;
         this._isLoading = true;
-        this.currentTrack = track;
-        this.setupEQ();
-        loadTimer = setTimeout(() => failLoad(new Error('Audio loading timed out')), 20000);
+        loadTimer = setTimeout(() => failLoad(new Error('Audio loading timed out')), 15000);
         const onError = () => {
           if (settled) return;
           removeListeners();
           if (loadTimer) clearTimeout(loadTimer);
           loadTimer = null;
-          this._isLoading = false;
-          const error = this.audio.error;
+          const error = candidate.error;
           console.error('Audio load error:', error?.code, error?.message);
           this.emit('loaderror', { track, error });
 
@@ -675,22 +771,25 @@ class AudioService {
         };
 
         removeListeners = () => {
-          this.audio.removeEventListener('canplay', startAudio);
-          this.audio.removeEventListener('error', onError);
+          candidate.removeEventListener('canplay', startAudio);
+          candidate.removeEventListener('error', onError);
         };
 
-        if (isSameUrl) {
+        if (candidate.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && !candidate.error) {
           void startAudio();
           return;
         }
 
-        this.audio.addEventListener('canplay', startAudio, { once: true });
-        this.audio.addEventListener('error', onError, { once: true });
+        candidate.addEventListener('canplay', startAudio, { once: true });
+        candidate.addEventListener('error', onError, { once: true });
 
-        // Change source and load
+        // Load a new element in the background so a failing next URL never
+        // destroys the currently audible track.
         try {
-          this.audio.src = url;
-          this.audio.load();
+          if (!canUsePreloaded && candidate !== previousAudio) candidate.src = url;
+          else if (candidate === previousAudio && candidate.src !== canonicalUrl)
+            candidate.src = url;
+          candidate.load();
         } catch (error) {
           failLoad(error as Error);
         }

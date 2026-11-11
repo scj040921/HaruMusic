@@ -31,9 +31,18 @@
       <p v-if="!tracks.length && !scanning" class="empty">
         还没有找到音乐。首次扫描时请允许访问音乐和音频。
       </p>
-      <div v-for="track in tracks" :key="track.id" class="track">
+      <div
+        v-for="track in tracks"
+        :key="track.id"
+        class="track"
+        :data-track-id="track.id"
+        :ref="(element) => observeTrack(element, track)"
+      >
         <button class="track-main" type="button" @click="play(track)">
-          <span class="track-art"><i class="ri-music-2-line" /></span>
+          <span class="track-art">
+            <img v-if="track.cover" :src="track.cover" :alt="`${track.name} 封面`" />
+            <i v-else class="ri-music-2-line" />
+          </span>
           <span class="track-copy">
             <strong>{{ track.name }}</strong>
             <small>{{ track.artist || (track.uri ? '设备中的 FLAC' : '本地导入') }}</small>
@@ -47,10 +56,11 @@
   </n-scrollbar>
 </template>
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import {
   type AndroidLocalTrack,
+  getAndroidLocalMetadata,
   listAndroidLocalTracks,
   removeAndroidLocalTrack,
   saveAndroidLocalTracks,
@@ -66,8 +76,44 @@ const error = ref('');
 const scanning = ref(false);
 const player = usePlayerStore();
 
+const metadataObserver =
+  typeof IntersectionObserver === 'undefined'
+    ? null
+    : new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const track = (entry.target as HTMLElement & { __androidTrack?: AndroidLocalTrack })
+              .__androidTrack;
+            metadataObserver?.unobserve(entry.target);
+            if (!track || track.metadataLoaded) continue;
+            void getAndroidLocalMetadata(track.id)
+              .then((metadata) => {
+                track.cover = metadata.cover;
+                track.lyrics = metadata.lyrics;
+                track.metadataLoaded = true;
+              })
+              .catch(() => {
+                track.metadataLoaded = true;
+              });
+          }
+        },
+        { rootMargin: '180px 0px', threshold: 0.01 }
+      );
+
+function observeTrack(element: unknown, track: AndroidLocalTrack) {
+  if (!(element instanceof HTMLElement) || !metadataObserver || track.metadataLoaded) return;
+  (element as HTMLElement & { __androidTrack?: AndroidLocalTrack }).__androidTrack = track;
+  metadataObserver.observe(element);
+}
+
 async function refresh() {
   tracks.value = await listAndroidLocalTracks();
+  await nextTick();
+  document.querySelectorAll<HTMLElement>('.local-page .track').forEach((element) => {
+    const track = tracks.value.find((item) => item.id === element.dataset.trackId);
+    if (track) observeTrack(element, track);
+  });
 }
 
 async function importFiles(event: Event) {
@@ -108,10 +154,11 @@ function asSong(track: AndroidLocalTrack): SongResult {
   return {
     id: track.id,
     name: track.name,
-    picUrl: '',
+    picUrl: track.cover || '',
     source: 'local',
     ar: track.artist ? ([{ id: 0, name: track.artist }] as SongResult['ar']) : [],
-    al: { id: 0, name: track.album || '', picUrl: '' } as SongResult['al'],
+    al: { id: 0, name: track.album || '', picUrl: track.cover || '' } as SongResult['al'],
+    dt: track.duration || 0,
     count: 0
   };
 }
@@ -146,6 +193,8 @@ onMounted(async () => {
     error.value = '无法读取本地音乐库。';
   }
 });
+
+onBeforeUnmount(() => metadataObserver?.disconnect());
 </script>
 <style scoped>
 .local-page {
@@ -249,6 +298,12 @@ p {
   border-radius: 16px;
   background: var(--surface-secondary, #f2f2f7);
   color: var(--text-secondary);
+  overflow: hidden;
+}
+.track-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .track-art i {
   font-size: 22px;

@@ -62,6 +62,7 @@ export const usePlaylistStore = defineStore(
      */
     const fetchSongs = async (startIndex: number, endIndex: number) => {
       try {
+        const preloadRevision = preloadService.getRevision();
         const targetList = playList.value;
         const firstIndex = Math.max(0, startIndex);
         const songs = targetList.slice(firstIndex, Math.min(endIndex, targetList.length));
@@ -86,7 +87,7 @@ export const usePlaylistStore = defineStore(
         // Start warming the next audio URL as soon as parsing returns it. Lyrics
         // and cover color are independent work and must not delay the handoff.
         if (nextSong?.playMusicUrl) {
-          preloadService.load(nextSong).catch((err) => {
+          preloadService.load(nextSong, preloadRevision).catch((err) => {
             console.warn('预加载下一首失败:', err);
           });
         }

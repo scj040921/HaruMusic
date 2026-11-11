@@ -25,6 +25,7 @@ import { getImageLinearBackground } from '@/utils/linearColor';
 import { readPlaybackProgress } from '@/utils/playerUtils';
 
 const { message } = createDiscreteApi(['message']);
+const SONG_DETAIL_TIMEOUT_MS = 15_000;
 
 let reparseGeneration = 0;
 
@@ -68,6 +69,30 @@ const loadMetadata = async (
   primaryColor: string;
 }> => {
   if (music.source === 'local') {
+    if (String(music.id).startsWith('android-local:')) {
+      const { getAndroidLocalMetadata } = await import('@/services/androidLocalMusic');
+      const { parseLyrics } = await import('@/hooks/usePlayerHooks');
+      const metadata = await getAndroidLocalMetadata(String(music.id));
+      const parsed = metadata.lyrics ? parseLyrics(metadata.lyrics) : { lyrics: [], times: [] };
+      const lyricRows = parsed.lyrics.length
+        ? parsed.lyrics
+        : (metadata.lyrics?.split(/\r?\n/).filter(Boolean) || []).map((text) => ({
+            text,
+            trText: ''
+          }));
+      const lyrics = lyricRows.length
+        ? {
+            lrcTimeArray: parsed.times,
+            lrcArray: lyricRows,
+            hasWordByWord: parsed.lyrics.some((line) => line.hasWordByWord)
+          }
+        : music.lyric;
+      return {
+        lyrics,
+        backgroundColor: '#29292d',
+        primaryColor: '#ffffff'
+      };
+    }
     return { lyrics: music.lyric, backgroundColor: '#29292d', primaryColor: '#ffffff' };
   }
   const [lyrics, { backgroundColor, primaryColor }] = await Promise.all([
@@ -103,7 +128,7 @@ const loadAndPlayAudio = async (
   // 优先切换到下一首已预热的媒体元素，未预热时继续沿用常规加载路径。
   console.log(`[playbackController] 开始播放: ${song.name}`);
   const generation = getCurrentGeneration();
-  const preloadedSound = await preloadService.consumeSound(song.id, song.playMusicUrl);
+  const preloadedSound = await preloadService.consumeSound(song, song.playMusicUrl);
   if (generation !== getCurrentGeneration()) {
     if (preloadedSound) {
       preloadedSound.pause();
@@ -179,8 +204,13 @@ export const playTrack = async (
   const audioTrackBeforeSwitch = audioService.getCurrentTrack();
   const wasPlayingBeforeSwitch = playerCore.play;
   const previousPlayIntent = playerCore.userPlayIntent;
+  const previousMusic = playerCore.playMusic;
+  const previousMusicUrl = playerCore.playMusicUrl;
   if (music.id !== playerCore.playMusic.id) {
     SongSourceConfigManager.clearTriedSources(music.id);
+  }
+  if (music.id !== playerCore.playMusic.id || music.source !== playerCore.playMusic.source) {
+    preloadService.retain(music);
   }
   if (!options.recovery) resetUrlExpiredRetry();
 
@@ -217,7 +247,21 @@ export const playTrack = async (
   for (let attempt = 0; attempt < 2; attempt++) {
     let audioUrl: string | undefined;
     try {
-      const song = await getSongDetail(candidate, requestId);
+      let detailTimeout: ReturnType<typeof setTimeout> | undefined;
+      let song: SongResult;
+      try {
+        song = await Promise.race([
+          getSongDetail(candidate, requestId),
+          new Promise<never>((_, reject) => {
+            detailTimeout = setTimeout(
+              () => reject(new Error('获取歌曲信息超时，请检查网络或本地文件访问权限。')),
+              SONG_DETAIL_TIMEOUT_MS
+            );
+          })
+        ]);
+      } finally {
+        if (detailTimeout) clearTimeout(detailTimeout);
+      }
       if (gen !== getCurrentGeneration()) return false;
       if (!song.playMusicUrl) throw new Error('歌曲没有播放URL');
       audioUrl = song.playMusicUrl;
@@ -263,6 +307,7 @@ export const playTrack = async (
       if (
         attempt === 0 &&
         !options.recovery &&
+        music.source !== 'local' &&
         audioUrl &&
         /^(https?:\/\/|pluginmedia:)/i.test(audioUrl) &&
         name !== 'AbortError' &&
@@ -279,6 +324,9 @@ export const playTrack = async (
       const previousAudioIsIntact =
         !!audioTrackBeforeSwitch && audioService.getCurrentTrack() === audioTrackBeforeSwitch;
       if (previousAudioIsIntact) {
+        playerCore.playMusic = previousMusic;
+        playerCore.playMusicUrl = previousMusicUrl;
+        if (previousMusic.id) updateDocumentTitle(previousMusic);
         playerCore.userPlayIntent = previousPlayIntent;
         playerCore.setIsPlay(wasPlayingBeforeSwitch);
       } else {
@@ -287,6 +335,7 @@ export const playTrack = async (
         playerCore.playMusic.playLoading = false;
         audioService.pause();
       }
+      playerCore.playMusic.playLoading = false;
       if (name !== 'AbortError') {
         message.error(
           i18n.global.t(name === 'NotAllowedError' ? 'player.resumeFailed' : 'player.playFailed')

@@ -46,6 +46,7 @@ class TestAudio extends EventTarget {
 
   ready(): void {
     this.error = null;
+    this.readyState = 2;
     this.dispatchEvent(new Event('canplay'));
   }
 }
@@ -257,6 +258,51 @@ describe('audio loading ownership (#769)', () => {
     expect(service.getCurrentTrack()?.id).toBe(song.id);
     expect(audio.pause).toHaveBeenCalledOnce();
     expect(preloaded.play).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the current song audible until a replacement source is ready', async () => {
+    const current = makeSong(1, 'https://example.com/current.mp3');
+    const next = makeSong(2, 'https://example.com/next.mp3');
+    const initial = service.play(current.playMusicUrl!, current);
+    audio.ready();
+    await initial;
+    audio.currentTime = 51;
+
+    const pendingNext = service.play(next.playMusicUrl!, next).catch((error) => error);
+    const staged = TestAudio.instances[1];
+    expect(service.getCurrentSound()).toBe(audio);
+    expect(audio.paused).toBe(false);
+    expect(audio.currentTime).toBe(51);
+
+    staged.fail(4);
+    expect(await pendingNext).toBeInstanceOf(Error);
+    expect(service.getCurrentSound()).toBe(audio);
+    expect(service.getCurrentTrack()).toBe(current);
+    expect(audio.paused).toBe(false);
+    expect(audio.currentTime).toBe(51);
+  });
+
+  it('restores the previous song if a ready preloaded element cannot start', async () => {
+    const current = makeSong(1, 'https://example.com/current.mp3');
+    const next = makeSong(2, 'https://example.com/next.mp3');
+    const initial = service.play(current.playMusicUrl!, current);
+    audio.ready();
+    await initial;
+    audio.currentTime = 51;
+
+    const preloaded = new TestAudio();
+    preloaded.src = next.playMusicUrl!;
+    preloaded.readyState = 2;
+    preloaded.play.mockRejectedValueOnce(new DOMException('Blocked', 'NotAllowedError'));
+    const failed = service
+      .play(next.playMusicUrl!, next, true, 0, preloaded as any)
+      .catch((e) => e);
+
+    expect(await failed).toBeInstanceOf(DOMException);
+    expect(service.getCurrentSound()).toBe(audio);
+    expect(service.getCurrentTrack()).toBe(current);
+    expect(audio.currentTime).toBe(51);
+    expect(audio.play).toHaveBeenCalledTimes(2);
   });
 
   it('cancels the old load before adopting a prebuffered element', async () => {

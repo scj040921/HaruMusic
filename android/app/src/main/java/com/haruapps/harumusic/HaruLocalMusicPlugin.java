@@ -44,6 +44,7 @@ import java.util.concurrent.Executors;
 )
 public class HaruLocalMusicPlugin extends Plugin {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final ExecutorService metadataWorker = Executors.newFixedThreadPool(2);
 
     private String activeAudioPermissionAlias() {
         return Build.VERSION.SDK_INT >= 33 ? "audioModern" : "audioLegacy";
@@ -139,82 +140,142 @@ public class HaruLocalMusicPlugin extends Plugin {
             call.reject("本地音乐地址无效，请重新扫描设备。");
             return;
         }
-        worker.execute(() -> {
+        metadataWorker.execute(() -> {
             JSObject result = new JSObject();
+            try (InputStream stream = getContext().getContentResolver().openInputStream(uri)) {
+                if (stream != null) {
+                    JSObject flacMetadata = readFlacMetadata(new DataInputStream(stream));
+                    if (flacMetadata.has("cover")) result.put("cover", flacMetadata.getString("cover"));
+                    if (flacMetadata.has("lyrics")) result.put("lyrics", flacMetadata.getString("lyrics"));
+                }
+            } catch (Exception ignored) {
+                // MediaMetadataRetriever below remains a fallback for artwork.
+            }
             MediaMetadataRetriever retriever = new MediaMetadataRetriever();
             try {
-                retriever.setDataSource(getContext(), uri);
-                byte[] picture = retriever.getEmbeddedPicture();
-                if (picture != null && picture.length <= 8 * 1024 * 1024) {
-                    BitmapFactory.Options options = new BitmapFactory.Options();
-                    options.inJustDecodeBounds = true;
-                    BitmapFactory.decodeByteArray(picture, 0, picture.length, options);
-                    options.inSampleSize = 1;
-                    while (options.outWidth / options.inSampleSize > 1024 || options.outHeight / options.inSampleSize > 1024) options.inSampleSize *= 2;
-                    options.inJustDecodeBounds = false;
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(picture, 0, picture.length, options);
-                    if (bitmap != null) {
-                        ByteArrayOutputStream output = new ByteArrayOutputStream();
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, output);
-                        bitmap.recycle();
-                        result.put("cover", "data:image/jpeg;base64," + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP));
-                    }
+                if (!result.has("cover")) {
+                    retriever.setDataSource(getContext(), uri);
+                    String cover = compressCover(retriever.getEmbeddedPicture());
+                    if (cover != null) result.put("cover", cover);
                 }
             } catch (Exception ignored) {
                 // Some files do not contain embedded artwork.
             } finally {
                 try { retriever.release(); } catch (Exception ignored) { }
             }
-            try (InputStream stream = getContext().getContentResolver().openInputStream(uri)) {
-                if (stream != null) {
-                    String lyric = readFlacLyrics(new DataInputStream(stream));
-                    if (lyric != null) result.put("lyrics", lyric);
-                }
-            } catch (Exception ignored) {
-                // Unsupported or malformed tags must not stop audio playback.
-            }
             getActivity().runOnUiThread(() -> call.resolve(result));
         });
     }
 
-    private String readFlacLyrics(DataInputStream input) throws Exception {
-        if (input.readInt() != 0x664c6143) return null;
+    private JSObject readFlacMetadata(DataInputStream input) throws Exception {
+        JSObject metadata = new JSObject();
+        if (input.readInt() != 0x664c6143) return metadata;
         for (int block = 0; block < 128; block++) {
             int header = input.readUnsignedByte();
+            int type = header & 0x7f;
             int length = (input.readUnsignedByte() << 16) | (input.readUnsignedByte() << 8) | input.readUnsignedByte();
-            if ((header & 0x7f) == 4 && length <= 2 * 1024 * 1024) {
+            if ((type == 4 || type == 6) && length <= 8 * 1024 * 1024) {
                 byte[] bytes = new byte[length];
                 input.readFully(bytes);
-                ByteBuffer data = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-                if (data.remaining() < 4) return null;
-                int vendorLength = data.getInt();
-                if (vendorLength < 0 || vendorLength > data.remaining() - 4) return null;
-                data.position(data.position() + vendorLength);
-                int count = data.getInt();
-                if (count < 0 || count > 10000) return null;
-                for (int i = 0; i < count && data.remaining() >= 4; i++) {
-                    int size = data.getInt();
-                    if (size < 0 || size > data.remaining()) return null;
-                    byte[] comment = new byte[size];
-                    data.get(comment);
-                    String value = new String(comment, StandardCharsets.UTF_8);
-                    int separator = value.indexOf('=');
-                    if (separator > 0) {
-                        String key = value.substring(0, separator).toUpperCase(java.util.Locale.ROOT);
-                        if (key.equals("LYRICS") || key.equals("LYRIC") || key.equals("UNSYNCEDLYRICS") || key.equals("SYNCEDLYRICS")) return value.substring(separator + 1);
-                    }
+                if (type == 4 && !metadata.has("lyrics")) {
+                    String lyrics = parseVorbisLyrics(bytes);
+                    if (lyrics != null && !lyrics.trim().isEmpty()) metadata.put("lyrics", lyrics);
+                } else if (type == 6 && !metadata.has("cover")) {
+                    String cover = parseFlacPicture(bytes);
+                    if (cover != null) metadata.put("cover", cover);
                 }
-                return null;
             }
-            int remaining = length;
-            while (remaining > 0) {
-                int skipped = input.skipBytes(remaining);
-                if (skipped <= 0) return null;
-                remaining -= skipped;
+            else {
+                int remaining = length;
+                while (remaining > 0) {
+                    int skipped = input.skipBytes(remaining);
+                    if (skipped <= 0) return metadata;
+                    remaining -= skipped;
+                }
             }
             if ((header & 0x80) != 0) break;
         }
+        return metadata;
+    }
+
+    private String parseVorbisLyrics(byte[] bytes) {
+        try {
+            ByteBuffer data = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+            if (data.remaining() < 8) return null;
+            int vendorLength = data.getInt();
+            if (vendorLength < 0 || vendorLength > data.remaining() - 4) return null;
+            data.position(data.position() + vendorLength);
+            int count = data.getInt();
+            if (count < 0 || count > 10000) return null;
+            for (int i = 0; i < count && data.remaining() >= 4; i++) {
+                int size = data.getInt();
+                if (size < 0 || size > data.remaining()) return null;
+                byte[] comment = new byte[size];
+                data.get(comment);
+                String value = new String(comment, StandardCharsets.UTF_8);
+                int separator = value.indexOf('=');
+                if (separator <= 0) continue;
+                String key = value.substring(0, separator).toUpperCase(java.util.Locale.ROOT);
+                if (key.equals("LYRICS") || key.equals("LYRIC") || key.equals("UNSYNCEDLYRICS") || key.equals("SYNCEDLYRICS")) {
+                    String lyrics = value.substring(separator + 1).trim();
+                    if (!lyrics.isEmpty()) return lyrics;
+                }
+            }
+        } catch (Exception ignored) {
+            // Invalid Vorbis comments are ignored without affecting playback.
+        }
         return null;
+    }
+
+    private String parseFlacPicture(byte[] block) {
+        try {
+            ByteBuffer data = ByteBuffer.wrap(block).order(ByteOrder.BIG_ENDIAN);
+            if (data.remaining() < 32) return null;
+            data.getInt(); // picture type
+            int mimeLength = data.getInt();
+            if (mimeLength < 0 || mimeLength > data.remaining() - 4) return null;
+            byte[] mimeBytes = new byte[mimeLength];
+            data.get(mimeBytes);
+            String mime = new String(mimeBytes, StandardCharsets.US_ASCII);
+            int descriptionLength = data.getInt();
+            if (descriptionLength < 0 || descriptionLength > data.remaining() - 20) return null;
+            data.position(data.position() + descriptionLength);
+            data.getInt(); // width
+            data.getInt(); // height
+            data.getInt(); // color depth
+            data.getInt(); // indexed colors
+            int pictureLength = data.getInt();
+            if (pictureLength <= 0 || pictureLength > data.remaining() || pictureLength > 8 * 1024 * 1024) return null;
+            byte[] picture = new byte[pictureLength];
+            data.get(picture);
+            String cover = compressCover(picture);
+            if (cover != null) return cover;
+            return null;
+        } catch (Exception ignored) {
+            // Invalid PICTURE blocks are ignored.
+        }
+        return null;
+    }
+
+    private String compressCover(byte[] picture) {
+        if (picture == null || picture.length == 0 || picture.length > 8 * 1024 * 1024) return null;
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(picture, 0, picture.length, bounds);
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
+        int sampleSize = 1;
+        while (bounds.outWidth / sampleSize > 1024 || bounds.outHeight / sampleSize > 1024) sampleSize *= 2;
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = sampleSize;
+        Bitmap bitmap = BitmapFactory.decodeByteArray(picture, 0, picture.length, options);
+        if (bitmap == null) return null;
+        try {
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, output);
+            return "data:image/jpeg;base64," + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP);
+        } finally {
+            bitmap.recycle();
+        }
     }
 
     @PluginMethod
