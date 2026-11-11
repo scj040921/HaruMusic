@@ -5,6 +5,7 @@ on:
     branches: [main, harumusic]
     paths:
       - 'src/**'
+      - 'tests/**'
       - 'resources/**'
       - 'package.json'
       - 'package-lock.json'
