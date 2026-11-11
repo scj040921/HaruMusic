@@ -47,7 +47,7 @@
             <img
               v-if="dayRecommendCover"
               ref="dailyCoverRef"
-              :src="getImgUrl(dayRecommendCover, '512y512')"
+              :src="getImgUrl(dayRecommendCover, '1024y1024')"
               alt=""
               class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
               crossorigin="anonymous"
@@ -115,7 +115,7 @@
             <img
               v-if="fmCurrentCover"
               ref="fmCoverRef"
-              :src="getImgUrl(fmCurrentCover, '512y512')"
+              :src="getImgUrl(fmCurrentCover, '800y800')"
               alt=""
               class="absolute inset-0 h-full w-full scale-150 object-cover opacity-30 blur-2xl"
               :class="isFmPlaying ? 'fm-bg-flow' : ''"
@@ -132,7 +132,7 @@
               >
                 <img
                   v-if="fmCurrentCover"
-                  :src="getImgUrl(fmCurrentCover, '256y256')"
+                  :src="getImgUrl(fmCurrentCover, '512y512')"
                   alt=""
                   class="h-full w-full object-cover"
                 />

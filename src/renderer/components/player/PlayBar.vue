@@ -85,17 +85,22 @@
       </div>
     </div>
     <div class="music-buttons">
-      <div class="music-buttons-prev" @click="handlePrev">
+      <button type="button" class="music-buttons-prev" aria-label="上一首" @click="handlePrev">
         <i class="iconfont icon-prev"></i>
-      </div>
-      <div class="music-buttons-play" @click="playMusicEvent">
+      </button>
+      <button
+        type="button"
+        class="music-buttons-play"
+        aria-label="播放或暂停"
+        @click="playMusicEvent"
+      >
         <i class="iconfont icon" :class="play ? 'icon-stop' : 'icon-play'"></i>
-      </div>
-      <div class="music-buttons-next" @click="handleNext">
+      </button>
+      <button type="button" class="music-buttons-next" aria-label="下一首" @click="handleNext">
         <i class="iconfont icon-next"></i>
-      </div>
+      </button>
     </div>
-    <div class="audio-button">
+    <div v-if="!liquid" class="audio-button">
       <div class="audio-volume custom-slider" @wheel.prevent="handleVolumeWheel">
         <div class="volume-icon" @click="mute">
           <i class="iconfont" :class="getVolumeIcon"></i>
@@ -179,8 +184,123 @@
         {{ t('player.playBar.playList') }}
       </n-tooltip>
     </div>
+    <div v-if="liquid" class="liquid-controls" @click.stop>
+      <button
+        type="button"
+        :aria-label="t('player.playBar.like')"
+        :aria-pressed="isFavorite"
+        @click="toggleFavorite"
+      >
+        <i :class="isFavorite ? 'ri-heart-3-fill' : 'ri-heart-3-line'" />
+      </button>
+      <button type="button" :aria-label="t('player.playBar.playList')" @click="openPlayListDrawer">
+        <i class="ri-play-list-2-line" />
+      </button>
+      <advanced-controls-popover />
+      <n-popover trigger="click" placement="top-end" :z-index="10000" display-directive="show">
+        <template #trigger
+          ><button type="button" aria-label="音量与更多播放控制">
+            <i class="ri-more-2-fill" /></button
+        ></template>
+        <div class="liquid-more">
+          <label
+            >音量
+            <input aria-label="音量" type="range" min="0" max="100" v-model.number="volumeSlider"
+          /></label>
+          <div class="audio-button">
+            <div class="audio-volume custom-slider" @wheel.prevent="handleVolumeWheel">
+              <div class="volume-icon" @click="mute">
+                <i class="iconfont" :class="getVolumeIcon"></i>
+              </div>
+              <div class="volume-slider">
+                <div class="volume-percentage" :class="{ 'volume-percentage-disabled': isMuted }">
+                  {{ Math.round(volumeSlider) }}%
+                </div>
+                <n-slider
+                  v-model:value="volumeSlider"
+                  :step="0.01"
+                  :tooltip="false"
+                  :disabled="isMuted"
+                  vertical
+                ></n-slider>
+              </div>
+            </div>
+            <n-tooltip v-if="!isMobile" trigger="hover" :z-index="9999999">
+              <template #trigger>
+                <i
+                  class="iconfont"
+                  :class="[playModeIcon, { 'intelligence-active': playMode === 3 }]"
+                  @click="togglePlayMode"
+                ></i>
+              </template>
+              {{ playModeText }}
+            </n-tooltip>
+            <n-tooltip v-if="!isMobile" trigger="hover" :z-index="9999999">
+              <template #trigger>
+                <i
+                  class="iconfont"
+                  :class="{
+                    'like-active': isFavorite,
+                    'ri-heart-3-fill': isFavorite,
+                    'ri-heart-3-line': !isFavorite
+                  }"
+                  @click="toggleFavorite"
+                ></i>
+              </template>
+              {{ t('player.playBar.like') }}
+            </n-tooltip>
+            <n-tooltip v-if="isElectron" class="music-lyric" trigger="hover" :z-index="9999999">
+              <template #trigger>
+                <i
+                  class="iconfont ri-netease-cloud-music-line"
+                  :class="{ 'text-green-500': isLyricWindowOpen, 'disabled-icon': !playMusic?.id }"
+                  @click="playMusic?.id && openLyricWindow()"
+                ></i>
+              </template>
+              {{ playMusic?.id ? t('player.playBar.lyric') : t('player.playBar.noSongPlaying') }}
+            </n-tooltip>
+            <n-tooltip v-if="playMusic?.id && isElectron" trigger="hover" :z-index="9999999">
+              <template #trigger>
+                <reparse-popover v-if="playMusic?.id" />
+              </template>
+              {{ t('player.playBar.reparse') }}
+            </n-tooltip>
+            <n-tooltip v-if="playMusic?.id && isElectron" trigger="hover" :z-index="9999999">
+              <template #trigger>
+                <i
+                  class="iconfont ri-download-line"
+                  :class="{ 'disabled-icon': isDownloading }"
+                  @click="playMusic?.id && handleDownload()"
+                />
+              </template>
+              {{ isDownloading ? t('songItem.message.downloading') : t('player.playBar.download') }}
+            </n-tooltip>
+
+            <song-quality-control :song="playMusic" />
+
+            <!-- 高级控制菜单按钮（整合了 EQ、定时关闭、播放速度） -->
+
+            <n-tooltip trigger="hover" :z-index="9999999">
+              <template #trigger>
+                <i
+                  class="iconfont icon-list text-2xl hover:text-green-500 transition-colors cursor-pointer"
+                  @click="openPlayListDrawer"
+                ></i>
+              </template>
+              {{ t('player.playBar.playList') }}
+            </n-tooltip>
+          </div>
+        </div>
+      </n-popover>
+    </div>
     <!-- 全屏播放器 -->
-    <music-full-wrapper ref="MusicFullRef" v-model="musicFullVisible" :background="background" />
+    <music-full-wrapper
+      ref="MusicFullRef"
+      v-model="musicFullVisible"
+      :background="background"
+      :liquid="liquid"
+      :salt="salt"
+    />
   </div>
 </template>
 
@@ -213,6 +333,9 @@ import { audioService } from '@/services/audioService';
 import { usePlayerStore } from '@/store/modules/player';
 import { useSettingsStore } from '@/store/modules/settings';
 import { getImgUrl, isElectron, isMobile, secondToMinute, setAnimationClass } from '@/utils';
+import { readLyricConfig } from '@/utils/lyricConfig';
+
+defineProps<{ liquid?: boolean; salt?: boolean }>();
 
 const playerStore = usePlayerStore();
 const settingsStore = useSettingsStore();
@@ -319,6 +442,7 @@ const setMusicFull = () => {
  * 全屏播放器由 n-drawer teleport 到 #layout-main，不在播放条节点内，无需额外排除。
  */
 const IGNORE_FULL_TRIGGER_SELECTOR = [
+  '.liquid-controls',
   '.music-time', // 进度条（绝对定位覆盖播放条顶边）
   '.music-buttons-prev',
   '.music-buttons-play',
@@ -332,8 +456,11 @@ const handleBarClick = (event: MouseEvent) => {
   setMusicFull();
 };
 
-const openLyricWindow = () => {
-  openLyric();
+const openLyricWindow = async () => {
+  await openLyric();
+  if (isElectron && readLyricConfig().saltStatusLyrics) {
+    window.electron.ipcRenderer.send('top-lyric', true);
+  }
 };
 
 const { navigateToArtist } = useArtist();
@@ -349,6 +476,45 @@ const openPlayListDrawer = () => {
 </script>
 
 <style lang="scss" scoped>
+.liquid-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.liquid-controls button {
+  width: 36px;
+  height: 44px;
+  font-size: 20px;
+  cursor: pointer;
+  border-radius: 14px;
+}
+.liquid-controls button[aria-pressed='true'] {
+  color: #ed536a;
+}
+.liquid-more {
+  max-width: min(600px, 80vw);
+  padding: 12px;
+}
+.liquid-more label {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+}
+.liquid-more input {
+  flex: 1;
+}
+.liquid-more .audio-button {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.music-buttons button:focus-visible,
+.liquid-controls button:focus-visible {
+  outline: 2px solid #ed536a;
+  outline-offset: 2px;
+}
+
 .music-buttons-play {
   transition:
     transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -365,7 +531,7 @@ const openPlayListDrawer = () => {
     transform: none;
   }
   .music-play-bar {
-    animation-duration: 1ms !important;
+    animation: none !important;
   }
 }
 .text-ellipsis {
@@ -373,11 +539,22 @@ const openPlayListDrawer = () => {
 }
 
 .music-play-bar {
-  @apply h-20 w-full absolute bottom-0 left-0 flex items-center box-border px-6 py-2 pt-3;
-  @apply bg-light dark:bg-dark;
-  border-top: 1px solid #e3ebe7;
+  position: fixed;
+  left: calc(var(--content-sidebar-width, 0px) + (100vw - var(--content-sidebar-width, 0px)) / 2);
+  bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(1120px, calc(100vw - var(--content-sidebar-width, 0px) - 40px));
+  height: 80px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 10px 20px 12px;
+  background: var(--background, #f7f8f6);
+  border: 1px solid var(--stroke, #d8ddd7);
+  border-radius: var(--corner, 16px);
+  box-shadow: 0 8px 28px rgba(22, 31, 26, 0.14);
   z-index: 9999;
-  animation-duration: 0.5s !important;
+  animation: none !important;
   /* 空白区域可点击展开详情页（#751） */
   cursor: pointer;
 
@@ -396,7 +573,8 @@ const openPlayListDrawer = () => {
   }
 
   .music-content {
-    width: clamp(140px, 17vw, 220px);
+    width: clamp(140px, 18vw, 240px);
+    min-width: 0;
     @apply ml-4;
 
     &-title {
@@ -410,11 +588,13 @@ const openPlayListDrawer = () => {
 }
 
 .play-bar-img {
-  @apply w-14 h-14 rounded-xl;
+  @apply w-12 h-12;
+  border-radius: var(--corner, 16px);
 }
 
 .music-buttons {
   @apply mx-6 flex-1 flex justify-center;
+  min-width: 170px;
 
   .iconfont {
     @apply text-2xl transition;
@@ -428,13 +608,23 @@ const openPlayListDrawer = () => {
 
   @apply flex items-center;
 
-  > div {
+  > button {
     @apply cursor-pointer;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--corner, 16px);
+    color: var(--text, #20231f);
   }
 
   &-play {
-    @apply flex justify-center items-center w-12 h-12 rounded-full mx-4 text-white;
-    background: #315f55;
+    @apply flex justify-center items-center mx-2;
+    color: var(--highlight, #315f55) !important;
+    background: transparent;
+    .icon {
+      font-size: 30px;
+    }
   }
 }
 
@@ -457,7 +647,15 @@ const openPlayListDrawer = () => {
   }
 }
 :global(.dark) .music-play-bar {
-  border-top-color: #26352f;
+  background: var(--background, #171b18);
+  border-color: var(--stroke, #343a35);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.34);
+}
+
+.music-play-bar :deep(button:focus-visible),
+.music-play-bar :deep(.iconfont:focus-visible) {
+  outline: 2px solid var(--highlight, #315f55);
+  outline-offset: 2px;
 }
 
 .audio-volume {
@@ -496,10 +694,15 @@ const openPlayListDrawer = () => {
 
 .audio-button {
   @apply flex items-center;
-  gap: 2px;
+  gap: 4px;
 
   .iconfont {
-    @apply text-xl transition cursor-pointer mx-2;
+    @apply text-xl transition cursor-pointer;
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--corner, 16px);
     @apply hover:text-green-500;
   }
 }
@@ -665,6 +868,32 @@ const openPlayListDrawer = () => {
   left: 0;
   padding: 0;
   border-radius: 0;
+}
+
+@media (max-width: 760px) {
+  .music-play-bar {
+    left: 50%;
+    width: calc(100vw - 24px);
+    bottom: max(10px, env(safe-area-inset-bottom));
+    height: 72px;
+    padding-inline: 12px;
+  }
+  .music-play-bar .music-content {
+    width: auto;
+    flex: 1;
+    margin-left: 10px;
+  }
+  .music-play-bar .music-buttons {
+    flex: none;
+    min-width: auto;
+    margin-inline: 8px;
+  }
+  .music-play-bar .audio-button {
+    gap: 0;
+  }
+  .music-play-bar .audio-button > *:not(:last-child) {
+    display: none;
+  }
 }
 
 .music-eq {

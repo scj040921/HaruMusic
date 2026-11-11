@@ -1,6 +1,26 @@
+import { registerPlugin } from '@capacitor/core';
+
 import type { AudioOutputDevice } from '@/types/audio';
 import type { SongResult } from '@/types/music';
-import { getImgUrl, isElectron } from '@/utils';
+import { getImgUrl, isAndroidApp, isElectron } from '@/utils';
+
+const androidMedia = isAndroidApp
+  ? registerPlugin<{
+      update(options: {
+        title: string;
+        artist: string;
+        album: string;
+        artwork: string;
+        position: number;
+        duration: number;
+        playing: boolean;
+      }): Promise<void>;
+      addListener(
+        event: 'mediaAction',
+        listener: (event: { action: string; position: number }) => void
+      ): Promise<unknown>;
+    }>('HaruMedia')
+  : null;
 
 class AudioService {
   private audio: HTMLAudioElement;
@@ -16,6 +36,7 @@ class AudioService {
   private volume = 1;
   private currentSinkId: string = 'default';
   private _isLoading = false;
+  private nativeMediaStarted = false;
 
   private operationLock = false;
   private operationLockTimer: ReturnType<typeof setTimeout> | null = null;
@@ -49,6 +70,16 @@ class AudioService {
 
     // Bind native DOM events
     this.bindAudioEvents();
+
+    if (androidMedia) {
+      void androidMedia.addListener('mediaAction', ({ action, position }) => {
+        if (action === 'play') this.emit('play_request');
+        else if (action === 'pause') this.emit('pause_request');
+        else if (action === 'next') this.emit('nexttrack');
+        else if (action === 'previous') this.emit('previoustrack');
+        else if (action === 'seek') this.seek(position);
+      });
+    }
 
     if ('mediaSession' in navigator) {
       this.initMediaSession();
@@ -94,7 +125,7 @@ class AudioService {
     });
 
     this.audio.addEventListener('timeupdate', () => {
-      // Consumers can listen to this if needed; mainly for MediaSession sync
+      this.emit('timeupdate', this.audio.currentTime);
     });
 
     this.audio.addEventListener('waiting', () => {
@@ -159,6 +190,7 @@ class AudioService {
   }
 
   private updateMediaSessionMetadata(track: SongResult) {
+    this.syncAndroidMedia();
     try {
       if (!('mediaSession' in navigator)) return;
 
@@ -186,12 +218,15 @@ class AudioService {
   }
 
   private updateMediaSessionState(isPlaying: boolean) {
+    if (isPlaying) this.nativeMediaStarted = true;
+    this.syncAndroidMedia();
     if (!('mediaSession' in navigator)) return;
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
     this.updateMediaSessionPositionState();
   }
 
   private updateMediaSessionPositionState() {
+    this.syncAndroidMedia();
     try {
       if (!('mediaSession' in navigator)) return;
       if (!this.audio.duration || !isFinite(this.audio.duration)) return;
@@ -206,6 +241,23 @@ class AudioService {
     } catch (error) {
       console.error('更新媒体会话位置状态时出错:', error);
     }
+  }
+
+  private syncAndroidMedia() {
+    if (!androidMedia || !this.nativeMediaStarted || !this.currentTrack) return;
+    const track = this.currentTrack;
+    const artists = track.ar || track.song?.artists || [];
+    void androidMedia
+      .update({
+        title: track.name || '',
+        artist: artists.map((artist: { name?: string }) => artist.name || '').join(' / '),
+        album: track.al?.name || track.song?.album?.name || '',
+        artwork: getImgUrl(track.picUrl, '512y512'),
+        position: Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0,
+        duration: Number.isFinite(this.audio.duration) ? this.audio.duration : 0,
+        playing: !this.audio.paused && !this.audio.ended
+      })
+      .catch((error) => console.warn('[Android media]', error));
   }
 
   // ==================== Event Emitter ====================

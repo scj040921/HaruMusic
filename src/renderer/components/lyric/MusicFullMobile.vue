@@ -154,9 +154,15 @@
                   {{ index < artistList.length - 1 ? ' / ' : '' }}
                 </span>
               </p>
-              <div class="favorite-icon" @click="toggleFavorite">
+              <button
+                class="favorite-icon"
+                type="button"
+                :aria-pressed="isFavorite"
+                :aria-label="isFavorite ? '取消喜欢' : '喜欢歌曲'"
+                @click="toggleFavorite"
+              >
                 <i class="ri-heart-3-fill" :class="{ favorite: isFavorite }"></i>
-              </div>
+              </button>
             </div>
 
             <!-- 歌词区域 -->
@@ -261,9 +267,15 @@
                 </span>
               </p>
             </div>
-            <div class="favorite-icon landscape" @click="toggleFavorite">
+            <button
+              class="favorite-icon landscape"
+              type="button"
+              :aria-pressed="isFavorite"
+              :aria-label="isFavorite ? '取消喜欢' : '喜欢歌曲'"
+              @click="toggleFavorite"
+            >
               <i class="ri-heart-3-fill" :class="{ favorite: isFavorite }"></i>
-            </div>
+            </button>
           </div>
 
           <!-- 歌词滚动区域 -->
@@ -414,6 +426,7 @@ import { audioService } from '@/services/audioService';
 import { usePlayerStore } from '@/store/modules/player';
 import { DEFAULT_LYRIC_CONFIG, LyricConfig } from '@/types/lyric';
 import { getImgUrl, secondToMinute } from '@/utils';
+import { playFavoriteFeedback } from '@/utils/favoriteFeedback';
 import { getTextColors } from '@/utils/linearColor';
 import { LYRIC_CONFIG_CHANGE_EVENT, readLyricConfig } from '@/utils/lyricConfig';
 import { showBottomToast } from '@/utils/shortcutToast';
@@ -486,12 +499,14 @@ const isFavorite = computed(() => {
   return playerStore.favoriteList.includes(playMusic.value.id as number);
 });
 
-const toggleFavorite = () => {
+const toggleFavorite = (event: Event) => {
+  const nextFavorite = !isFavorite.value;
   if (isFavorite.value) {
     playerStore.removeFromFavorite(playMusic.value.id as number);
   } else {
     playerStore.addToFavorite(playMusic.value.id as number);
   }
+  playFavoriteFeedback(event.currentTarget, nextFavorite);
 };
 
 // 歌词全屏控制
@@ -1332,13 +1347,22 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
   // 通用收藏按钮样式
   .favorite-icon {
     @apply cursor-pointer transition-all duration-200;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 22px;
+    padding: 0;
+    background: transparent;
 
     i {
       @apply text-xl;
       color: var(--text-color-primary);
 
       &.favorite {
-        @apply text-red-500 !important;
+        color: var(--accent, #fa2d48) !important;
       }
     }
 
@@ -1699,13 +1723,22 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
 
 .favorite-icon {
   @apply cursor-pointer transition-all duration-200;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 22px;
+  padding: 0;
+  background: transparent;
 
   i {
     @apply text-xl;
     color: var(--text-color-primary);
 
     &.favorite {
-      @apply text-red-500 !important;
+      color: var(--accent, #fa2d48) !important;
     }
   }
 

@@ -6,6 +6,9 @@
   <div
     v-if="internalVisible"
     class="playlist-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-label="播放队列"
     :class="[
       'animate__animated',
       closing
@@ -29,9 +32,9 @@
           </template>
           {{ t('player.playList.clearAll') }}
         </n-tooltip>
-        <div class="close-btn" @click="closePanel">
+        <button type="button" aria-label="关闭播放队列" class="close-btn" @click="closePanel">
           <i class="iconfont ri-close-line"></i>
-        </div>
+        </button>
       </div>
     </div>
     <div class="playlist-panel-content">
@@ -41,9 +44,52 @@
       </div>
       <n-virtual-list v-else ref="playListRef" :item-size="62" item-resizable :items="playList">
         <template #default="{ item }">
-          <div class="music-play-list-content">
+          <div
+            class="music-play-list-content"
+            :class="{ 'queue-dragging': draggedId === item.id }"
+            draggable="true"
+            @dragstart="dragStart($event, item)"
+            @dragover.prevent
+            @drop="dropSong($event, item)"
+            @dragend="draggedId = null"
+          >
             <div class="flex items-center justify-between">
-              <song-item :key="item.id" class="flex-1" :item="item" mini></song-item>
+              <button
+                type="button"
+                class="queue-song"
+                aria-label="播放这首歌曲"
+                @click="playerStore.setPlay(item)"
+              >
+                <img :src="getImgUrl(item.picUrl, '100y100')" :alt="item.name" />
+                <div class="queue-song-copy">
+                  <strong :class="{ 'queue-current': item.id === playMusic?.id }">{{
+                    item.name
+                  }}</strong
+                  ><span>{{
+                    item.ar?.map((artist) => artist.name).join(' / ') || item.artist || ''
+                  }}</span>
+                </div>
+                <i
+                  v-if="item.id === playMusic?.id"
+                  class="ri-bar-chart-fill queue-playing"
+                  aria-label="正在播放"
+                />
+              </button>
+              <div class="queue-order" aria-label="调整队列顺序">
+                <button
+                  :disabled="playList.indexOf(item) === 0"
+                  aria-label="上移"
+                  @click.stop="moveSong(item, -1)"
+                >
+                  ↑</button
+                ><button
+                  :disabled="playList.indexOf(item) === playList.length - 1"
+                  aria-label="下移"
+                  @click.stop="moveSong(item, 1)"
+                >
+                  ↓
+                </button>
+              </div>
               <div class="delete-btn" @click.stop="handleDeleteSong(item)">
                 <i
                   class="iconfont ri-delete-bin-line text-gray-400 hover:text-red-500 transition-colors"
@@ -62,10 +108,10 @@ import { useDialog, useMessage } from 'naive-ui';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import SongItem from '@/components/common/SongItem.vue';
+import { playMusic } from '@/hooks/MusicHook';
 import { usePlayerStore } from '@/store/modules/player';
 import type { SongResult } from '@/types/music';
-import { isMobile } from '@/utils';
+import { getImgUrl, isMobile } from '@/utils';
 
 const { t } = useI18n();
 const message = useMessage();
@@ -101,7 +147,8 @@ watch(
       if (!internalVisible.value) return;
 
       // 开始关闭动画，等 animationend 后再隐藏
-      closing.value = true;
+      closing.value = false;
+      internalVisible.value = false;
     }
   },
   { immediate: true }
@@ -112,6 +159,37 @@ const playList = computed(() => playerStore.playList as SongResult[]);
 
 // 播放列表引用
 const playListRef = ref<any>(null);
+const draggedId = ref<SongResult['id'] | null>(null);
+const reorderSong = (from: number, to: number) => {
+  if (
+    from < 0 ||
+    to < 0 ||
+    from >= playList.value.length ||
+    to >= playList.value.length ||
+    from === to
+  )
+    return;
+  const reordered = [...playList.value];
+  const [song] = reordered.splice(from, 1);
+  reordered.splice(to, 0, song);
+  playerStore.setPlayList(reordered, true, false, true);
+};
+const moveSong = (song: SongResult, delta: number) =>
+  reorderSong(
+    playList.value.findIndex((item) => item.id === song.id),
+    playList.value.findIndex((item) => item.id === song.id) + delta
+  );
+const dragStart = (event: DragEvent, song: SongResult) => {
+  draggedId.value = song.id;
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+};
+const dropSong = (_event: DragEvent, song: SongResult) => {
+  if (draggedId.value !== null)
+    reorderSong(
+      playList.value.findIndex((item) => item.id === draggedId.value),
+      playList.value.findIndex((item) => item.id === song.id)
+    );
+};
 
 // 关闭面板
 const closePanel = () => {
@@ -255,7 +333,14 @@ const handleDeleteSong = (song: SongResult) => {
 }
 
 .music-play-list-content {
-  @apply pr-2 hover:bg-light-100 dark:hover:bg-dark-100;
+  @apply pr-2;
+  border-bottom: 1px solid var(--divider, #d9d9de);
+  transition:
+    transform 180ms cubic-bezier(0.2, 1.3, 0.35, 1),
+    opacity 180ms;
+  &:active {
+    transform: scale(0.985);
+  }
   &:hover {
     .delete-btn {
       @apply visible;
@@ -267,6 +352,98 @@ const handleDeleteSong = (song: SongResult) => {
       @apply text-lg;
     }
   }
+}
+:global(.salt-mode .playlist-panel) {
+  --accent: var(--highlight);
+  border-radius: var(--corner, 16px);
+  border: 0;
+  background: var(--background, #f5f1e9);
+  box-shadow: 0 18px 56px #0002;
+  backdrop-filter: none;
+}
+:global(.salt-mode .playlist-panel-header) {
+  border-color: var(--stroke, #d7cec1);
+  background: var(--background, #f5f1e9);
+  backdrop-filter: none;
+}
+:global(.salt-mode .music-play-list-content) {
+  min-height: 54px;
+  border-color: var(--stroke, #d7cec1);
+  background: transparent;
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 180ms;
+}
+:global(.salt-mode .music-play-list-content.queue-dragging) {
+  z-index: 2;
+  transform: scale(1.025) translateY(-2px);
+  opacity: 0.92;
+  box-shadow: 0 10px 24px #0002;
+}
+:global(.salt-mode .queue-song img) {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--corner, 16px);
+}
+:global(.salt-mode .queue-song-copy .queue-current),
+:global(.salt-mode .queue-playing) {
+  color: var(--highlight);
+  background: transparent;
+}
+:global(.salt-mode .queue-order button:focus-visible) {
+  outline-color: var(--highlight);
+}
+.queue-song {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+  padding: 8px 0;
+}
+.queue-song img {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.queue-song-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.queue-song-copy strong,
+.queue-song-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.queue-song-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #111);
+}
+.queue-song-copy span {
+  font-size: 12px;
+  color: var(--text-secondary, #77777c);
+}
+.queue-song-copy .queue-current,
+.queue-playing {
+  color: var(--accent, #fa2d48);
+}
+.queue-order {
+  display: flex;
+}
+.queue-order button {
+  min-width: 36px;
+  min-height: 40px;
+  color: var(--text-secondary, #77777c);
+}
+.queue-order button:disabled {
+  opacity: 0.25;
+}
+.queue-order button:focus-visible {
+  outline: 2px solid var(--accent, #fa2d48);
 }
 
 // 移动端适配

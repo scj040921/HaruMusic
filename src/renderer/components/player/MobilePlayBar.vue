@@ -5,7 +5,8 @@
     :class="[
       setAnimationClass('animate__fadeInUp'),
       playerStore.musicFull ? 'play-bar-expanded' : 'play-bar-mini',
-      shouldShowMobileMenu ? 'is-menu-show' : 'is-menu-hide'
+      shouldShowMobileMenu ? 'is-menu-show' : 'is-menu-hide',
+      { 'android-native-player': isAndroidApp }
     ]"
     :style="{
       color: playerStore.musicFull
@@ -20,33 +21,42 @@
     <!-- Mini模式 - 在musicFullVisible为false时显示 -->
     <div v-if="!playerStore.musicFull" class="mobile-mini-controls">
       <!-- 歌曲信息 -->
-      <div class="mini-song-info" @click="setMusicFull">
+      <button class="mini-song-info" type="button" aria-label="打开正在播放" @click="setMusicFull">
         <n-image
+          v-if="playMusic?.picUrl"
           :src="getImgUrl(playMusic?.picUrl, '100y100')"
           class="mini-song-cover"
           lazy
           preview-disabled
         />
+        <span v-else class="mini-song-cover mini-cover-placeholder"
+          ><i class="ri-music-2-line"
+        /></span>
         <div class="mini-song-text">
-          <n-ellipsis line-clamp="1">
-            <span class="mini-song-title">{{ playMusic.name }}</span>
-            <span class="mx-2 text-gray-500 dark:text-gray-400">-</span>
-            <span
-              class="mini-song-artist"
-              v-for="(artists, artistsindex) in artistList"
-              :key="artistsindex"
-            >
-              {{ artists.name }}{{ artistsindex < artistList.length - 1 ? ' / ' : '' }}
-            </span>
-          </n-ellipsis>
+          <span class="mini-song-title">{{ playMusic.name }}</span>
+          <span v-if="artistList.length" class="mini-song-artist">{{
+            artistList.map((artist) => artist.name).join(' / ')
+          }}</span>
         </div>
-      </div>
+      </button>
 
       <div class="mini-playback-controls">
-        <div class="mini-control-btn play" @click="playMusicEvent">
+        <button
+          class="mini-control-btn play"
+          type="button"
+          :aria-label="play ? '暂停' : '播放'"
+          @click="playMusicEvent"
+        >
           <i class="iconfont icon" :class="play ? 'icon-stop' : 'icon-play'"></i>
-        </div>
-        <i class="iconfont icon-list mini-list-icon" @click="openPlayListDrawer"></i>
+        </button>
+        <button
+          class="mini-list-icon"
+          type="button"
+          aria-label="播放队列"
+          @click="openPlayListDrawer"
+        >
+          <i class="iconfont icon-list"></i>
+        </button>
       </div>
     </div>
 
@@ -69,7 +79,7 @@ import { artistList, playMusic, textColors } from '@/hooks/MusicHook';
 import { usePlaybackControl } from '@/hooks/usePlaybackControl';
 import { usePlayerStore } from '@/store/modules/player';
 import { useSettingsStore } from '@/store/modules/settings';
-import { getImgUrl, setAnimationClass } from '@/utils';
+import { getImgUrl, isAndroidApp, setAnimationClass } from '@/utils';
 
 const shouldShowMobileMenu = inject('shouldShowMobileMenu') as Ref<boolean>;
 

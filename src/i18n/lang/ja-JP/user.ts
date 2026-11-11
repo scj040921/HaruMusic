@@ -19,6 +19,13 @@ export default {
     title: '聴取ランキング',
     playCount: '{count}回'
   },
+  guest: {
+    title: 'あなたの音楽スペース',
+    description: 'ログインせずに音楽を再生できます。お気に入りと再生履歴はこの端末に保存されます。',
+    history: '再生履歴',
+    favorite: 'お気に入り',
+    settings: '音源設定'
+  },
   follow: {
     title: 'フォローリスト',
     viewPlaylist: 'プレイリストを見る',

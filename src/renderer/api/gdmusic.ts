@@ -1,6 +1,8 @@
 import axios from 'axios';
 
+import { requestMusicSourceHttp } from '@/services/musicSource/transport';
 import type { MusicSourceType } from '@/types/music';
+import { isAndroidApp } from '@/utils';
 
 /**
  * GD音乐台解析服务
@@ -152,6 +154,15 @@ type ExpectedSong = {
 
 const baseUrl = 'https://music-api.gdstudio.xyz/api.php';
 
+const getRemoteData = async (url: string, timeout: number): Promise<any> => {
+  if (!isAndroidApp) return (await axios.get(url, { timeout })).data;
+  const response = await requestMusicSourceHttp(url, { method: 'GET', timeout });
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw new Error(`GD 音乐台请求失败（${response.statusCode}）`);
+  }
+  return response.body;
+};
+
 /**
  * 归一化文本用于匹配：去掉括号备注（Live/翻唱/伴奏等）、空白与常见标点，转小写
  */
@@ -245,7 +256,7 @@ async function searchAndGetUrl(
   const searchUrl = `${baseUrl}?types=search&source=${source}&name=${encodeURIComponent(searchQuery)}&count=5&pages=1`;
   console.log(`GD音乐台尝试音源 ${source} 搜索:`, searchUrl);
 
-  const searchResponse = await axios.get(searchUrl, { timeout: 5000 });
+  const searchResponse = { data: await getRemoteData(searchUrl, 5000) };
 
   if (searchResponse.data && Array.isArray(searchResponse.data) && searchResponse.data.length > 0) {
     const matchedResult = pickBestCandidate(searchResponse.data as GDSearchItem[], expected);
@@ -261,7 +272,7 @@ async function searchAndGetUrl(
     const songUrl = `${baseUrl}?types=url&source=${trackSource}&id=${trackId}&br=${quality}`;
     console.log(`GD音乐台尝试获取 ${trackSource} 歌曲URL:`, songUrl);
 
-    const songResponse = await axios.get(songUrl, { timeout: 5000 });
+    const songResponse = { data: await getRemoteData(songUrl, 5000) };
 
     if (songResponse.data && songResponse.data.url) {
       return {

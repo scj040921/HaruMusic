@@ -10,7 +10,7 @@
     @change="handleTypeChange"
     @scroll="handleScroll"
   >
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+    <div class="playlist-editorial-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
       <!-- Loading State -->
       <template v-if="loading && page === 0">
         <div v-for="i in 15" :key="`loading-${i}`" class="space-y-3">
@@ -155,11 +155,11 @@ const loadList = async (type: string, isLoadMore = false) => {
       return;
     }
     if (isLoadMore) {
-      recommendList.value.push(...data.playlists);
+      recommendList.value.push(...(Array.isArray(data?.playlists) ? data.playlists : []));
     } else {
-      recommendList.value = data.playlists;
+      recommendList.value = Array.isArray(data?.playlists) ? data.playlists : [];
     }
-    hasMore.value = data.more;
+    hasMore.value = Boolean(data?.more);
     page.value++;
   } catch (error) {
     console.error('加载歌单列表失败:', error);
@@ -180,17 +180,21 @@ const playlistCategory = ref<IPlayListSort>();
 const currentType = ref((route.query.type as string) || DEFAULT_CAT);
 
 const loadPlaylistCategory = async () => {
-  const { data } = await getPlaylistCategory();
-  playlistCategory.value = {
-    ...data,
-    sub: [
-      {
-        name: DEFAULT_CAT,
-        category: 0
-      },
-      ...data.sub
-    ]
-  };
+  try {
+    const { data } = await getPlaylistCategory();
+    playlistCategory.value = {
+      ...data,
+      sub: [
+        {
+          name: DEFAULT_CAT,
+          category: 0
+        },
+        ...(Array.isArray(data?.sub) ? data.sub : [])
+      ]
+    };
+  } catch (error) {
+    console.warn('无法加载歌单分类', error);
+  }
 };
 
 const handleTypeChange = (type: string) => {

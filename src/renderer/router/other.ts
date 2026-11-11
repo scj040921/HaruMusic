@@ -1,5 +1,17 @@
 const otherRouter = [
   {
+    path: '/device-music',
+    name: 'deviceMusic',
+    meta: { title: 'comp.localMusic', keepAlive: false, back: true, isMobile: true },
+    component: () => import('@/views/local-music/AndroidLocalMusic.vue')
+  },
+  {
+    path: '/artists',
+    name: 'artists',
+    meta: { title: 'comp.haruHome.artists', keepAlive: true, back: true, isMobile: true },
+    component: () => import('@/views/artist/index.vue')
+  },
+  {
     path: '/user/follows',
     name: 'userFollows',
     meta: {

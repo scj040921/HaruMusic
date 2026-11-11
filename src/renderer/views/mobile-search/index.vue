@@ -143,7 +143,7 @@ const hotSearchList = ref<any[]>([]);
 const loadHotSearchKeyword = async () => {
   try {
     const { data } = await getSearchKeyword();
-    hotSearchKeyword.value = data.data.showKeyword;
+    hotSearchKeyword.value = data?.data?.showKeyword || '搜索歌曲、艺人或专辑';
   } catch (e) {
     console.error('加载热门搜索关键词失败:', e);
   }

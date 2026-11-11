@@ -1,5 +1,44 @@
 <template>
-  <div class="music-list-page h-full w-full bg-white dark:bg-black transition-colors duration-500">
+  <div
+    class="music-list-page h-full w-full bg-white dark:bg-black transition-colors duration-500"
+    :class="{ 'desktop-album-cover-page': isElectron && isAlbum }"
+    :style="isElectron && isAlbum ? { '--cover-color': coverTint } : undefined"
+  >
+    <div
+      v-if="isElectron && isAlbum && getCoverImgUrl"
+      class="desktop-cover-ambience"
+      aria-hidden="true"
+    />
+    <div
+      v-if="isElectron && isAlbum && getCoverImgUrl"
+      class="desktop-album-reflection"
+      :style="{ backgroundImage: `url(${getImgUrl(getCoverImgUrl, '500y500')})` }"
+      aria-hidden="true"
+    />
+    <div
+      v-if="isElectron && isAlbum && getCoverImgUrl"
+      class="desktop-album-artwork"
+      :style="{ backgroundImage: `url(${getImgUrl(getCoverImgUrl, '500y500')})` }"
+      aria-hidden="true"
+    />
+    <div
+      v-if="isElectron && isAlbum && getCoverImgUrl"
+      class="desktop-album-backdrop"
+      :style="{ backgroundImage: `url(${getImgUrl(getCoverImgUrl, '500y500')})` }"
+      aria-hidden="true"
+    />
+    <div
+      v-if="isElectron && isAlbum && getCoverImgUrl"
+      class="desktop-album-tint"
+      :class="{ 'is-ready': coverTintReady }"
+      :style="{ backgroundColor: `color-mix(in srgb, ${coverTint} 22%, transparent)` }"
+      aria-hidden="true"
+    />
+    <div
+      v-if="isElectron && isAlbum && getCoverImgUrl"
+      class="desktop-cover-noise"
+      aria-hidden="true"
+    />
     <n-scrollbar ref="scrollbarRef" class="h-full" @scroll="handleScroll">
       <div class="music-list-content" :style="{ paddingBottom: contentPaddingBottom }">
         <!-- Hero Section 和 Action Bar -->
@@ -11,7 +50,9 @@
               <div
                 class="absolute inset-0 bg-cover bg-center scale-110 blur-3xl opacity-40 dark:opacity-30"
                 :style="{
-                  backgroundImage: `url(${getImgUrl(getCoverImgUrl, '800y800')})`
+                  backgroundImage: isElectron
+                    ? `radial-gradient(ellipse at 18% 12%, color-mix(in srgb, ${coverTint} 48%, transparent), transparent 66%), url(${getImgUrl(getCoverImgUrl, '500y500')})`
+                    : `url(${getImgUrl(getCoverImgUrl, '800y800')})`
                 }"
               ></div>
               <div
@@ -348,6 +389,7 @@ import { usePlayHistoryStore } from '@/store/modules/playHistory';
 import { SongResult } from '@/types/music';
 import { calculateAnimationDelay, getImgUrl, isElectron, isMobile } from '@/utils';
 import { getLoginErrorMessage, hasPermission } from '@/utils/auth';
+import { getImageDominantColor } from '@/utils/linearColor';
 
 defineOptions({
   name: 'MusicList'
@@ -488,6 +530,23 @@ const getCoverImgUrl = computed(() => {
   const song = songList.value[0];
   return song?.picUrl || song?.al?.picUrl || song?.album?.picUrl || '';
 });
+const coverTint = ref('#77777c');
+const coverTintReady = ref(false);
+let coverTintGeneration = 0;
+watch(
+  getCoverImgUrl,
+  async (cover) => {
+    const generation = ++coverTintGeneration;
+    coverTintReady.value = false;
+    if (!isElectron || !cover) return;
+    const tint = await getImageDominantColor(getImgUrl(cover, '64y64'));
+    if (generation === coverTintGeneration && tint) {
+      coverTint.value = tint;
+      coverTintReady.value = true;
+    }
+  },
+  { immediate: true }
+);
 
 // 全量歌曲列表（用于"播放全部"等操作）
 const allFilteredSongs = computed(() => {
@@ -926,6 +985,170 @@ onMounted(checkCollectionStatus);
 <style scoped lang="scss">
 .music-list-page {
   position: relative;
+}
+
+.music-list-page.desktop-album-cover-page {
+  isolation: isolate;
+  background: color-mix(
+    in srgb,
+    var(--cover-color, #77777c) 28%,
+    var(--canvas, #f2f2f7)
+  ) !important;
+  overflow: hidden;
+  border-radius: 28px;
+}
+
+.desktop-cover-ambience {
+  position: absolute;
+  z-index: 0;
+  inset: -12%;
+  overflow: hidden;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--cover-color, #77777c) 22%, var(--canvas, #f2f2f7));
+  mask-image: linear-gradient(to bottom, #000 0%, #000 48%, transparent 100%);
+}
+
+.desktop-cover-ambience::before,
+.desktop-cover-ambience::after {
+  content: '';
+  position: absolute;
+  width: min(78vw, 960px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  filter: blur(240px);
+  opacity: 0.58;
+  mix-blend-mode: soft-light;
+  transform: translateZ(0);
+  transition: background-color 420ms ease-out;
+}
+
+.desktop-cover-ambience::before {
+  top: -18%;
+  left: -14%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--cover-color, #77777c) 62%, #39d2c4) 0%,
+    color-mix(in srgb, var(--cover-color, #77777c) 34%, #39d2c4) 38%,
+    transparent 72%
+  );
+}
+
+.desktop-cover-ambience::after {
+  right: -16%;
+  bottom: -28%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--cover-color, #77777c) 36%, #ff9368) 0%,
+    color-mix(in srgb, var(--cover-color, #77777c) 22%, #ff9368) 42%,
+    transparent 74%
+  );
+}
+
+:global(.dark) .desktop-cover-ambience::before,
+:global(.dark) .desktop-cover-ambience::after {
+  mix-blend-mode: screen;
+  opacity: 0.42;
+}
+
+.desktop-cover-noise {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.34'/%3E%3C/svg%3E");
+}
+
+.desktop-album-reflection {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  background-position: center 32%;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0.14;
+  filter: blur(30px) saturate(1.12);
+  transform: scaleY(-1);
+  transform-origin: center;
+  mask-image: linear-gradient(to bottom, #000 0%, #0008 38%, transparent 100%);
+}
+
+.desktop-album-backdrop {
+  position: absolute;
+  z-index: 3;
+  inset: -20px;
+  pointer-events: none;
+  background-position: center 38%;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0.34;
+  filter: blur(30px) saturate(1.08);
+  mask-image: linear-gradient(to bottom, transparent 38%, #0003 54%, #000 74%, transparent 100%);
+}
+
+.desktop-album-artwork {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  background-position: center 32%;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0.96;
+  filter: saturate(1.04);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 50%, transparent 100%);
+}
+
+.desktop-album-tint {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: color;
+  opacity: 0;
+  transition: opacity 220ms ease-out;
+}
+
+.desktop-album-tint.is-ready {
+  opacity: 0.52;
+}
+
+.desktop-album-cover-page > :deep(.n-scrollbar) {
+  position: relative;
+  z-index: 5;
+  background: transparent;
+}
+
+.desktop-album-cover-page .hero-bg {
+  display: none;
+}
+
+.desktop-album-cover-page .hero-bg > div:first-child {
+  opacity: 0.28;
+  filter: none;
+}
+
+.desktop-album-cover-page .hero-section {
+  border-radius: 28px;
+}
+
+.desktop-album-cover-page .action-bar {
+  border: 1px solid transparent;
+  border-radius: 24px;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+.desktop-album-cover-page .hero-bg > div:last-child {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--canvas, #fff) 8%, transparent),
+    color-mix(in srgb, var(--canvas, #fff) 20%, transparent) 58%,
+    color-mix(in srgb, var(--canvas, #fff) 54%, transparent)
+  ) !important;
 }
 
 .hero-section {

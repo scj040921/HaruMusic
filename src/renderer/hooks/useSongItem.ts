@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { usePlayerStore, useRecommendStore } from '@/store';
 import type { SongResult } from '@/types/music';
 import { getImgUrl } from '@/utils';
+import { playFavoriteFeedback } from '@/utils/favoriteFeedback';
 import { getImageBackground } from '@/utils/linearColor';
 
 import { dislikeRecommendedSong } from '../api/music';
@@ -80,11 +81,13 @@ export function useSongItem(props: { item: SongResult; canRemove?: boolean }) {
     const numericId =
       typeof props.item.id === 'string' ? parseInt(props.item.id, 10) : props.item.id;
 
-    if (isFavorite.value) {
+    const nextFavorite = !isFavorite.value;
+    if (!nextFavorite) {
       playerStore.removeFromFavorite(numericId);
     } else {
       playerStore.addToFavorite(numericId);
     }
+    playFavoriteFeedback(e?.currentTarget ?? null, nextFavorite);
   };
 
   // 判断当前歌曲是否为每日推荐歌曲

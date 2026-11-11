@@ -7,6 +7,8 @@ import Components from 'unplugin-vue-components/vite';
 import viteCompression from 'vite-plugin-compression';
 import VueDevTools from 'vite-plugin-vue-devtools';
 
+const isCapacitorBuild = process.env.CAPACITOR_BUILD === '1';
+
 export default defineConfig({
   main: {},
   preload: {},
@@ -20,7 +22,7 @@ export default defineConfig({
     },
     plugins: [
       vue(),
-      viteCompression(),
+      ...(isCapacitorBuild ? [] : [viteCompression()]),
       VueDevTools(),
       AutoImport({
         imports: [

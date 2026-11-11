@@ -635,30 +635,33 @@ const loadLxDialect = async (
         throw new Error(`LX 音源 ${source.key} 不支持获取音乐 URL`);
       }
 
-      let targetQuality: LxQuality = QUALITY_TO_LX[quality] || '320k';
-      if (!source.qualitys.includes(targetQuality)) {
-        targetQuality = LX_QUALITY_LADDER.find((q) => source.qualitys.includes(q)) || targetQuality;
+      const requested = QUALITY_TO_LX[quality];
+      const start = quality === 'auto' ? 0 : Math.max(0, LX_QUALITY_LADDER.indexOf(requested));
+      const qualities = LX_QUALITY_LADDER.slice(start).filter(
+        (q) => !source.qualitys.length || source.qualitys.includes(q)
+      );
+      let lastError: unknown;
+      for (const targetQuality of qualities) {
+        try {
+          const result = await requestHandler({
+            source: source.key,
+            action: 'musicUrl',
+            info: { type: targetQuality, musicInfo: itemToLxMusicInfo(item) }
+          });
+          const url =
+            typeof result === 'string'
+              ? result
+              : result && typeof result === 'object'
+                ? ((result as Record<string, unknown>).url ??
+                  (result as Record<string, unknown>).data)
+                : null;
+          if (typeof url === 'string' && /^https?:\/\//i.test(url)) return { url };
+        } catch (error) {
+          lastError = error;
+        }
       }
-
-      const result = await requestHandler({
-        source: source.key,
-        action: 'musicUrl',
-        info: { type: targetQuality, musicInfo: itemToLxMusicInfo(item) }
-      });
-
-      let url: unknown;
-      if (typeof result === 'string') {
-        url = result;
-      } else if (result && typeof result === 'object') {
-        url = (result as Record<string, unknown>).url ?? (result as Record<string, unknown>).data;
-      }
-      if (typeof url !== 'string' || !url) {
-        throw new Error(
-          ((result as Record<string, unknown>)?.message as string) || 'LX 脚本未返回音乐 URL'
-        );
-      }
+      throw lastError || new Error('LX 音源没有返回可用音质');
       // LX 脚本可能返回 API 端点而非直链；此处保持乐观返回，由上层 resolveAudioUrl 验证
-      return { url };
     }
   };
   Object.defineProperty(exports_, '__lxSources', {

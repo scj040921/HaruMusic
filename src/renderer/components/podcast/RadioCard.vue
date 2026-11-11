@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import type { DjProgram, DjRadio } from '@/types/podcast';
-import { formatNumber, getImgUrl } from '@/utils';
+import { formatNumber, getImgUrl, isElectron } from '@/utils';
 
 const props = withDefaults(
   defineProps<{
@@ -14,6 +15,7 @@ const props = withDefaults(
 );
 
 const router = useRouter();
+const { t } = useI18n();
 
 const goToDetail = () => {
   if (props.radio?.id) {
@@ -23,7 +25,11 @@ const goToDetail = () => {
 </script>
 
 <template>
-  <div class="group cursor-pointer animate-item" :style="{ animationDelay }" @click="goToDetail">
+  <div
+    class="radio-card group cursor-pointer animate-item"
+    :style="{ animationDelay }"
+    @click="goToDetail"
+  >
     <!-- Cover -->
     <div
       class="relative aspect-square overflow-hidden rounded-2xl shadow-md group-hover:shadow-xl transition-all duration-500"
@@ -73,7 +79,8 @@ const goToDetail = () => {
         v-if="radio?.subCount !== undefined"
         class="text-xs text-neutral-500 dark:text-neutral-400"
       >
-        {{ formatNumber(radio?.subCount || 0) }} subscribers
+        {{ formatNumber(radio?.subCount || 0) }}
+        {{ isElectron ? t('podcast.subscribeCount') : 'subscribers' }}
       </p>
     </div>
   </div>

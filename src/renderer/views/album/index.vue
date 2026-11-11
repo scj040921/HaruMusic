@@ -10,7 +10,7 @@
     @change="handleAreaChange"
     @scroll="handleScroll"
   >
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+    <div class="album-editorial-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
       <!-- Loading State -->
       <template v-if="loading && page === 0">
         <div v-for="i in 15" :key="`loading-${i}`" class="space-y-3">
@@ -160,7 +160,8 @@ const loadList = async (area: string, isLoadMore = false) => {
       offset: page.value * TOTAL_ITEMS
     };
     const { data } = await getNewAlbums(params);
-    const albums = data.albums || [];
+    if (area !== currentArea.value) return;
+    const albums = Array.isArray(data?.albums) ? data.albums : [];
 
     if (isLoadMore) {
       albumList.value.push(...albums);

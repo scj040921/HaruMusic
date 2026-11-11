@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { get } from 'lodash';
 
+import { requestMusicSourceHttp } from '@/services/musicSource/transport';
 import { useSettingsStore } from '@/store';
+import { isAndroidApp } from '@/utils';
 
 import type { ParsedMusicResult } from './gdmusic';
 
@@ -64,23 +66,35 @@ export const parseFromCustomApi = async (
 
     // 2. 判断请求方法，默认为GET
     const method = plugin.method?.toUpperCase() === 'POST' ? 'POST' : 'GET';
-    let response;
+    let responseData: any;
 
     // 3. 根据方法发送不同的请求
-    if (method === 'POST') {
+    if (isAndroidApp) {
+      const response = await requestMusicSourceHttp(plugin.apiUrl, {
+        method,
+        timeout,
+        ...(method === 'POST' ? { data: finalParams } : { params: finalParams })
+      });
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new Error(`HTTP ${response.statusCode}`);
+      }
+      responseData = response.body;
+    } else if (method === 'POST') {
       console.log('自定义API：发送 POST 请求到:', plugin.apiUrl, '参数:', finalParams);
-      response = await axios.post(plugin.apiUrl, finalParams, { timeout });
+      const response = await axios.post(plugin.apiUrl, finalParams, { timeout });
+      responseData = response.data;
     } else {
       // 默认为 GET
       // apiUrl 本身可能已带查询串（如 xxx/api.php?type=url），需按情况选择 ? 或 &
       const separator = plugin.apiUrl.includes('?') ? '&' : '?';
       const finalUrl = `${plugin.apiUrl}${separator}${new URLSearchParams(finalParams).toString()}`;
       console.log('自定义API：发送 GET 请求到:', finalUrl);
-      response = await axios.get(finalUrl, { timeout });
+      const response = await axios.get(finalUrl, { timeout });
+      responseData = response.data;
     }
 
     // 4. 使用 lodash.get 安全地从响应数据中提取URL
-    const musicUrl = get(response.data, plugin.responseUrlPath);
+    const musicUrl = get(responseData, plugin.responseUrlPath);
 
     if (musicUrl && typeof musicUrl === 'string') {
       console.log('自定义API：成功获取URL！');

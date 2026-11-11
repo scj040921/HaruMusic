@@ -20,6 +20,7 @@ import {
   inferPluginAudioFormat,
   validatePluginMediaSource
 } from '../musicSourcePluginProtocol';
+import { cancelMusicSourceHttp, requestMusicSourceHttp } from './transport';
 
 type WorkerInitializeMessage = {
   type: 'initialize';
@@ -44,9 +45,7 @@ type WorkerHttpResponseMessage = {
 };
 
 type RunnerToWorkerMessage =
-  | WorkerInitializeMessage
-  | WorkerInvokeMessage
-  | WorkerHttpResponseMessage;
+  WorkerInitializeMessage | WorkerInvokeMessage | WorkerHttpResponseMessage;
 
 export type SandboxPluginRuntime = {
   platform?: string;
@@ -288,11 +287,7 @@ export class PluginSandboxRunner {
     const requestId = `plugin_sandbox_${this.plugin.id}_${Date.now()}_${Math.random()
       .toString(36)
       .slice(2, 8)}`;
-    const request = window.api.lxMusicHttpRequest({
-      url: message.url,
-      options: { ...message.options, requestId },
-      requestId
-    });
+    const request = requestMusicSourceHttp(message.url, { ...message.options }, requestId);
     request
       .then((response: unknown) => {
         this.pendingHttpCancels.delete(message.requestId);
@@ -313,7 +308,7 @@ export class PluginSandboxRunner {
       });
 
     this.pendingHttpCancels.set(message.requestId, () => {
-      void window.api.lxMusicHttpCancel(requestId);
+      void cancelMusicSourceHttp(requestId);
     });
   }
 
@@ -396,12 +391,19 @@ export class PluginSandboxRunner {
     }
 
     const item = toPluginItem(song, songPlatform);
-    try {
-      return adaptRawMediaSource(await this.invoke('getMediaSource', [item, quality]));
-    } catch (error) {
-      console.warn(`[MusicSource:${this.plugin.name}] getMediaSource failed`, error);
-      return null;
+    const levels =
+      quality === 'auto'
+        ? ['jymaster', 'hires', 'lossless', 'exhigh', 'higher', 'standard']
+        : [quality];
+    for (const level of levels) {
+      try {
+        const media = adaptRawMediaSource(await this.invoke('getMediaSource', [item, level]));
+        if (media) return media;
+      } catch {
+        /* The next supported quality may still be playable. */
+      }
     }
+    return null;
   }
 
   getRuntimeMeta(): SandboxPluginRuntime | null {

@@ -1,0 +1,19 @@
+{
+  "name": "harumusic-public-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Public HTTPS adapter for the HaruMusic Android client",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.cjs"
+  },
+  "dependencies": {
+    "express": "4.21.2",
+    "express-rate-limit": "7.5.0",
+    "http-proxy-middleware": "3.0.5",
+    "netease-cloud-music-api-alger": "4.32.0"
+  }
+}

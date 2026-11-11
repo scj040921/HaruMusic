@@ -1,6 +1,6 @@
 {
   "name": "harumusic",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "HaruMusic desktop music player",
   "author": "HaruMusic contributors",
   "main": "./out/main/index.js",
@@ -22,6 +22,8 @@
     "fix-sandbox": "node scripts/fix-sandbox.js",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win --publish never",
+    "build:android": "node scripts/build-android.mjs",
+    "test:android-api-smoke": "node scripts/android-api-smoke.mjs",
     "build:mac": "npm run build && electron-builder --mac --x64 --publish never && cp dist/latest-mac.yml dist/latest-mac-x64.yml && electron-builder --mac --arm64 --publish never && cp dist/latest-mac.yml dist/latest-mac-arm64.yml && node scripts/merge_latest_mac_yml.mjs dist/latest-mac-x64.yml dist/latest-mac-arm64.yml dist/latest-mac.yml",
     "build:mac:x64": "npm run build && electron-builder --mac --x64 --publish never && cp dist/latest-mac.yml dist/latest-mac-x64.yml",
     "build:mac:arm64": "npm run build && electron-builder --mac --arm64 --publish never && cp dist/latest-mac.yml dist/latest-mac-arm64.yml",
@@ -40,6 +42,12 @@
     ]
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/status-bar": "^8.0.4",
+    "@capawesome/capacitor-nodejs": "0.2.0",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@httptoolkit/dbus-native": "^0.1.5",
@@ -71,6 +79,7 @@
     "vue-i18n": "^11.2.2"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
     "@electron-toolkit/eslint-config": "^2.1.0",
@@ -226,6 +235,7 @@
       "out/**/*",
       "resources/icons/**/*",
       "resources/icon.png",
+      "resources/icon_16x16.png",
       "LICENSE"
     ],
     "publish": [

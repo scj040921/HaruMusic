@@ -1,4 +1,10 @@
 node_modules
+.cache/
+artifacts/
+*.jks
+*.keystore
+*.p12
+*.pfx
 .DS_Store
 
 dist
@@ -77,4 +83,14 @@ docs/image*.png
 .github/PULL_REQUEST_TEMPLATE.md
 .github/issue-shoot.md
 .github/workflows/deploy.yml
-android/
+# Keep the Capacitor Android project source under version control; ignore only generated/local files.
+android/.gradle/
+android/.idea/
+android/local.properties
+android/build/
+android/app/build/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/res/xml/config.xml
+android/capacitor-cordova-android-plugins/

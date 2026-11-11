@@ -4,6 +4,7 @@ import type { SongResult } from '@/types/music';
 
 vi.mock('@/utils', () => ({
   isElectron: false,
+  isAndroidApp: false,
   getImgUrl: (url: string) => url
 }));
 
@@ -77,6 +78,16 @@ describe('audio loading ownership (#769)', () => {
     vi.clearAllTimers();
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it('forwards native media time without timer interpolation', () => {
+    const listener = vi.fn();
+    service.on('timeupdate', listener);
+    audio.currentTime = 42.75;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(listener).toHaveBeenCalledWith(42.75);
+    vi.advanceTimersByTime(1000);
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 
   it('cancels a scheduled online retry when a local song starts', async () => {

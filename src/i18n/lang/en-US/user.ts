@@ -19,6 +19,14 @@ export default {
     title: 'Listening History',
     playCount: '{count} times'
   },
+  guest: {
+    title: 'Your music space',
+    description:
+      'Listen without signing in. Your favorites and listening history stay on this device.',
+    history: 'Listening history',
+    favorite: 'Favorites',
+    settings: 'Music sources'
+  },
   follow: {
     title: 'Follow List',
     viewPlaylist: 'View Playlist',

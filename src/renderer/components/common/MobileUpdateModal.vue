@@ -4,13 +4,14 @@
       <div
         v-if="showModal"
         class="fixed inset-0 z-[999999] flex items-end justify-center bg-black/50 backdrop-blur-sm"
+        data-android-hig-modal
       >
         <!-- 弹窗内容 -->
         <div
-          class="w-full max-w-lg bg-white dark:bg-gray-900 rounded-t-3xl overflow-hidden animate-slide-up"
+          class="android-update-sheet w-full max-w-lg bg-white dark:bg-gray-900 rounded-t-3xl overflow-hidden animate-slide-up"
         >
           <!-- 顶部装饰条 -->
-          <div class="h-1 bg-gradient-to-r from-green-400 via-green-500 to-emerald-600"></div>
+          <div class="h-1 bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-300"></div>
 
           <!-- 关闭条 -->
           <div class="flex justify-center pt-3 pb-2">
@@ -22,7 +23,7 @@
             <div class="flex items-center gap-4">
               <!-- 应用图标 -->
               <div
-                class="w-20 h-20 rounded-2xl overflow-hidden shadow-lg flex-shrink-0 ring-2 ring-green-500/20"
+                class="w-20 h-20 rounded-2xl overflow-hidden shadow-lg flex-shrink-0 ring-1 ring-white/40"
               >
                 <img src="@/assets/logo.png" alt="App Icon" class="w-full h-full object-cover" />
               </div>
@@ -39,6 +40,11 @@
                 <h2 class="text-2xl font-bold text-gray-900 dark:text-white truncate">
                   v{{ updateInfo.latestVersion }}
                 </h2>
+                <p
+                  class="text-xs font-medium uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300"
+                >
+                  {{ updateInfo.channel }}
+                </p>
                 <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
                   {{ t('comp.update.currentVersion') }}: v{{ updateInfo.currentVersion }}
                 </p>
@@ -51,9 +57,10 @@
             class="mx-6 mb-6 max-h-80 overflow-y-auto rounded-2xl bg-gray-50 dark:bg-gray-800/50"
           >
             <div
-              class="p-5 text-sm text-gray-600 dark:text-gray-300 leading-relaxed"
-              v-html="parsedReleaseNotes"
-            ></div>
+              class="p-5 text-sm text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap"
+            >
+              {{ releaseNotesText }}
+            </div>
           </div>
 
           <!-- 操作按钮 -->
@@ -73,7 +80,7 @@
             >
               <span class="flex items-center justify-center gap-2">
                 <i class="ri-download-2-line text-lg"></i>
-                {{ t('comp.update.nowUpdate') }}
+                {{ downloadButtonLabel }}
               </span>
             </button>
           </div>
@@ -84,48 +91,44 @@
 </template>
 
 <script setup lang="ts">
-import { marked } from 'marked';
-import { computed, onMounted, ref } from 'vue';
+import { Browser } from '@capacitor/browser';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { checkUpdate, getProxyNodes, UpdateResult } from '@/utils/update';
+import { checkUpdate, getUpdateChannel, UpdateChannel, UpdateResult } from '@/utils/update';
 
 import config from '../../../../package.json';
 
 const { t } = useI18n();
 
-// 缓存键：记录用户点击"稍后提醒"的时间
-const REMIND_LATER_KEY = 'update_remind_later_timestamp';
-
-// 配置 marked
-marked.setOptions({
-  breaks: true,
-  gfm: true
-});
-
 const showModal = ref(false);
+const currentVersion = ref(config.version);
+const channel = ref<UpdateChannel>(getUpdateChannel());
+let autoCheckTimeout: ReturnType<typeof setTimeout> | null = null;
+let appStateListener: { remove: () => Promise<void> } | null = null;
+let channelChangeHandler: ((event: Event) => void) | null = null;
 
 const updateInfo = ref<UpdateResult>({
   hasUpdate: false,
   latestVersion: '',
   currentVersion: config.version,
+  channel: channel.value,
   releaseInfo: null
 });
 
-// 解析 Markdown
-const parsedReleaseNotes = computed(() => {
-  if (!updateInfo.value.releaseInfo?.body) return '';
-  try {
-    return marked.parse(updateInfo.value.releaseInfo.body);
-  } catch (error) {
-    console.error('Error parsing markdown:', error);
-    return updateInfo.value.releaseInfo.body;
-  }
-});
+const releaseNotesText = computed(
+  () => updateInfo.value.releaseInfo?.body || '此版本没有附加更新说明。'
+);
+const downloadButtonLabel = computed(() =>
+  updateInfo.value.releaseInfo?.assets.some((asset) => /\.apk$/i.test(asset.name))
+    ? '下载 Android 安装包'
+    : t('comp.update.nowUpdate')
+);
+const remindLaterKey = computed(() => `update_remind_later_timestamp:${channel.value}`);
 
 // 检查是否应该显示更新提醒
 const shouldShowReminder = (): boolean => {
-  const remindLaterTime = localStorage.getItem(REMIND_LATER_KEY);
+  const remindLaterTime = localStorage.getItem(remindLaterKey.value);
   if (!remindLaterTime) return true;
 
   const savedTime = parseInt(remindLaterTime, 10);
@@ -139,7 +142,7 @@ const shouldShowReminder = (): boolean => {
 // 处理"稍后提醒"
 const handleLater = () => {
   // 记录当前时间
-  localStorage.setItem(REMIND_LATER_KEY, Date.now().toString());
+  localStorage.setItem(remindLaterKey.value, Date.now().toString());
   showModal.value = false;
 };
 
@@ -148,14 +151,21 @@ const closeModal = () => {
 };
 
 const checkForUpdates = async () => {
+  const now = Date.now();
+  const lastCheck = Number(localStorage.getItem(`update:last-auto-check:${channel.value}`) || 0);
+  if (now - lastCheck < 6 * 60 * 60 * 1000) return;
+
   // 检查是否应该显示提醒
   if (!shouldShowReminder()) {
-    console.log('更新提醒被延迟，等待24小时后再提醒');
     return;
   }
 
   try {
-    const result = await checkUpdate(config.version);
+    const nativeApp = await import('@capacitor/app');
+    const appInfo = await nativeApp.App.getInfo();
+    if (appInfo.version) currentVersion.value = appInfo.version;
+    const result = await checkUpdate(currentVersion.value, channel.value);
+    if (!result.error) localStorage.setItem(`update:last-auto-check:${channel.value}`, String(now));
     if (result && result.hasUpdate) {
       updateInfo.value = result;
       showModal.value = true;
@@ -166,43 +176,81 @@ const checkForUpdates = async () => {
 };
 
 const handleUpdate = async () => {
-  const version = updateInfo.value.latestVersion;
+  const assetUrl = updateInfo.value.releaseInfo?.assets.find((asset) =>
+    /\.apk$/i.test(asset.name)
+  )?.browser_download_url;
+  const releaseUrl = assetUrl || updateInfo.value.releaseInfo?.html_url;
+  if (!releaseUrl) return;
 
-  // Android APK 下载地址
-  const downloadUrl = `https://github.com/scj040921/HaruMusic/releases/tag/v${version}`;
-
+  localStorage.removeItem(remindLaterKey.value);
   try {
-    // 获取代理节点
-    const proxyHosts = await getProxyNodes();
-    const proxyDownloadUrl = `${proxyHosts[0]}/${downloadUrl}`;
-
-    // 清除"稍后提醒"记录（用户选择更新后，下次应该正常提醒）
-    localStorage.removeItem(REMIND_LATER_KEY);
-
-    // 使用系统浏览器打开下载链接
-    window.open(proxyDownloadUrl, '_blank');
-
-    // 关闭弹窗
-    closeModal();
-  } catch (error) {
-    console.error('打开下载链接失败:', error);
-    // 回退到直接打开 GitHub Releases
-    const releaseUrl =
-      updateInfo.value.releaseInfo?.html_url || 'https://github.com/scj040921/HaruMusic/releases';
-    window.open(releaseUrl, '_blank');
-    closeModal();
+    await Browser.open({ url: releaseUrl });
+  } catch {
+    window.open(releaseUrl, '_blank', 'noopener,noreferrer');
   }
+  closeModal();
 };
 
-onMounted(() => {
-  // 延迟检查更新，确保应用完全加载
-  setTimeout(() => {
-    checkForUpdates();
-  }, 2000);
+onMounted(async () => {
+  autoCheckTimeout = setTimeout(() => void checkForUpdates(), 2_000);
+  channelChangeHandler = (event: Event) => {
+    const next = (event as CustomEvent<UpdateChannel>).detail;
+    if (next) {
+      channel.value = next;
+      void checkForUpdates();
+    }
+  };
+  window.addEventListener('harumusic:update-channel', channelChangeHandler);
+  try {
+    const nativeApp = await import('@capacitor/app');
+    appStateListener = await nativeApp.App.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) void checkForUpdates();
+    });
+  } catch {
+    // The component only runs inside Android; a missing native bridge should not block playback.
+  }
+});
+
+onUnmounted(() => {
+  if (autoCheckTimeout) clearTimeout(autoCheckTimeout);
+  if (channelChangeHandler) {
+    window.removeEventListener('harumusic:update-channel', channelChangeHandler);
+  }
+  void appStateListener?.remove();
 });
 </script>
 
 <style scoped>
+[data-android-hig-modal] {
+  background: rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+}
+
+.android-update-sheet {
+  border: 1px solid color-mix(in srgb, var(--divider, #d9d9de) 70%, transparent);
+  border-radius: 28px 28px 0 0;
+  background: color-mix(in srgb, var(--canvas, #ffffff) 94%, transparent);
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(26px) saturate(1.5);
+  -webkit-backdrop-filter: blur(26px) saturate(1.5);
+}
+
+.android-update-sheet > div:first-child {
+  display: none;
+}
+
+.android-update-sheet button {
+  min-height: 48px;
+  border-radius: 16px;
+  box-shadow: none;
+  background-image: none;
+}
+
+.android-update-sheet button:last-child {
+  background-color: var(--accent, #fa2d48);
+}
+
 /* 动画 */
 .update-modal-enter-active,
 .update-modal-leave-active {
@@ -225,6 +273,15 @@ onMounted(() => {
 
 .update-modal-leave-to .animate-slide-up {
   transform: translateY(100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-modal-enter-active,
+  .update-modal-leave-active,
+  .update-modal-enter-active .animate-slide-up,
+  .update-modal-leave-active .animate-slide-up {
+    transition: none;
+  }
 }
 
 /* 更新内容样式 */

@@ -36,6 +36,16 @@
   "lxMusicScripts": [],
   "activeLxMusicApiId": null,
   "musicSourcePlugins": [],
+  "musicSourceSubscriptions": [
+    {
+      "name": "qwerwhr · MusicFree 插件",
+      "url": "https://qwerwhr.github.io/musicfree-plugins/plugins.json"
+    },
+    {
+      "name": "hebijunge · MusicFree 插件",
+      "url": "https://hebijunge.github.io/musicfree-plugins/plugins.json"
+    }
+  ],
   "musicSourceOrder": [],
   "musicSourceUnifiedMigrated": false,
   "enableGpuAcceleration": true,

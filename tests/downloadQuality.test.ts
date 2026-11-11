@@ -15,7 +15,7 @@ vi.mock('@/services/SongSourceConfigManager', () => ({
 vi.mock('@/store', () => ({
   useSettingsStore: () => ({ setData: { musicQuality: 'higher', enabledMusicSources: [] } })
 }));
-vi.mock('@/utils', () => ({ isElectron: true }));
+vi.mock('@/utils', () => ({ isElectron: true, isAndroidApp: false }));
 vi.mock('@/services/musicSource/cache', () => ({
   MusicResolveCache: {
     getCachedMusicUrl: mocks.getCached,
@@ -26,12 +26,15 @@ vi.mock('@/services/musicSource/cache', () => ({
 }));
 vi.mock('@/services/musicSource/registry', () => ({
   useMusicSourceRegistry: () => ({
-    orderedProviders: () => [{ key: 'test', name: 'Test', resolve: mocks.resolve }],
+    orderedProviders: () => [
+      { key: 'test', name: 'Test', plugin: { dialect: 'native' }, resolve: mocks.resolve }
+    ],
     findProvider: vi.fn()
   })
 }));
 
 import { resolveSong } from '../src/renderer/services/musicSource/resolver';
+import { markUnplayableMedia } from '../src/renderer/services/unplayableMedia';
 
 describe('download quality', () => {
   beforeEach(() => {
@@ -54,10 +57,21 @@ describe('download quality', () => {
     expect(mocks.addFailed).not.toHaveBeenCalled();
   });
 
-  it('keeps playback song quality and playback caching', async () => {
+  it('skips an audio URL that failed loading and tries the next quality', async () => {
+    mocks.getCached.mockResolvedValue(null);
+    markUnplayableMedia('https://example.com/high.flac');
+    mocks.resolve.mockImplementation(async (_song, quality) => ({
+      url: quality === 'auto' ? 'https://example.com/high.flac' : 'https://example.com/playable.mp3'
+    }));
+    const result = await resolveSong({ id: 321, name: 'Fallback' } as any);
+    expect(result?.media.url).toBe('https://example.com/playable.mp3');
+    expect(mocks.resolve.mock.calls.map((call) => call[1])).toEqual(['auto', 'hires']);
+  });
+
+  it('uses auto for playback despite legacy song/global quality, keeping playback caching', async () => {
     mocks.getCached.mockResolvedValue(null);
     await resolveSong({ id: 123, name: 'Song' } as any);
-    expect(mocks.resolve).toHaveBeenCalledWith(expect.anything(), 'standard', expect.anything());
+    expect(mocks.resolve).toHaveBeenCalledWith(expect.anything(), 'auto', expect.anything());
     expect(mocks.getCached).toHaveBeenCalled();
     expect(mocks.setCached).toHaveBeenCalled();
   });

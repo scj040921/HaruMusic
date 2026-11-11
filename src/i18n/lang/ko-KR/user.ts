@@ -19,6 +19,13 @@ export default {
     title: '음악 청취 순위',
     playCount: '{count}회'
   },
+  guest: {
+    title: '나의 음악 공간',
+    description: '로그인 없이 음악을 들을 수 있어요. 즐겨찾기와 재생 기록은 이 기기에 저장됩니다.',
+    history: '재생 기록',
+    favorite: '즐겨찾기',
+    settings: '음원 설정'
+  },
   follow: {
     title: '팔로잉 목록',
     viewPlaylist: '플레이리스트 보기',

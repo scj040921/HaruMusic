@@ -23,24 +23,13 @@ const getSettingsStore = () => {
   return _settingsStore;
 };
 
-const loginRouter = {
-  path: '/login',
-  name: 'login',
-  meta: {
-    keepAlive: true,
-    title: '登录',
-    icon: 'icon-Home',
-    back: true
-  },
-  component: () => import('@/views/login/index.vue')
-};
-
 const routes = [
   {
     path: '/',
     component: AppLayout,
-    children: [...homeRouter, loginRouter, ...otherRouter]
+    children: [...homeRouter, ...otherRouter]
   },
+  { path: '/login', redirect: '/' },
   {
     path: '/lyric',
     component: () => import('@/views/lyric/index.vue')

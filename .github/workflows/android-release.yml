@@ -1,0 +1,183 @@
+name: Android Nightly / Acceptance / Stable
+
+on:
+  push:
+    branches: [main, harumusic]
+    paths:
+      - 'src/**'
+      - 'resources/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.ts'
+      - 'android/**'
+      - 'deployment/android-node-api/**'
+      - 'scripts/android-api-smoke.mjs'
+      - 'scripts/build-android.mjs'
+      - '.github/workflows/android-release.yml'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel
+        required: true
+        type: choice
+        options: [acceptance, stable]
+      version:
+        description: Three-part base version; must match package.json
+        required: true
+        type: string
+      publish:
+        description: Publish a signed APK to GitHub Releases
+        required: true
+        type: boolean
+        default: false
+      notes:
+        description: Release notes shown by the in-app update prompt
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Choose channel and version
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+          HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+          HAS_KEY_PASSWORDS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
+          HAS_PUBLIC_TOKEN: ${{ secrets.HARUAPPS_RELEASE_TOKEN != '' }}
+          HAS_UPDATE_KEY: ${{ secrets.ANDROID_UPDATE_SIGNING_KEY != '' }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const semver = /^\d+\.\d+\.\d+$/;
+          let channel;
+          let version;
+          let publish;
+          if (process.env.EVENT_NAME === 'push') {
+            channel = 'nightly';
+            version = `${pkg.version}-nightly.${process.env.RUN_NUMBER}`;
+            publish = process.env.HAS_KEYSTORE === 'true' && process.env.HAS_KEY_PASSWORDS === 'true' && process.env.HAS_PUBLIC_TOKEN === 'true' && process.env.HAS_UPDATE_KEY === 'true';
+          } else {
+            channel = process.env.INPUT_CHANNEL;
+            if (!['acceptance', 'stable'].includes(channel)) throw new Error('Choose acceptance or stable.');
+            if (!semver.test(process.env.INPUT_VERSION || '')) throw new Error('Expected a three-part version.');
+            if (process.env.INPUT_VERSION !== pkg.version) throw new Error('Version input must match package.json.');
+            version = channel === 'acceptance'
+              ? `${pkg.version}-rc.${process.env.RUN_NUMBER}`
+              : pkg.version;
+            publish = process.env.INPUT_PUBLISH === 'true';
+            if (publish && (process.env.HAS_KEYSTORE !== 'true' || process.env.HAS_KEY_PASSWORDS !== 'true' || process.env.HAS_PUBLIC_TOKEN !== 'true' || process.env.HAS_UPDATE_KEY !== 'true')) {
+              throw new Error('Publishing requires Android signing secrets, the update signing key, and HARUAPPS_RELEASE_TOKEN.');
+            }
+          }
+          const tag = `harumusic-android-${channel}-${version}`;
+          const buildType = publish ? 'release' : 'debug';
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, [
+            `channel=${channel}`,
+            `version=${version}`,
+            `tag=${tag}`,
+            `build_type=${buildType}`,
+            `publish=${publish}`,
+            `prerelease=${channel !== 'stable'}`
+          ].join('\n') + '\n');
+          NODE
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Verify playback and update behavior
+        run: |
+          npm run typecheck
+          npm test
+          npm ci --prefix deployment/android-node-api --omit=dev --ignore-scripts --no-audit --no-fund
+          npm run test:android-api-smoke
+
+      - name: Prepare signing key
+        if: steps.release.outputs.publish == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/harumusic-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/harumusic-release.jks" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Build Android package
+        env:
+          ANDROID_API_MODE: embedded
+          VITE_UPDATE_FEED_URL: ${{ vars.VITE_UPDATE_FEED_URL }}
+          ANDROID_VERSION_NAME: ${{ steps.release.outputs.version }}
+          ANDROID_BUILD_NUMBER: ${{ github.run_number }}
+          ANDROID_BUILD_TYPE: ${{ steps.release.outputs.build_type }}
+          ANDROID_UPDATE_CHANNEL: ${{ steps.release.outputs.channel }}
+        run: npm run build:android
+
+      - name: Prepare update-channel manifest
+        if: steps.release.outputs.publish == 'true'
+        env:
+          CHANNEL: ${{ steps.release.outputs.channel }}
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+          BUILD_TYPE: ${{ steps.release.outputs.build_type }}
+          NOTES: ${{ inputs.notes }}
+          ANDROID_UPDATE_SIGNING_KEY: ${{ secrets.ANDROID_UPDATE_SIGNING_KEY }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: node scripts/write-update-manifest.mjs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harumusic-android-${{ steps.release.outputs.channel }}-${{ steps.release.outputs.version }}
+          if-no-files-found: error
+          path: |
+            artifacts/android/*.apk
+            artifacts/android/android-*.json
+
+      - name: Publish release
+        if: steps.release.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.HARUAPPS_RELEASE_TOKEN }}
+          CHANNEL: ${{ steps.release.outputs.channel }}
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          apk=$(find artifacts/android -maxdepth 1 -name '*.apk' -print -quit)
+          args=("$TAG" "$apk" "artifacts/android/android-${CHANNEL}.json" --repo scj040921/haruapps --target main --title "HaruMusic ${VERSION} (${CHANNEL})")
+          if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
+          if [ -n "$NOTES" ]; then
+            printf '%s\n' "$NOTES" > "$RUNNER_TEMP/release-notes.md"
+            args+=(--notes-file "$RUNNER_TEMP/release-notes.md")
+          else
+            args+=(--notes "HaruMusic ${CHANNEL} build ${VERSION}")
+          fi
+          gh release create "${args[@]}"
+          gh release view harumusic-update-channels --repo scj040921/haruapps >/dev/null 2>&1 || gh release create harumusic-update-channels --repo scj040921/haruapps --target main --title 'HaruMusic Android update channels' --prerelease --notes 'Channel metadata for HaruMusic Android updates.'
+          gh release upload harumusic-update-channels "artifacts/android/android-${CHANNEL}.json" --repo scj040921/haruapps --clobber

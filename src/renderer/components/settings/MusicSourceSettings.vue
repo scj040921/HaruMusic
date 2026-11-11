@@ -5,6 +5,20 @@
     @close="handleClose"
   >
     <div class="flex flex-col h-full">
+      <input
+        ref="pluginFileInput"
+        class="hidden"
+        type="file"
+        accept=".js,.mjs,.cjs,.txt,application/javascript,text/plain"
+        @change="handlePluginFileSelected"
+      />
+      <input
+        ref="customApiFileInput"
+        class="hidden"
+        type="file"
+        accept=".json,application/json"
+        @change="handleCustomApiFileSelected"
+      />
       <!-- 顺序说明：启用中的音源按序号依次尝试解析 -->
       <div class="flex items-center gap-1.5 px-1 pb-2 shrink-0">
         <i class="ri-sort-asc text-xs text-gray-400"></i>
@@ -14,6 +28,78 @@
       </div>
 
       <div class="h-[420px] overflow-y-auto overscroll-contain">
+        <section
+          class="music-free-plugin-catalog mb-4 rounded-2xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/5 dark:bg-white/[0.035]"
+        >
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-xs font-semibold text-gray-800 dark:text-gray-100">
+                MusicFree 插件订阅
+              </p>
+              <p class="mt-0.5 text-[10px] text-gray-400">选一个目录浏览，再逐个导入需要的音源</p>
+            </div>
+            <button
+              v-if="activeSubscription"
+              class="shrink-0 rounded-xl px-2.5 py-1.5 text-xs text-primary transition active:scale-95 hover:bg-primary/10"
+              @click="
+                activeSubscription = null;
+                subscriptionPlugins = [];
+              "
+            >
+              返回订阅
+            </button>
+          </div>
+          <template v-if="!activeSubscription">
+            <button
+              v-for="subscription in musicFreeSubscriptions"
+              :key="subscription.url"
+              class="mb-1.5 flex w-full items-center justify-between gap-3 rounded-xl bg-white/80 px-3 py-2.5 text-left transition hover:bg-white active:scale-[0.99] dark:bg-white/[0.045] dark:hover:bg-white/[0.08]"
+              @click="openMusicFreeSubscription(subscription)"
+            >
+              <span class="truncate text-xs font-medium text-gray-700 dark:text-gray-200">{{
+                subscription.name
+              }}</span>
+              <span class="shrink-0 text-[11px] text-gray-400">{{
+                subscription.pluginCount ? `${subscription.pluginCount} 个插件` : '浏览 →'
+              }}</span>
+            </button>
+            <p v-if="subscriptionError" class="px-1 pt-1 text-[10px] text-red-500">
+              {{ subscriptionError }}
+            </p>
+          </template>
+          <template v-else>
+            <div v-if="isLoadingSubscription" class="py-6 text-center text-xs text-gray-400">
+              正在读取插件目录…
+            </div>
+            <div v-else-if="subscriptionPlugins.length" class="space-y-1">
+              <div
+                v-for="plugin in subscriptionPlugins"
+                :key="plugin.url"
+                class="flex items-center gap-2 rounded-xl px-2.5 py-2 hover:bg-white/70 dark:hover:bg-white/[0.06]"
+              >
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-xs font-medium text-gray-800 dark:text-gray-100">
+                    {{ plugin.name }}
+                  </p>
+                  <p class="text-[10px] text-gray-400">
+                    {{ plugin.version ? `v${plugin.version}` : 'MusicFree' }}
+                  </p>
+                </div>
+                <button
+                  class="shrink-0 rounded-xl bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary transition hover:bg-primary/15 active:scale-95 disabled:opacity-50"
+                  :disabled="isImportingPlugin || isPluginImported(plugin.url)"
+                  @click="importSubscriptionPlugin(plugin)"
+                >
+                  {{ isPluginImported(plugin.url) ? '已导入' : '导入' }}
+                </button>
+              </div>
+            </div>
+            <p v-else-if="!isLoadingSubscription" class="py-4 text-center text-xs text-gray-400">
+              订阅目录没有可用插件
+            </p>
+          </template>
+        </section>
+
         <template v-for="group in sourceGroups" :key="group.key">
           <p
             class="px-1 pt-3 pb-1 text-[11px] font-medium text-gray-400 dark:text-gray-500 first:pt-1"
@@ -66,7 +152,7 @@
 
                 <!-- hover 操作（customApi 配置 / 插件排序·变量·删除） -->
                 <div
-                  class="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
+                  class="flex items-center gap-0.5 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
                 >
                   <button
                     v-if="source.key === 'customApi'"
@@ -218,10 +304,12 @@ import { useI18n } from 'vue-i18n';
 import ResponsiveModal from '@/components/common/ResponsiveModal.vue';
 import { MusicSourcePluginStore } from '@/services/musicSource/pluginStore';
 import { useMusicSourceRegistry } from '@/services/musicSource/registry';
+import { fetchMusicSourcePlugin } from '@/services/musicSource/transport';
 import { useSettingsStore } from '@/store';
 import { type Platform } from '@/types/music';
 import type { MusicSourcePlugin } from '@/types/musicSourcePlugin';
 import { isMusicSourcePluginKey } from '@/types/musicSourcePlugin';
+import { isElectron } from '@/utils';
 import SBtn from '@/views/set/SBtn.vue';
 
 // ==================== Props & Emits ====================
@@ -247,8 +335,64 @@ const selectedSources = ref<Platform[]>([...props.sources]);
 const { providers } = useMusicSourceRegistry();
 
 const pluginUrl = ref('');
+const pluginFileInput = ref<HTMLInputElement | null>(null);
+const customApiFileInput = ref<HTMLInputElement | null>(null);
 const isImportingPlugin = ref(false);
 const varsEditorId = ref<string | null>(null);
+const activeSubscription = ref<string | null>(null);
+const isLoadingSubscription = ref(false);
+const subscriptionError = ref('');
+const subscriptionPlugins = ref<Array<{ name: string; url: string; version?: string }>>([]);
+const musicFreeSubscriptions = computed(() => settingsStore.setData.musicSourceSubscriptions || []);
+
+const isPluginImported = (url: string): boolean =>
+  providers.value.some((provider) => provider.plugin?.sourceUrl === url);
+
+const openMusicFreeSubscription = async (subscription: { name: string; url: string }) => {
+  activeSubscription.value = subscription.url;
+  subscriptionError.value = '';
+  isLoadingSubscription.value = true;
+  subscriptionPlugins.value = [];
+  try {
+    const result = await fetchMusicSourcePlugin(subscription.url);
+    const manifest = JSON.parse(result.content);
+    if (!Array.isArray(manifest?.plugins)) throw new Error('JSON 订阅清单格式无效');
+    subscriptionPlugins.value = manifest.plugins
+      .filter(
+        (plugin: any) => plugin && typeof plugin.name === 'string' && typeof plugin.url === 'string'
+      )
+      .map((plugin: any) => ({
+        name: plugin.name,
+        url: plugin.url,
+        ...(typeof plugin.version === 'string' ? { version: plugin.version } : {})
+      }));
+    const subscriptions = [...musicFreeSubscriptions.value];
+    const existing = subscriptions.findIndex((item: any) => item.url === subscription.url);
+    const next = {
+      ...subscription,
+      pluginCount: subscriptionPlugins.value.length
+    };
+    if (existing >= 0) subscriptions[existing] = next;
+    else subscriptions.push(next);
+    settingsStore.setSetData({ musicSourceSubscriptions: subscriptions });
+  } catch (error: any) {
+    subscriptionError.value = error?.message || '读取订阅目录失败';
+  } finally {
+    isLoadingSubscription.value = false;
+  }
+};
+
+const importSubscriptionPlugin = async (plugin: { name: string; url: string }) => {
+  isImportingPlugin.value = true;
+  try {
+    const result = await fetchMusicSourcePlugin(plugin.url);
+    await installSource(result.content, { name: plugin.name, sourceUrl: result.url || plugin.url });
+  } catch (error: any) {
+    message.error(`${t('common.error')}：${error?.message || '插件导入失败'}`);
+  } finally {
+    isImportingPlugin.value = false;
+  }
+};
 
 // ==================== 列表模型 ====================
 
@@ -401,6 +545,10 @@ const installSource = async (content: string, options: { name?: string; sourceUr
 };
 
 const importFromFile = async () => {
+  if (!isElectron) {
+    pluginFileInput.value?.click();
+    return;
+  }
   try {
     const result = await window.api.importMusicSourcePlugin();
     if (result?.content) {
@@ -409,6 +557,25 @@ const importFromFile = async () => {
   } catch (error: any) {
     console.error('导入本地音源插件失败:', error);
     message.error(`${t('common.error')}：${error.message}`);
+  }
+};
+
+const handlePluginFileSelected = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) {
+    message.error('音源脚本不能超过 2 MB。');
+    return;
+  }
+  isImportingPlugin.value = true;
+  try {
+    await installSource(await file.text(), { name: file.name.replace(/\.(m?js|cjs|txt)$/i, '') });
+  } catch (error: any) {
+    message.error(`${t('common.error')}：${error?.message || '插件导入失败'}`);
+  } finally {
+    isImportingPlugin.value = false;
   }
 };
 
@@ -424,7 +591,24 @@ const importFromUrl = async () => {
 
   isImportingPlugin.value = true;
   try {
-    const result = await window.api.fetchMusicSourcePlugin(url);
+    const result = await fetchMusicSourcePlugin(url);
+    try {
+      const manifest = JSON.parse(result.content);
+      if (Array.isArray(manifest?.plugins)) {
+        const subscription = {
+          name: manifest.desc || new URL(url).hostname,
+          url: result.url || url
+        };
+        await openMusicFreeSubscription(subscription);
+        return;
+      }
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        // A single JavaScript plugin continues through the regular importer.
+      } else {
+        throw error;
+      }
+    }
     await installSource(result.content, { name: result.name, sourceUrl: result.url });
     pluginUrl.value = '';
   } catch (error: any) {
@@ -437,6 +621,10 @@ const importFromUrl = async () => {
 
 /** 自定义 API 的 JSON 配置导入（customApi 内置 provider 的配置入口） */
 const importCustomApi = async () => {
+  if (!isElectron) {
+    customApiFileInput.value?.click();
+    return;
+  }
   try {
     const result = await window.api.importCustomApiPlugin();
     if (result && result.name && result.content) {
@@ -449,6 +637,29 @@ const importCustomApi = async () => {
     }
   } catch (error: any) {
     message.error(t('settings.playback.customApi.importFailed', { message: error.message }));
+  }
+};
+
+const handleCustomApiFileSelected = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    if (file.size > 256 * 1024) throw new Error('自定义音源配置不能超过 256 KB。');
+    const content = await file.text();
+    const config = JSON.parse(content);
+    if (!config.name || !config.apiUrl || !config.params || !config.responseUrlPath) {
+      throw new Error('配置缺少 name、apiUrl、params 或 responseUrlPath。');
+    }
+    settingsStore.setCustomApiPlugin({ name: config.name, content });
+    if (!selectedSources.value.includes('customApi' as Platform)) {
+      selectedSources.value.push('customApi' as Platform);
+    }
+    persistSelection();
+    message.success(t('settings.playback.customApi.importSuccess', { name: config.name }));
+  } catch (error: any) {
+    message.error(error?.message || t('settings.playback.customApi.importFailed', { message: '' }));
   }
 };
 

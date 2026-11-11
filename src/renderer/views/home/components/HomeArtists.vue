@@ -2,6 +2,9 @@
   <section class="artists-section">
     <div class="artist-heading">
       <h2>{{ title }}</h2>
+      <button type="button" class="artists-more" @click="router.push('/artists')">
+        {{ t('comp.more') }} <i class="ri-arrow-right-s-line" />
+      </button>
     </div>
     <!-- Loading Skeleton -->
     <div v-if="loading" class="artists-scroll flex gap-6 md:gap-8 overflow-x-hidden pb-4">
@@ -25,9 +28,11 @@
       @wheel="handleWheel"
     >
       <div class="artists-track flex gap-6 md:gap-8 lg:gap-10">
-        <div
+        <button
           v-for="(item, index) in artists"
           :key="item.id"
+          type="button"
+          :aria-label="`打开艺人主页：${item.name}`"
           class="artist-item animate-item group flex flex-shrink-0 snap-start flex-col items-center gap-3 md:gap-4 cursor-pointer"
           :style="{ animationDelay: calculateAnimationDelay(index, 0.04) }"
           @click="navigateToArtist(item.id)"
@@ -37,9 +42,10 @@
             class="artist-avatar relative h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 lg:h-32 lg:w-32 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800 transition-transform duration-200 group-hover:scale-105"
           >
             <img
-              :src="getImgUrl(item.picUrl, '300y300')"
-              class="h-full w-full object-cover grayscale-[0.15] transition-all duration-700 group-hover:grayscale-0 group-hover:brightness-110"
+              :src="getImgUrl(item.picUrl, '512y512')"
+              class="h-full w-full object-cover transition-[transform,filter] duration-300 group-hover:brightness-105"
               loading="lazy"
+              decoding="async"
               :alt="item.name"
             />
           </div>
@@ -50,7 +56,7 @@
           >
             {{ item.name }}
           </span>
-        </div>
+        </button>
       </div>
 
       <!-- Scroll Indicators (Optional visual feedback) -->
@@ -63,11 +69,21 @@
         :class="{ 'opacity-100': showRightFade }"
       />
     </div>
+
+    <div v-if="!loading && loadError" class="flex items-center gap-3 py-5 text-sm text-neutral-400">
+      <i class="ri-wifi-off-line" />
+      <span>{{ t('common.loadFailed') }}</span>
+      <button class="font-medium text-primary" @click="fetchArtists">
+        {{ t('common.retry') }}
+      </button>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 
 import { getHotSinger } from '@/api/home';
 import { useArtist } from '@/hooks/useArtist';
@@ -79,20 +95,29 @@ const props = defineProps<{
 }>();
 
 const { navigateToArtist } = useArtist();
+const { t } = useI18n();
+const router = useRouter();
 const artists = ref<any[]>([]);
 const loading = ref(true);
+const loadError = ref(false);
 const scrollContainer = ref<HTMLElement | null>(null);
 const showLeftFade = ref(false);
 const showRightFade = ref(false);
 
 const fetchArtists = async () => {
+  loading.value = true;
+  loadError.value = false;
   try {
     const { data } = await getHotSinger({ offset: 0, limit: props.limit || 10 });
-    if (data.code === 200) {
+    const raw = data as any;
+    const payload = raw?.data && typeof raw.data === 'object' ? raw.data : raw;
+    if (payload?.code === 200 || Array.isArray(payload?.artists)) {
       // 强制限制数量，确保不超过 limit
-      artists.value = data.artists.slice(0, props.limit || 10);
+      artists.value = (payload.artists || []).slice(0, props.limit || 10);
+      loadError.value = false;
     }
   } catch (error) {
+    loadError.value = true;
     console.error('Failed to fetch hot artists:', error);
   } finally {
     loading.value = false;
@@ -142,6 +167,16 @@ onMounted(() => {
 <style scoped>
 .artist-heading {
   margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.artists-more {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary, #77777c);
+  font-size: 14px;
+  cursor: pointer;
 }
 .artist-heading h2 {
   font-size: 20px;
@@ -185,6 +220,10 @@ onMounted(() => {
   /* Snap alignment */
   scroll-snap-align: start;
   scroll-snap-stop: normal;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
 }
 
 /* Scroll fade indicators */

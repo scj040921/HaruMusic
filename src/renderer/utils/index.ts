@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { computed } from 'vue';
 
 import { useSettingsStore } from '@/store/modules/settings';
@@ -41,7 +42,9 @@ export const calculateAnimationDelay = (index: any, baseDelay: number = 0.03): s
   }
   const speed = settingsStore.setData?.animationSpeed || 1;
   // 速度越快，延迟应该越短，所以除以 speed
-  const delay = (index * baseDelay) / speed;
+  // Long result lists should not keep later items invisible for seconds.
+  const staggerIndex = isElectron ? Math.min(Math.max(Number(index) || 0, 0), 5) : index;
+  const delay = (staggerIndex * baseDelay) / speed;
   return `${delay.toFixed(3)}s`;
 };
 
@@ -87,8 +90,21 @@ export const getImgUrl = (url: string | undefined, size: string = '') => {
     return url.replace(/thumbnail=\d+y\d+(?!.*thumbnail)/, `thumbnail=${size}`);
   }
 
-  const imgUrl = `${url}?param=${size}`;
-  return imgUrl;
+  try {
+    const parsed = new URL(url);
+    if (
+      Capacitor.getPlatform() === 'android' &&
+      parsed.protocol === 'http:' &&
+      /(^|\.)music\.126\.net$/i.test(parsed.hostname)
+    ) {
+      parsed.protocol = 'https:';
+    }
+    if (/(^|\.)music\.126\.net$/i.test(parsed.hostname) && size)
+      parsed.searchParams.set('param', size);
+    return parsed.href;
+  } catch {
+    return url;
+  }
 };
 
 export const isMobile = computed(() => {
@@ -96,7 +112,8 @@ export const isMobile = computed(() => {
   return settingsStore.isMobile;
 });
 
-export const isElectron = (window as any).electron !== undefined;
+export const isElectron = typeof window !== 'undefined' && (window as any).electron !== undefined;
+export const isAndroidApp = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 
 export const isLyricWindow = computed(() => {
   return window.location.hash.includes('lyric');

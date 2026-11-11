@@ -12,16 +12,9 @@
         />
       </setting-item>
 
-      <setting-item v-if="isElectron" :title="t('settings.playback.musicSources')">
+      <setting-item :title="t('settings.playback.musicSources')">
         <template #description>
-          <div class="flex items-center gap-2">
-            <n-switch v-model:value="setData.enableMusicUnblock">
-              <template #checked>{{ t('common.on') }}</template>
-              <template #unchecked>{{ t('common.off') }}</template>
-            </n-switch>
-            <span>{{ t('settings.playback.musicUnblockEnableDesc') }}</span>
-          </div>
-          <div v-if="setData.enableMusicUnblock" class="mt-2 text-sm">
+          <div class="mt-1 text-sm">
             <span class="text-gray-500">{{ t('settings.playback.selectedMusicSources') }}</span>
             <span v-if="musicSources.length > 0" class="text-gray-400">{{
               musicSources.join(', ')
@@ -31,7 +24,7 @@
             }}</span>
           </div>
         </template>
-        <s-btn :disabled="!setData.enableMusicUnblock" @click="showMusicSourcesModal = true">
+        <s-btn @click="showMusicSourcesModal = true">
           {{ t('settings.playback.configureMusicSources') }}
         </s-btn>
       </setting-item>
@@ -85,6 +78,114 @@
       </setting-item>
     </setting-section>
 
+    <setting-section title="Salt UI 播放界面">
+      <setting-item title="播放界面主题" description="跟随系统，或单独指定浅色与深色播放界面。">
+        <s-select
+          v-model="saltConfig.saltPlayerTheme"
+          :options="saltThemeOptions"
+          width="w-40 max-md:w-full"
+          @update:value="saveSaltConfig"
+        />
+      </setting-item>
+      <setting-item title="分控主题" description="允许主页与播放界面分别使用强调色。">
+        <n-switch v-model:value="saltConfig.saltSplitTheme" @update:value="saveSaltConfig" />
+        <div v-if="saltConfig.saltSplitTheme" class="flex items-center gap-3">
+          <label class="flex items-center gap-2 text-sm"
+            >主页
+            <input
+              v-model="saltConfig.saltHomeHighlight"
+              type="color"
+              aria-label="主页强调色"
+              @input="saveSaltConfig"
+          /></label>
+          <label class="flex items-center gap-2 text-sm"
+            >播放页
+            <input
+              v-model="saltConfig.saltPlayerHighlight"
+              type="color"
+              aria-label="播放页强调色"
+              @input="saveSaltConfig"
+          /></label>
+        </div>
+      </setting-item>
+      <setting-item title="壁纸取色" description="从当前专辑封面采样播放背景色。">
+        <n-switch v-model:value="saltConfig.saltSampleWallpaper" @update:value="saveSaltConfig" />
+      </setting-item>
+      <setting-item
+        title="动态流光"
+        description="浅色主题自动降低流光强度；关闭后保留静态采样背景。"
+      >
+        <n-switch v-model:value="saltConfig.saltDynamicFlow" @update:value="saveSaltConfig" />
+      </setting-item>
+      <setting-item
+        title="长按播放键切换沉浸模式"
+        description="隐藏歌曲信息与状态栏，只保留封面或歌词和基本操控。"
+      >
+        <n-switch v-model:value="saltConfig.saltImmersiveOnHold" @update:value="saveSaltConfig" />
+      </setting-item>
+      <setting-item
+        title="歌词逐字策略"
+        description="只强调当前行、扩展到相邻行，或始终按时间揭示。"
+      >
+        <s-select
+          v-model="saltConfig.saltKaraokePolicy"
+          :options="saltKaraokeOptions"
+          width="w-48 max-md:w-full"
+          @update:value="saveSaltConfig"
+        />
+      </setting-item>
+      <setting-item
+        title="逐字动画帧率"
+        description="逐字进度由播放音频时钟驱动，并按所选帧率量化显示。"
+      >
+        <div class="flex items-center gap-3">
+          <input
+            v-model.number="saltConfig.saltKaraokeFps"
+            type="range"
+            min="10"
+            max="60"
+            step="5"
+            @input="saveSaltConfig"
+          /><span>{{ saltConfig.saltKaraokeFps }} fps</span>
+        </div>
+      </setting-item>
+      <setting-item title="未播放歌词透明度" description="设置逐字揭示前歌词的可见程度。">
+        <div class="flex items-center gap-3">
+          <input
+            v-model.number="saltConfig.saltKaraokeOpacity"
+            type="range"
+            min="20"
+            max="80"
+            step="5"
+            @input="saveSaltConfig"
+          /><span>{{ saltConfig.saltKaraokeOpacity }}%</span>
+        </div>
+      </setting-item>
+      <setting-item title="桌面歌词" description="记住桌面歌词偏好。">
+        <n-switch
+          v-model:value="saltConfig.saltDesktopLyrics"
+          :disabled="!isElectron"
+          @update:value="setDesktopLyrics"
+        />
+      </setting-item>
+      <setting-item
+        title="状态栏歌词置顶"
+        description="桌面歌词窗口打开时，将歌词窗口保持在其他窗口上方。"
+      >
+        <n-switch
+          v-model:value="saltConfig.saltStatusLyrics"
+          :disabled="!isElectron"
+          @update:value="setStatusLyrics"
+        />
+      </setting-item>
+      <setting-item
+        title="保持屏幕唤醒"
+        description="播放界面打开时阻止屏幕自动休眠；设备不支持时自动忽略。"
+      >
+        <n-switch v-model:value="saltConfig.saltKeepAwake" @update:value="saveSaltConfig" />
+      </setting-item>
+    </setting-section>
+
     <div
       class="mt-6 p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-gray-100 dark:border-gray-800"
     >
@@ -105,11 +206,7 @@
       </div>
     </div>
 
-    <music-source-settings
-      v-if="isElectron"
-      v-model:show="showMusicSourcesModal"
-      v-model:sources="musicSources"
-    />
+    <music-source-settings v-model:show="showMusicSourcesModal" v-model:sources="musicSources" />
   </div>
 </template>
 
@@ -119,6 +216,7 @@ import { useI18n } from 'vue-i18n';
 
 import AudioDeviceSettings from '@/components/settings/AudioDeviceSettings.vue';
 import MusicSourceSettings from '@/components/settings/MusicSourceSettings.vue';
+import { isLyricWindowOpen, openLyric } from '@/hooks/MusicHook';
 import { type Platform } from '@/types/music';
 import { isElectron } from '@/utils';
 import { LYRIC_CONFIG_CHANGE_EVENT, readLyricConfig, writeLyricConfig } from '@/utils/lyricConfig';
@@ -129,7 +227,7 @@ import SettingItem from '../SettingItem.vue';
 import SettingSection from '../SettingSection.vue';
 import SSelect from '../SSelect.vue';
 
-const ALL_PLATFORMS: Platform[] = ['migu', 'kugou', 'kuwo', 'pyncmd'];
+const ALL_PLATFORMS: Platform[] = ['netease' as Platform];
 
 const memberLinks = [
   { name: '网易云音乐会员', url: 'https://music.163.com/store/vip' },
@@ -145,9 +243,32 @@ const showMusicSourcesModal = ref(false);
 
 // 纯净模式开关：与播放页共享 localStorage 配置，通过自定义事件双向实时同步
 const pureModeEnabled = ref(readLyricConfig().pureModeEnabled);
+const saltConfig = ref(readLyricConfig());
+const saltThemeOptions = [
+  { label: '跟随系统', value: 'system' },
+  { label: '浅色', value: 'light' },
+  { label: '深色', value: 'dark' }
+];
+const saltKaraokeOptions = [
+  { label: '仅当前行逐字', value: 'current' },
+  { label: '拓展当前行逐字', value: 'expanded' },
+  { label: '总是逐字', value: 'always' }
+];
+const saveSaltConfig = () => writeLyricConfig({ ...readLyricConfig(), ...saltConfig.value });
+const setDesktopLyrics = async (enabled: boolean) => {
+  saveSaltConfig();
+  if (isElectron && enabled !== isLyricWindowOpen.value) await openLyric();
+};
+const setStatusLyrics = (enabled: boolean) => {
+  saveSaltConfig();
+  if (isElectron && isLyricWindowOpen.value) {
+    window.electron.ipcRenderer.send('top-lyric', enabled);
+  }
+};
 
 const handleLyricConfigChange = () => {
-  pureModeEnabled.value = readLyricConfig().pureModeEnabled;
+  saltConfig.value = readLyricConfig();
+  pureModeEnabled.value = saltConfig.value.pureModeEnabled;
 };
 
 onMounted(() => {

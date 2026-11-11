@@ -1,10 +1,13 @@
 <template>
-  <div class="mobile-header" :class="{ 'safe-area-top': hasSafeArea }">
+  <div
+    class="mobile-header"
+    :class="{ 'safe-area-top': hasSafeArea, 'android-hig-header': isAndroidApp }"
+  >
     <!-- 左侧区域 -->
     <div class="header-left">
-      <div v-if="showBack" class="header-btn" @click="goBack">
+      <button v-if="showBack" class="header-btn" type="button" aria-label="返回" @click="goBack">
         <i class="ri-arrow-left-s-line"></i>
-      </div>
+      </button>
       <div v-else class="header-logo">
         <span class="logo-text">HaruMusic</span>
       </div>
@@ -17,12 +20,12 @@
 
     <!-- 右侧区域 -->
     <div class="header-right">
-      <div class="header-btn" @click="openSearch">
+      <button class="header-btn" type="button" aria-label="搜索" @click="openSearch">
         <i class="ri-search-line"></i>
-      </div>
-      <div class="header-btn" @click="openSettings">
+      </button>
+      <button class="header-btn" type="button" aria-label="设置" @click="openSettings">
         <i class="ri-settings-3-line"></i>
-      </div>
+      </button>
     </div>
   </div>
 </template>
@@ -31,6 +34,8 @@
 import { computed, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
+
+import { isAndroidApp } from '@/utils';
 
 const route = useRoute();
 const router = useRouter();

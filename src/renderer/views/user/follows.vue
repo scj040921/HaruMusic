@@ -188,7 +188,7 @@ const checkTargetUser = () => {
 const checkLoginStatus = () => {
   const loginInfo = checkAuthStatus();
   if (!loginInfo.isLoggedIn) {
-    router.push('/login');
+    router.replace('/user');
     return false;
   }
   if (!userStore.user && loginInfo.user) {

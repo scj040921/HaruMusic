@@ -26,6 +26,7 @@ import {
   getPluginSandboxRunner,
   PluginSandboxRunner
 } from './PluginSandboxRunner';
+import { fetchMusicSourcePlugin } from './transport';
 
 const MAX_PLUGIN_COUNT = 32;
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
@@ -206,7 +207,7 @@ export const MusicSourcePluginStore = {
     const plugin = this.getPlugin(id);
     if (!plugin?.sourceUrl) return { hasUpdate: false };
     try {
-      const fetched = await window.api.fetchMusicSourcePlugin(plugin.sourceUrl);
+      const fetched = await fetchMusicSourcePlugin(plugin.sourceUrl);
       const remoteId = hashMusicSource(fetched.content);
       return { hasUpdate: remoteId !== plugin.id, latestSource: fetched.content };
     } catch (error) {

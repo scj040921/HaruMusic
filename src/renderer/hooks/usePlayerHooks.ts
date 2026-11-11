@@ -304,6 +304,14 @@ export const useLyrics = () => {
  */
 export const useSongDetail = () => {
   const getSongDetail = async (playMusic: SongResult, requestId?: string) => {
+    if (playMusic.source === 'local' && String(playMusic.id).startsWith('android-local:')) {
+      const { getAndroidLocalUrl } = await import('@/services/androidLocalMusic');
+      return {
+        ...playMusic,
+        playMusicUrl: await getAndroidLocalUrl(String(playMusic.id)),
+        playLoading: false
+      } as SongResult;
+    }
     // 验证请求
     if (requestId && !playbackRequestManager.isRequestValid(requestId)) {
       console.log(`[getSongDetail] 请求已失效: ${requestId}`);

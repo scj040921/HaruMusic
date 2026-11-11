@@ -1,7 +1,13 @@
 <template>
   <div>
     <!-- menu -->
-    <div class="app-menu" :class="{ 'app-menu-expanded': settingsStore.setData.isMenuExpanded }">
+    <div
+      class="app-menu"
+      :class="{
+        'app-menu-expanded': settingsStore.setData.isMenuExpanded,
+        'android-hig-tabs': isAndroidApp && isMobile
+      }"
+    >
       <div class="app-menu-header">
         <button
           class="app-menu-logo"
@@ -14,12 +20,12 @@
           :aria-expanded="settingsStore.setData.isMenuExpanded"
           @click="toggleMenu"
         >
-          <span class="haru-mark" aria-hidden="true">h<span>♪</span></span>
+          <img class="haru-mark" src="@/assets/logo.png" alt="" aria-hidden="true" />
           <span v-if="settingsStore.setData.isMenuExpanded" class="haru-name">HaruMusic</span>
         </button>
       </div>
       <div class="app-menu-list">
-        <div v-for="(item, index) in menus" :key="item.path" class="app-menu-item">
+        <div v-for="item in visibleMenus" :key="item.path" class="app-menu-item">
           <n-tooltip
             :delay="200"
             :disabled="settingsStore.setData.isMenuExpanded || isMobile"
@@ -28,19 +34,21 @@
             <template #trigger>
               <router-link
                 class="app-menu-item-link"
-                :class="{ 'is-active': isChecked(index) }"
+                :class="{ 'is-active': isChecked(item) }"
                 :aria-label="t(item.meta.title)"
-                :aria-current="isChecked(index) ? 'page' : undefined"
+                :aria-current="isChecked(item) ? 'page' : undefined"
                 :to="item.path"
               >
                 <i
                   class="iconfont app-menu-item-icon"
-                  :style="iconStyle(index)"
+                  :style="iconStyle(item)"
                   :class="item.meta.icon"
                 ></i>
-                <span v-if="settingsStore.setData.isMenuExpanded" class="app-menu-item-text ml-3">{{
-                  t(item.meta.title)
-                }}</span>
+                <span
+                  v-if="settingsStore.setData.isMenuExpanded || (isAndroidApp && isMobile)"
+                  class="app-menu-item-text ml-3"
+                  >{{ t(item.meta.title) }}</span
+                >
               </router-link>
             </template>
             <div v-if="!settingsStore.setData.isMenuExpanded">{{ t(item.meta.title) }}</div>
@@ -52,12 +60,12 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 
 import { useSettingsStore } from '@/store';
-import { isMobile } from '@/utils';
+import { isAndroidApp, isMobile } from '@/utils';
 
 const props = defineProps({
   size: {
@@ -81,6 +89,11 @@ const props = defineProps({
 const route = useRoute();
 const path = ref(route.path);
 const settingsStore = useSettingsStore();
+const visibleMenus = computed(() =>
+  isAndroidApp && isMobile.value
+    ? props.menus.filter((item: any) => item.path !== '/album')
+    : props.menus
+);
 watch(
   () => route.path,
   async (newParams) => {
@@ -90,14 +103,14 @@ watch(
 
 const { t } = useI18n();
 
-const isChecked = (index: number) => {
-  return path.value === props.menus[index].path;
+const isChecked = (item: any) => {
+  return path.value === item.path;
 };
 
-const iconStyle = (index: number) => {
+const iconStyle = (item: any) => {
   const style = {
     fontSize: props.size,
-    color: isChecked(index) ? props.selectColor : props.color
+    color: isChecked(item) ? props.selectColor : props.color
   };
   return style;
 };
@@ -111,22 +124,11 @@ const toggleMenu = () => {
 
 <style lang="scss" scoped>
 .haru-mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   width: 38px;
   height: 38px;
-  border-radius: 12px;
-  background: #d9e9e3;
-  color: #315f55;
-  font:
-    700 25px/1 Georgia,
-    serif;
-}
-.haru-mark span {
-  font-size: 13px;
-  margin-left: -2px;
-  margin-top: -8px;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 .app-menu {
   --haru-nav-icon: #84928b;
@@ -270,6 +272,99 @@ const toggleMenu = () => {
     &-expanded {
       @apply w-full;
     }
+  }
+}
+
+.app-menu.android-hig-tabs {
+  --haru-nav-icon: #77777c;
+  --haru-nav-active: #fa2d48;
+  width: 100%;
+  padding: 0;
+
+  .app-menu-list {
+    display: flex;
+    justify-content: space-around;
+    align-items: stretch;
+    gap: 4px;
+    padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-menu-item {
+    flex: 1 1 0;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .app-menu-item-link {
+    min-height: 56px;
+    height: auto;
+    width: 100% !important;
+    margin: 0;
+    padding: 4px 2px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    border-radius: 14px;
+    background: transparent;
+    color: #77777c;
+    transition:
+      color 180ms cubic-bezier(0.2, 0.86, 0.28, 1),
+      transform 220ms cubic-bezier(0.2, 0.86, 0.28, 1);
+  }
+
+  .app-menu-item-link.is-active,
+  .app-menu-item-link.is-active:hover {
+    background: transparent;
+    color: #fa2d48;
+  }
+
+  .app-menu-item-link:active {
+    transform: scale(0.94);
+  }
+
+  .app-menu-item-icon {
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    font-size: 21px !important;
+    color: currentColor !important;
+  }
+
+  .app-menu-item-text {
+    display: block;
+    margin: 0;
+    max-width: 100%;
+    overflow: hidden;
+    color: currentColor;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 14px;
+    text-overflow: ellipsis;
+  }
+}
+
+:global(.dark) .app-menu.android-hig-tabs {
+  --haru-nav-icon: #a1a1a6;
+  --haru-nav-active: #ff5268;
+
+  .app-menu-item-link,
+  .app-menu-item-link.is-active {
+    color: var(--haru-nav-icon);
+  }
+
+  .app-menu-item-link.is-active,
+  .app-menu-item-link.is-active:hover {
+    color: var(--haru-nav-active);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-menu.android-hig-tabs .app-menu-item-link {
+    transition: none;
+  }
+
+  .app-menu.android-hig-tabs .app-menu-item-link:active {
+    transform: none;
   }
 }
 </style>

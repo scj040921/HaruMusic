@@ -2,7 +2,7 @@
   <n-dropdown
     :show="showDropdown"
     :options="dropdownOptions"
-    trigger="hover"
+    trigger="click"
     :z-index="9999999"
     @select="handleSelect"
     placement="top"
@@ -10,7 +10,7 @@
   >
     <n-tooltip trigger="hover" :z-index="9999999">
       <template #trigger>
-        <div class="advanced-controls-btn">
+        <button type="button" aria-label="高级播放设置" class="advanced-controls-btn">
           <i class="iconfont ri-settings-3-line"></i>
 
           <!-- 激活状态的小标记 -->
@@ -19,7 +19,7 @@
               <i class="ri-time-line"></i>
             </span>
           </div>
-        </div>
+        </button>
       </template>
       {{ t('player.playBar.advancedControls') }}
     </n-tooltip>
@@ -275,7 +275,12 @@ const selectSpeed = (speed: number) => {
 .timer-modal-content,
 .speed-modal-content {
   @apply p-6 rounded-3xl bg-light-100 dark:bg-dark-100 bg-opacity-80 filter backdrop-blur-sm;
-  max-width: 600px;
+  width: min(600px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  background: var(--canvas, #fff);
+  backdrop-filter: none;
   margin: 0 auto;
 }
 

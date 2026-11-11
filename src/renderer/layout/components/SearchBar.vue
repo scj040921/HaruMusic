@@ -135,7 +135,9 @@
             class="cursor-pointer"
             @click="selectItem('user')"
           />
-          <span v-else class="login-label" @click="toLogin">{{ t('comp.searchBar.login') }}</span>
+          <n-avatar v-else circle :size="26" class="cursor-pointer" @click="selectItem('user')">
+            <i class="ri-user-line text-sm" />
+          </n-avatar>
         </div>
       </template>
       <div class="user-menu">
@@ -145,9 +147,6 @@
         </div>
         <div v-if="userStore.user" class="menu-sep" />
         <div class="menu-list">
-          <div v-if="!userStore.user" class="menu-row" @click="toLogin">
-            <i class="ri-login-box-line" /><span>{{ t('comp.searchBar.toLogin') }}</span>
-          </div>
           <div v-if="userStore.user" class="menu-row" @click="selectItem('logout')">
             <i class="ri-logout-box-r-line" /><span>{{ t('comp.searchBar.logout') }}</span>
           </div>
@@ -208,14 +207,14 @@
 
 <script lang="ts" setup>
 import { useDebounceFn } from '@vueuse/core';
-import { computed, onMounted, ref, watch, watchEffect } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import { getSearchKeyword } from '@/api/home';
 import { getUserDetail } from '@/api/login';
 import { getSearchSuggestions } from '@/api/search';
-import { SEARCH_TYPES, USER_SET_OPTIONS } from '@/const/bar-const';
+import { SEARCH_TYPES } from '@/const/bar-const';
 import { useZoom } from '@/hooks/useZoom';
 import { useDownloadStore } from '@/store/modules/download';
 import { useIntelligenceModeStore } from '@/store/modules/intelligenceMode';
@@ -234,7 +233,6 @@ const navTitleStore = useNavTitleStore();
 const searchStore = useSearchStore();
 const settingsStore = useSettingsStore();
 const userStore = useUserStore();
-const userSetOptions = ref(USER_SET_OPTIONS);
 const { t, locale } = useI18n();
 
 const intelligenceModeStore = useIntelligenceModeStore();
@@ -433,9 +431,14 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 // ── User / misc ───────────────────────────────────────
 const loadHotSearch = async () => {
-  const { data } = await getSearchKeyword();
-  hotSearchKeyword.value = data.data.showKeyword;
-  hotSearchValue.value = data.data.realkeyword;
+  try {
+    const { data } = await getSearchKeyword();
+    hotSearchKeyword.value = data?.data?.showKeyword || '搜索歌曲、艺人或专辑';
+    hotSearchValue.value = data?.data?.realkeyword || '';
+  } catch {
+    hotSearchKeyword.value = '搜索歌曲、艺人或专辑';
+    hotSearchValue.value = '';
+  }
 };
 const loadPage = async () => {
   if (!localStorage.getItem('token')) return;
@@ -445,14 +448,7 @@ const loadPage = async () => {
   localStorage.setItem('user', JSON.stringify(userStore.user));
 };
 loadPage();
-watchEffect(() => {
-  userSetOptions.value = userStore.user
-    ? USER_SET_OPTIONS
-    : USER_SET_OPTIONS.filter((i) => i.key !== 'logout');
-});
-
 const restartApp = () => window.electron.ipcRenderer.send('restart');
-const toLogin = () => router.push('/user');
 const toGithub = () => window.open('https://github.com/scj040921/HaruMusic', '_blank');
 const toGithubRelease = () => {
   window.open('https://github.com/scj040921/HaruMusic', '_blank');
@@ -484,6 +480,7 @@ const updateInfo = ref<UpdateResult>({
   hasUpdate: false,
   latestVersion: '',
   currentVersion: config.version,
+  channel: 'stable',
   releaseInfo: null
 });
 
@@ -763,16 +760,6 @@ onMounted(() => {
 .user-btn:hover {
   border-color: #22c55e;
   box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.12);
-}
-
-.login-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #6b7280;
-  padding: 0 8px;
-}
-.dark .login-label {
-  color: #9ca3af;
 }
 
 /* ── User menu ───────────────────────────────────────── */

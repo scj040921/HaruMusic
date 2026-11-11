@@ -1,7 +1,50 @@
 <template>
   <div
     class="artist-detail-page h-full w-full bg-white dark:bg-neutral-900 transition-colors duration-500"
+    :class="{ 'desktop-artist-cover-page': isElectron }"
+    :style="isElectron ? { '--cover-color': artistCoverTint } : undefined"
   >
+    <div
+      v-if="isElectron && artistInfo && (artistInfo.cover || artistInfo.picUrl)"
+      class="desktop-cover-ambience"
+      aria-hidden="true"
+    />
+    <div
+      v-if="isElectron && artistInfo && (artistInfo.cover || artistInfo.picUrl)"
+      class="desktop-artist-reflection"
+      :style="{
+        backgroundImage: `url(${getImgUrl(artistInfo.cover || artistInfo.picUrl, '500y500')})`
+      }"
+      aria-hidden="true"
+    />
+    <div
+      v-if="isElectron && artistInfo && (artistInfo.cover || artistInfo.picUrl)"
+      class="desktop-artist-artwork"
+      :style="{
+        backgroundImage: `url(${getImgUrl(artistInfo.cover || artistInfo.picUrl, '500y500')})`
+      }"
+      aria-hidden="true"
+    />
+    <div
+      v-if="isElectron && artistInfo && (artistInfo.cover || artistInfo.picUrl)"
+      class="desktop-artist-backdrop"
+      :style="{
+        backgroundImage: `url(${getImgUrl(artistInfo.cover || artistInfo.picUrl, '500y500')})`
+      }"
+      aria-hidden="true"
+    />
+    <div
+      v-if="isElectron && artistInfo && (artistInfo.cover || artistInfo.picUrl)"
+      class="desktop-artist-tint"
+      :class="{ 'is-ready': artistTintReady }"
+      :style="{ backgroundColor: `color-mix(in srgb, ${artistCoverTint} 22%, transparent)` }"
+      aria-hidden="true"
+    />
+    <div
+      v-if="isElectron && artistInfo && (artistInfo.cover || artistInfo.picUrl)"
+      class="desktop-cover-noise"
+      aria-hidden="true"
+    />
     <n-scrollbar ref="scrollbarRef" class="h-full">
       <div class="artist-detail-content w-full pb-32">
         <!-- Loading State -->
@@ -51,7 +94,9 @@
               <div
                 class="absolute inset-0 bg-cover bg-center scale-110 blur-2xl opacity-40 dark:opacity-30"
                 :style="{
-                  backgroundImage: `url(${getImgUrl(artistInfo.cover || artistInfo.picUrl, '800y800')})`
+                  backgroundImage: isElectron
+                    ? `radial-gradient(ellipse at 18% 12%, color-mix(in srgb, ${artistCoverTint} 48%, transparent), transparent 66%), url(${getImgUrl(artistInfo.cover || artistInfo.picUrl, '500y500')})`
+                    : `url(${getImgUrl(artistInfo.cover || artistInfo.picUrl, '800y800')})`
                 }"
               />
               <div
@@ -439,7 +484,8 @@ import { useScrollTitle } from '@/hooks/useScrollTitle';
 import router from '@/router';
 import { usePlayerStore } from '@/store';
 import { IArtist } from '@/types/artist';
-import { calculateAnimationDelay, getImgUrl, isMobile } from '@/utils';
+import { calculateAnimationDelay, getImgUrl, isElectron, isMobile } from '@/utils';
+import { getImageDominantColor } from '@/utils/linearColor';
 
 defineOptions({
   name: 'ArtistDetail'
@@ -464,6 +510,23 @@ const tabs = computed(() => [
 
 // 歌手信息
 const artistInfo = ref<IArtist>();
+const artistCoverTint = ref('#77777c');
+const artistTintReady = ref(false);
+let artistTintGeneration = 0;
+watch(
+  () => artistInfo.value?.cover || artistInfo.value?.picUrl,
+  async (cover) => {
+    const generation = ++artistTintGeneration;
+    artistTintReady.value = false;
+    if (!isElectron || !cover) return;
+    const tint = await getImageDominantColor(getImgUrl(cover, '64y64'));
+    if (generation === artistTintGeneration && tint) {
+      artistCoverTint.value = tint;
+      artistTintReady.value = true;
+    }
+  },
+  { immediate: true }
+);
 const songs = ref<any[]>([]);
 const albums = ref<any[]>([]);
 
@@ -917,6 +980,170 @@ const formatSong = (item: any) => {
 /* Artist Detail Page Styles */
 .artist-detail-page {
   position: relative;
+}
+
+.artist-detail-page.desktop-artist-cover-page {
+  isolation: isolate;
+  background: color-mix(
+    in srgb,
+    var(--cover-color, #77777c) 28%,
+    var(--canvas, #f2f2f7)
+  ) !important;
+  overflow: hidden;
+  border-radius: 28px;
+}
+
+.desktop-cover-ambience {
+  position: absolute;
+  z-index: 0;
+  inset: -12%;
+  overflow: hidden;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--cover-color, #77777c) 22%, var(--canvas, #f2f2f7));
+  mask-image: linear-gradient(to bottom, #000 0%, #000 48%, transparent 100%);
+}
+
+.desktop-cover-ambience::before,
+.desktop-cover-ambience::after {
+  content: '';
+  position: absolute;
+  width: min(78vw, 960px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  filter: blur(240px);
+  opacity: 0.58;
+  mix-blend-mode: soft-light;
+  transform: translateZ(0);
+  transition: background-color 420ms ease-out;
+}
+
+.desktop-cover-ambience::before {
+  top: -18%;
+  left: -14%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--cover-color, #77777c) 62%, #39d2c4) 0%,
+    color-mix(in srgb, var(--cover-color, #77777c) 34%, #39d2c4) 38%,
+    transparent 72%
+  );
+}
+
+.desktop-cover-ambience::after {
+  right: -16%;
+  bottom: -28%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--cover-color, #77777c) 36%, #ff9368) 0%,
+    color-mix(in srgb, var(--cover-color, #77777c) 22%, #ff9368) 42%,
+    transparent 74%
+  );
+}
+
+:global(.dark) .desktop-cover-ambience::before,
+:global(.dark) .desktop-cover-ambience::after {
+  mix-blend-mode: screen;
+  opacity: 0.42;
+}
+
+.desktop-cover-noise {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.34'/%3E%3C/svg%3E");
+}
+
+.desktop-artist-reflection {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  background-position: center 32%;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0.14;
+  filter: blur(30px) saturate(1.12);
+  transform: scaleY(-1);
+  transform-origin: center;
+  mask-image: linear-gradient(to bottom, #000 0%, #0008 38%, transparent 100%);
+}
+
+.desktop-artist-backdrop {
+  position: absolute;
+  z-index: 3;
+  inset: -20px;
+  pointer-events: none;
+  background-position: center 34%;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0.34;
+  filter: blur(30px) saturate(1.08);
+  mask-image: linear-gradient(to bottom, transparent 38%, #0003 54%, #000 74%, transparent 100%);
+}
+
+.desktop-artist-artwork {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  background-position: center 32%;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0.96;
+  filter: saturate(1.04);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 50%, transparent 100%);
+}
+
+.desktop-artist-tint {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: color;
+  opacity: 0;
+  transition: opacity 220ms ease-out;
+}
+
+.desktop-artist-tint.is-ready {
+  opacity: 0.52;
+}
+
+.desktop-artist-cover-page > :deep(.n-scrollbar) {
+  position: relative;
+  z-index: 5;
+  background: transparent;
+}
+
+.desktop-artist-cover-page .hero-bg {
+  display: none;
+}
+
+.desktop-artist-cover-page .hero-bg > div:first-child {
+  opacity: 0.28;
+  filter: none;
+}
+
+.desktop-artist-cover-page .hero-section {
+  border-radius: 28px;
+}
+
+.desktop-artist-cover-page .action-bar {
+  border: 1px solid transparent;
+  border-radius: 24px;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+.desktop-artist-cover-page .hero-bg > div:last-child {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--canvas, #fff) 8%, transparent),
+    color-mix(in srgb, var(--canvas, #fff) 20%, transparent) 58%,
+    color-mix(in srgb, var(--canvas, #fff) 54%, transparent)
+  ) !important;
 }
 
 /* Hero Section */

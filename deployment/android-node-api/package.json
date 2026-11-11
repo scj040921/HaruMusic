@@ -1,0 +1,17 @@
+{
+  "name": "harumusic-android-local-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Embedded loopback API runtime for the HaruMusic Android app",
+  "type": "commonjs",
+  "main": "server.cjs",
+  "engines": {
+    "node": ">=18.20.4"
+  },
+  "dependencies": {
+    "@unblockneteasemusic/server": "0.27.10",
+    "express": "4.22.1",
+    "http-proxy-middleware": "3.0.5",
+    "netease-cloud-music-api-alger": "4.32.0"
+  }
+}

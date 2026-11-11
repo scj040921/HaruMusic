@@ -1,8 +1,9 @@
 import axios, { InternalAxiosRequestConfig } from 'axios';
 
+import { getAndroidEmbeddedApiBaseUrl } from '@/services/androidEmbeddedApi';
 import { useUserStore } from '@/store/modules/user';
 
-import { getSetData, isElectron, isMobile } from '.';
+import { getSetData, isAndroidApp, isElectron, isMobile } from '.';
 
 let setData: any = null;
 
@@ -29,11 +30,13 @@ const RETRY_DELAY = 500;
 
 // 请求拦截器
 request.interceptors.request.use(
-  (config: CustomAxiosRequestConfig) => {
+  async (config: CustomAxiosRequestConfig) => {
     setData = getSetData();
     config.baseURL = window.electron
       ? `http://127.0.0.1:${setData?.musicApiPort}`
-      : import.meta.env.VITE_API;
+      : isAndroidApp
+        ? await getAndroidEmbeddedApiBaseUrl()
+        : import.meta.env.VITE_API;
     // 只在retryCount未定义时初始化为0
     if (config.retryCount === undefined) {
       config.retryCount = 0;

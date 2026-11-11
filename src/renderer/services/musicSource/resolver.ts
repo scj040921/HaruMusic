@@ -5,16 +5,17 @@
  * 失败缓存跳过，统一校验与 API 端点二次解析，返回 attempts 归因。
  * 取代旧的「getSongUrl 内联降级链 + MusicParser 策略工厂」双轨编排。
  */
-import { getSongQuality } from '@/services/songQuality';
 import { SongSourceConfigManager } from '@/services/SongSourceConfigManager';
+import { isUnplayableMedia } from '@/services/unplayableMedia';
 import { useSettingsStore } from '@/store';
 import type { SongResult } from '@/types/music';
-import { isElectron } from '@/utils';
+import { isAndroidApp, isElectron } from '@/utils';
 
 import { buildPluginMediaUrl, validatePluginMediaSource } from '../../../shared/musicSourcePlugin';
 import { inferPluginAudioFormat, qualityToBitrate } from '../musicSourcePluginProtocol';
 import { MusicResolveCache } from './cache';
 import { useMusicSourceRegistry } from './registry';
+import { buildAndroidMediaProxyUrl } from './transport';
 import type { ResolveAttempt, ResolveSongResult } from './types';
 
 const STAGE_BUDGET_MS = 25_000;
@@ -116,9 +117,7 @@ export const resolveSong = async (
   const { orderedProviders, findProvider } = useMusicSourceRegistry();
 
   const sourceKeys = options.sourceKeys ?? effectiveSourceKeys(song.id as number);
-  const quality = options.isDownload
-    ? options.quality || 'auto'
-    : options.quality || getSongQuality(song.id) || settingsStore.setData?.musicQuality || 'auto';
+  const quality = options.isDownload ? options.quality || 'auto' : options.quality || 'auto';
   const globalKeys: string[] = settingsStore.setData?.enabledMusicSources || [];
 
   const songId = Number(song.id);
@@ -130,10 +129,10 @@ export const resolveSong = async (
       sourceKeys ?? globalKeys,
       quality
     );
-    if (cached) {
+    if (cached && !isUnplayableMedia(cached.url)) {
       return {
         media: validatePluginMediaSource({
-          url: cached.url,
+          url: isAndroidApp ? buildAndroidMediaProxyUrl(cached.url) : cached.url,
           format: cached.format,
           br: cached.br
         })!,
@@ -150,7 +149,7 @@ export const resolveSong = async (
   // 都依赖 Electron。原先这里是非 Electron 直接 return null，导致 Web/PWA 解析不出
   // 任何播放地址（整个播放链路失效）。Web 只能走纯 HTTP 的内置网易云源。
   let candidates = orderedProviders(sourceKeys);
-  if (!isElectron) {
+  if (!isElectron && !isAndroidApp) {
     const netease = findProvider('netease');
     candidates = netease && netease.available !== false ? [netease] : [];
   }
@@ -178,16 +177,43 @@ export const resolveSong = async (
     try {
       let verifiedUrl: string | null = null;
       const raw = await withTimeout(
-        provider.resolve(song, quality, {
-          isDownload: options.isDownload,
-          verifyMedia:
-            provider.key === 'netease'
-              ? async (url, headers) => {
-                  verifiedUrl = await withTimeout(verifyMediaUrl(url, headers), 4000);
-                  return verifiedUrl;
-                }
-              : undefined
-        }),
+        (async () => {
+          const levels =
+            quality === 'auto' && (provider.plugin || provider.key === 'customApi')
+              ? ['auto', 'hires', 'lossless', 'exhigh', 'higher', 'standard']
+              : [quality];
+          const seen = new Set<string>();
+          for (const level of levels) {
+            try {
+              const candidate = await provider.resolve(song, level, {
+                isDownload: options.isDownload,
+                verifyMedia:
+                  provider.key === 'netease'
+                    ? async (url, headers) => {
+                        verifiedUrl = isUnplayableMedia(url)
+                          ? null
+                          : await withTimeout(verifyMediaUrl(url, headers), 4000);
+                        return verifiedUrl;
+                      }
+                    : undefined
+              });
+              if (!candidate || seen.has(candidate.url) || isUnplayableMedia(candidate.url))
+                continue;
+              seen.add(candidate.url);
+              const url =
+                verifiedUrl === candidate.url
+                  ? verifiedUrl
+                  : await withTimeout(verifyMediaUrl(candidate.url, candidate.headers), 4000);
+              if (url) {
+                verifiedUrl = url;
+                return { ...candidate, url };
+              }
+            } catch {
+              /* A lower supported tier may still work. */
+            }
+          }
+          return null;
+        })(),
         provider.key === 'netease' ? STAGE_BUDGET_MS : 15_000
       );
       if (!raw) {
@@ -222,9 +248,11 @@ export const resolveSong = async (
       attempts.push({ providerKey: provider.key, ok: true, costMs: Date.now() - stageStart });
       const result: ResolveSongResult = {
         media: {
-          url: buildPluginMediaUrl(media.url, media.headers),
+          url: isAndroidApp
+            ? buildAndroidMediaProxyUrl(media.url, media.headers)
+            : buildPluginMediaUrl(media.url, media.headers),
           format: media.format || inferPluginAudioFormat(media.url, media.br),
-          br: media.br ?? qualityToBitrate(quality),
+          br: media.br ?? (quality === 'auto' ? undefined : qualityToBitrate(quality)),
           headers: media.headers
         },
         providerKey: provider.key,

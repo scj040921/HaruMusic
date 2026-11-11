@@ -17,7 +17,10 @@
         <!-- Toplist Grid -->
         <div class="toplist-grid-container">
           <!-- Loading State -->
-          <div v-if="loading" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+          <div
+            v-if="loading"
+            class="chart-editorial-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6"
+          >
             <div v-for="i in 15" :key="i" class="space-y-3">
               <div class="aspect-square skeleton-shimmer rounded-2xl" />
               <div class="h-4 w-3/4 skeleton-shimmer rounded-lg" />
@@ -26,7 +29,10 @@
           </div>
 
           <!-- Content State -->
-          <div v-else class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+          <div
+            v-else
+            class="chart-editorial-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6"
+          >
             <div
               v-for="(item, index) in topList"
               :key="item.id"

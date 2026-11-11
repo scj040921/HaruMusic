@@ -34,6 +34,12 @@
         @play="playSong(song)"
       />
     </div>
+
+    <div v-if="!loading && loadError" class="flex items-center gap-3 py-5 text-sm text-neutral-400">
+      <i class="ri-wifi-off-line" />
+      <span>{{ t('common.loadFailed') }}</span>
+      <button class="font-medium text-primary" @click="fetchSongs">{{ t('common.retry') }}</button>
+    </div>
   </section>
 </template>
 
@@ -56,6 +62,7 @@ const { t } = useI18n();
 const playerStore = usePlayerStore();
 const songs = ref<SongResult[]>([]);
 const loading = ref(true);
+const loadError = ref(false);
 const gridClass = computed(() =>
   isMobile.value
     ? 'grid-cols-1 sm:grid-cols-2'
@@ -63,23 +70,29 @@ const gridClass = computed(() =>
 );
 
 const fetchSongs = async () => {
+  loading.value = true;
+  loadError.value = false;
   try {
     const { data } = await getRecommendMusic({ limit: props.limit || 12 });
-    if (data.code === 200) {
+    const raw = data as any;
+    const payload = raw?.data && typeof raw.data === 'object' ? raw.data : raw;
+    if (payload?.code === 200 || Array.isArray(payload?.result)) {
       // 转换数据格式为 SongResult
-      songs.value = data.result.slice(0, props.limit || 12).map((item: any) => ({
+      songs.value = (payload.result || []).slice(0, props.limit || 12).map((item: any) => ({
         ...item,
         source: 'netease',
-        picUrl: item.picUrl,
+        picUrl: item.picUrl || item.song?.album?.picUrl || item.song?.al?.picUrl,
         al: {
-          picUrl: item.picUrl,
-          name: item.name,
-          id: item.id
+          picUrl: item.picUrl || item.song?.album?.picUrl || item.song?.al?.picUrl,
+          name: item.name || item.song?.name,
+          id: item.id || item.song?.id
         },
-        ar: item.song.artists
+        ar: item.song?.artists || item.artists || item.ar || []
       })) as SongResult[];
+      loadError.value = false;
     }
   } catch (error) {
+    loadError.value = true;
     console.error('Failed to fetch new songs:', error);
   } finally {
     loading.value = false;

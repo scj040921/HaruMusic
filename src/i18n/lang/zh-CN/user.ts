@@ -19,6 +19,13 @@ export default {
     title: '听歌排行',
     playCount: '{count}次'
   },
+  guest: {
+    title: '你的音乐空间',
+    description: '无需登录即可听歌。你的收藏与播放记录保存在这台设备上。',
+    history: '播放记录',
+    favorite: '我的收藏',
+    settings: '音源设置'
+  },
   follow: {
     title: '关注列表',
     viewPlaylist: '查看歌单',

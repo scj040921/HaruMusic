@@ -1,10 +1,14 @@
 <template>
-  <div class="app-container h-full w-full" :class="{ mobile: isMobile, noElectron: !isElectron }">
+  <div
+    class="app-container h-full w-full"
+    :class="{ mobile: isMobile, noElectron: !isElectron, 'android-native': isAndroidApp }"
+  >
     <n-config-provider :theme="theme === 'dark' ? darkTheme : lightTheme">
       <n-dialog-provider>
         <n-message-provider>
           <router-view></router-view>
           <disclaimer-modal></disclaimer-modal>
+          <mobile-update-modal v-if="isAndroidApp"></mobile-update-modal>
         </n-message-provider>
       </n-dialog-provider>
     </n-config-provider>
@@ -14,16 +18,17 @@
 <script setup lang="ts">
 import { cloneDeep } from 'lodash';
 import { darkTheme, lightTheme } from 'naive-ui';
-import { computed, nextTick, onMounted, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import DisclaimerModal from '@/components/common/DisclaimerModal.vue';
+import MobileUpdateModal from '@/components/common/MobileUpdateModal.vue';
 import { usePlayerStore } from '@/store/modules/player';
 import { usePlayerCoreStore } from '@/store/modules/playerCore';
 import { useSettingsStore } from '@/store/modules/settings';
 import { useUserStore } from '@/store/modules/user';
-import { isElectron, isLyricWindow } from '@/utils';
+import { isAndroidApp, isElectron, isLyricWindow } from '@/utils';
 import { checkLoginStatus } from '@/utils/auth';
 
 import { initAudioListeners, initMusicHook } from './hooks/MusicHook';
@@ -37,6 +42,8 @@ const playerStore = usePlayerStore();
 const playerCoreStore = usePlayerCoreStore();
 const userStore = useUserStore();
 const router = useRouter();
+let nativeBackButtonListener: { remove: () => Promise<void> } | null = null;
+let stopNativeStatusBarWatch: (() => void) | null = null;
 
 // 监听语言变化
 watch(
@@ -125,6 +132,44 @@ if (isElectron) {
 useAppShortcuts();
 
 onMounted(async () => {
+  if (isAndroidApp) {
+    try {
+      const [{ App: NativeApp }, { StatusBar, Style }] = await Promise.all([
+        import('@capacitor/app'),
+        import('@capacitor/status-bar')
+      ]);
+      await StatusBar.setOverlaysWebView({ overlay: true });
+
+      const syncStatusBar = () => {
+        const isDark = theme.value === 'dark';
+        void StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light });
+        void import('@capacitor/core')
+          .then(({ registerPlugin }) =>
+            registerPlugin<{ setSystemBars(options: { dark: boolean }): Promise<void> }>(
+              'HaruMedia'
+            ).setSystemBars({ dark: isDark })
+          )
+          .catch(() => {});
+      };
+      syncStatusBar();
+      stopNativeStatusBarWatch = watch(theme, syncStatusBar);
+
+      nativeBackButtonListener = await NativeApp.addListener('backButton', () => {
+        if (playerStore.musicFull) {
+          playerStore.setMusicFull(false);
+          return;
+        }
+        if (router.currentRoute.value.path !== '/') {
+          router.back();
+          return;
+        }
+        NativeApp.exitApp();
+      });
+    } catch (error) {
+      console.warn('[Android] Native shell initialization failed:', error);
+    }
+  }
+
   playerStore.setIsPlay(false);
   if (isLyricWindow.value) {
     return;
@@ -132,12 +177,12 @@ onMounted(async () => {
 
   // 检查网络状态，离线时自动跳转到本地音乐页面
   if (!navigator.onLine) {
-    router.push('/local-music');
+    router.push(isAndroidApp ? '/device-music' : '/local-music');
   }
 
   // 监听网络状态变化，断网时跳转到本地音乐页面
   const handleOffline = () => {
-    router.push('/local-music');
+    router.push(isAndroidApp ? '/device-music' : '/local-music');
   };
   window.addEventListener('offline', handleOffline);
   onUnmounted(() => {
@@ -186,6 +231,11 @@ onMounted(async () => {
       console.error('[App] 启动时自动扫描本地音乐失败:', error);
     });
   }
+});
+
+onUnmounted(() => {
+  stopNativeStatusBarWatch?.();
+  void nativeBackButtonListener?.remove();
 });
 </script>
 

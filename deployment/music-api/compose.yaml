@@ -1,0 +1,53 @@
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      API_PORT: "30489"
+      HOST: "0.0.0.0"
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-https://localhost}"
+      TRUST_PROXY_HOPS: "1"
+      RATE_LIMIT_MAX: "${RATE_LIMIT_MAX:-1200}"
+    expose:
+      - "3000"
+    networks:
+      - internal
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_DOMAIN: "${API_DOMAIN:?Set API_DOMAIN in the server .env file}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

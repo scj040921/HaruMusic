@@ -317,34 +317,6 @@ const setupAudioListeners = () => {
           sound.value = currentSound;
         }
 
-        nowTime.value = currentTime;
-        if (Number.isFinite(currentSound.duration)) allTime.value = currentSound.duration;
-
-        // === 歌词索引更新 ===
-        const newIndex = getLrcIndex(nowTime.value);
-        if (newIndex !== nowIndex.value) {
-          nowIndex.value = newIndex;
-          currentLrcProgress.value = 0; // 换行时重置进度
-          if (isElectron && isLyricWindowOpen.value) {
-            sendLyricToWin();
-          }
-        }
-        if (isElectron && lrcArray.value[nowIndex.value]) {
-          if (lastIndex !== nowIndex.value) {
-            sendTrayLyric(nowIndex.value);
-            lastIndex = nowIndex.value;
-          }
-        }
-
-        // === 逐字歌词行内进度 ===
-        const { start, end } = currentLrcTiming.value;
-        if (typeof start === 'number' && typeof end === 'number' && start !== end) {
-          const elapsed = currentTime + correctionTime.value - start;
-          const duration = end - start;
-          const progress = (elapsed / duration) * 100;
-          currentLrcProgress.value = Math.min(Math.max(progress, 0), 100);
-        }
-
         // === 节流发送轻量歌词进度更新（每 ~200ms / 约每 4 个 tick）===
         lyricThrottleCounter++;
         if (isElectron && isLyricWindowOpen.value && lyricThrottleCounter % 4 === 0) {
@@ -412,6 +384,44 @@ const setupAudioListeners = () => {
 
   // 启动恢复监控
   startRecoveryMonitor();
+
+  // 歌词和进度始终以媒体元素的时间事件为准；后台定时器仅处理持久化和系统同步。
+  audioService.on('timeupdate', (currentTime: number) => {
+    const currentSound = audioService.getCurrentSound();
+    if (
+      !currentSound ||
+      audioService.getCurrentTrack()?.id !== getPlayerStore().playMusic.id ||
+      !Number.isFinite(currentTime)
+    )
+      return;
+    nowTime.value = currentTime;
+    if (Number.isFinite(currentSound.duration)) allTime.value = currentSound.duration;
+
+    // === 歌词索引更新 ===
+    const newIndex = getLrcIndex(nowTime.value);
+    if (newIndex !== nowIndex.value) {
+      nowIndex.value = newIndex;
+      currentLrcProgress.value = 0; // 换行时重置进度
+      if (isElectron && isLyricWindowOpen.value) {
+        sendLyricToWin();
+      }
+    }
+    if (isElectron && lrcArray.value[nowIndex.value]) {
+      if (lastIndex !== nowIndex.value) {
+        sendTrayLyric(nowIndex.value);
+        lastIndex = nowIndex.value;
+      }
+    }
+
+    // === 逐字歌词行内进度 ===
+    const { start, end } = currentLrcTiming.value;
+    if (typeof start === 'number' && typeof end === 'number' && start !== end) {
+      const elapsed = currentTime + correctionTime.value - start;
+      const duration = end - start;
+      const progress = (elapsed / duration) * 100;
+      currentLrcProgress.value = Math.min(Math.max(progress, 0), 100);
+    }
+  });
 
   // 监听seek开始事件，立即更新UI
   audioService.on('seek_start', (time) => {

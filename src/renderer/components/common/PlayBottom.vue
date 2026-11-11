@@ -9,7 +9,9 @@ import { usePlayerStore } from '@/store/modules/player';
 import { isMobile } from '@/utils';
 
 const playerStore = usePlayerStore();
-const isPlay = computed(() => playerStore.playMusicUrl);
+// Keep the page gutter in sync with AppLayout's player visibility condition.
+// The active song remains visible in the play bar while its URL is refreshing.
+const isPlay = computed(() => Boolean(playerStore.playMusic?.id));
 
 defineProps({
   height: {
@@ -21,6 +23,6 @@ defineProps({
 
 <style lang="scss" scoped>
 .bottom {
-  @apply h-28;
+  @apply h-32;
 }
 </style>

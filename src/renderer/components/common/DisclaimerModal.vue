@@ -4,9 +4,10 @@
       <div
         v-if="showDisclaimer"
         class="fixed inset-0 z-[999999] flex items-center justify-center bg-[#12241d]/55"
+        :class="{ 'android-hig-disclaimer': isAndroidApp }"
       >
         <div
-          class="w-full max-w-md mx-4 bg-white dark:bg-[#18221e] rounded-2xl overflow-hidden shadow-2xl"
+          class="disclaimer-sheet w-full max-w-md mx-4 bg-white dark:bg-[#18221e] rounded-2xl overflow-hidden shadow-2xl"
         >
           <div class="h-1 bg-[#4b8170]"></div>
           <h2 class="text-xl font-semibold text-gray-900 dark:text-white px-7 mt-8">
@@ -85,7 +86,7 @@
 import { onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { isElectron, isLyricWindow } from '@/utils';
+import { isAndroidApp, isElectron, isLyricWindow } from '@/utils';
 
 const { t } = useI18n();
 
@@ -138,6 +139,45 @@ onMounted(() => {
 .disclaimer-modal-enter-from,
 .disclaimer-modal-leave-to {
   opacity: 0;
+}
+
+.android-hig-disclaimer {
+  background: rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+}
+
+.android-hig-disclaimer .disclaimer-sheet {
+  max-height: calc(
+    100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
+  );
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--divider, #d9d9de) 70%, transparent);
+  border-radius: 28px;
+  background: color-mix(in srgb, var(--canvas, #ffffff) 94%, transparent);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.2);
+}
+
+.android-hig-disclaimer .disclaimer-sheet > div:first-child {
+  display: none;
+}
+
+.android-hig-disclaimer .disclaimer-sheet button:first-child {
+  min-height: 48px;
+  border-radius: 16px;
+  background: var(--accent, #fa2d48);
+  box-shadow: none;
+}
+
+.android-hig-disclaimer .disclaimer-sheet button:last-child {
+  min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .disclaimer-modal-enter-active,
+  .disclaimer-modal-leave-active {
+    transition: none;
+  }
 }
 
 .donate-modal-enter-active,

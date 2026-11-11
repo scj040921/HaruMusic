@@ -1,5 +1,9 @@
 <template>
-  <div id="layout-main" class="mobile-layout mobile" :class="{ 'has-safe-area': isPhone }">
+  <div
+    id="layout-main"
+    class="mobile-layout mobile"
+    :class="{ 'has-safe-area': isPhone, 'android-liquidglass': isAndroidApp }"
+  >
     <!-- 顶部头部 -->
     <mobile-header />
 
@@ -36,6 +40,7 @@ import homeRouter from '@/router/home';
 import otherRouter from '@/router/other';
 import { useMenuStore } from '@/store/modules/menu';
 import { usePlayerStore } from '@/store/modules/player';
+import { isAndroidApp } from '@/utils';
 
 import AppMenu from './components/AppMenu.vue';
 import MobileHeader from './components/MobileHeader.vue';

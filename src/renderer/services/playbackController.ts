@@ -17,6 +17,7 @@ import { audioService } from '@/services/audioService';
 import { playbackRequestManager } from '@/services/playbackRequestManager';
 import { setSongQuality, type SongQuality } from '@/services/songQuality';
 import { SongSourceConfigManager } from '@/services/SongSourceConfigManager';
+import { markUnplayableMedia } from '@/services/unplayableMedia';
 import type { Platform, SongResult } from '@/types/music';
 import { getImgUrl } from '@/utils';
 import { getImageLinearBackground } from '@/utils/linearColor';
@@ -65,6 +66,9 @@ const loadMetadata = async (
   backgroundColor: string;
   primaryColor: string;
 }> => {
+  if (music.source === 'local') {
+    return { lyrics: music.lyric, backgroundColor: '#29292d', primaryColor: '#ffffff' };
+  }
   const [lyrics, { backgroundColor, primaryColor }] = await Promise.all([
     (async () => {
       if (music.lyric?.lrcTimeArray?.length) {
@@ -243,10 +247,11 @@ export const playTrack = async (
         attempt === 0 &&
         !options.recovery &&
         audioUrl &&
-        /^https?:\/\//i.test(audioUrl) &&
+        /^(https?:\/\/|pluginmedia:)/i.test(audioUrl) &&
         name !== 'AbortError' &&
         name !== 'NotAllowedError'
       ) {
+        markUnplayableMedia(audioUrl);
         await clearParsedUrlCache(music.id);
         if (gen !== getCurrentGeneration()) return false;
         candidate = { ...originalMusic, playMusicUrl: undefined, expiredAt: undefined };

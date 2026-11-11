@@ -53,6 +53,37 @@
         </div>
       </div>
     </template>
+    <template v-else-if="!isLoggedIn">
+      <section
+        class="guest-state flex min-h-full flex-1 flex-col items-center justify-center px-6 py-16 text-center"
+      >
+        <div
+          class="mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-neutral-100 text-neutral-500 dark:bg-white/10 dark:text-neutral-300"
+        >
+          <i class="ri-headphone-line text-4xl" />
+        </div>
+        <h1 class="text-2xl font-semibold text-neutral-900 dark:text-white">
+          {{ t('user.guest.title') }}
+        </h1>
+        <p class="mt-3 max-w-md text-sm leading-6 text-neutral-500 dark:text-neutral-400">
+          {{ t('user.guest.description') }}
+        </p>
+        <div class="mt-7 flex flex-wrap justify-center gap-3">
+          <button class="guest-action" @click="router.push('/history')">
+            <i class="ri-history-line" />{{ t('user.guest.history') }}
+          </button>
+          <button class="guest-action" @click="router.push('/favorite')">
+            <i class="ri-heart-line" />{{ t('user.guest.favorite') }}
+          </button>
+          <button class="guest-action" @click="router.push('/set')">
+            <i class="ri-settings-3-line" />{{ t('user.guest.settings') }}
+          </button>
+          <button v-if="isAndroidApp" class="guest-action" @click="router.push('/device-music')">
+            <i class="ri-folder-music-line" />{{ t('comp.localMusic') }}
+          </button>
+        </div>
+      </section>
+    </template>
     <template v-else>
       <div
         v-if="userDetail && user"
@@ -63,9 +94,6 @@
         <div class="page">
           <div class="user-name">
             <span>{{ user.nickname }}</span>
-            <span v-if="currentLoginType" class="login-type">{{
-              t('login.title.' + currentLoginType)
-            }}</span>
           </div>
           <div class="user-info">
             <n-avatar round :size="50" :src="getImgUrl(user.avatarUrl, '50y50')" />
@@ -163,14 +191,6 @@
         </div>
       </div>
     </template>
-    <!-- 未登录时显示登录组件 -->
-    <div
-      v-if="!isLoggedIn && isMobile"
-      class="login-container"
-      :class="setAnimationClass('animate__fadeIn')"
-    >
-      <login-component @login-success="handleLoginSuccess" />
-    </div>
   </div>
 </template>
 
@@ -187,9 +207,14 @@ import PlayBottom from '@/components/common/PlayBottom.vue';
 import SongItem from '@/components/common/SongItem.vue';
 import { usePlayerStore } from '@/store/modules/player';
 import { useUserStore } from '@/store/modules/user';
-import { getImgUrl, isElectron, isMobile, setAnimationClass, setAnimationDelay } from '@/utils';
-import { checkLoginStatus as checkAuthStatus } from '@/utils/auth';
-import LoginComponent from '@/views/login/index.vue';
+import {
+  getImgUrl,
+  isAndroidApp,
+  isElectron,
+  isMobile,
+  setAnimationClass,
+  setAnimationDelay
+} from '@/utils';
 
 defineOptions({
   name: 'User'
@@ -270,34 +295,15 @@ onBeforeUnmount(() => {
   mounted.value = false;
 });
 
-// 检查登录状态
-const checkLoginStatus = () => {
-  // userStore 的状态已经在 App.vue 中全局初始化，这里只需要检查
-  if (userStore.user && userStore.loginType) {
-    return true;
-  }
-
-  // 如果还是没有登录信息，跳转到登录页
-  const loginInfo = checkAuthStatus();
-  if (!loginInfo.isLoggedIn) {
-    !isMobile.value && router.push('/login');
-    return false;
-  }
-
-  return true;
-};
-
 const loadPage = async () => {
-  if (!mounted.value) return;
-
-  // 检查登录状态
-  if (!checkLoginStatus()) return;
+  if (!mounted.value || !user.value) return;
 
   await loadData();
 };
 
 const loadData = async () => {
   try {
+    if (!user.value) return;
     // 只有在没有数据时才显示加载状态
     if (!userDetail.value || !recordList.value?.length) {
       infoLoading.value = true;
@@ -335,7 +341,6 @@ const loadData = async () => {
     console.error('加载用户页面失败:', error);
     if (error.response?.status === 401) {
       userStore.handleLogout();
-      router.push('/login');
     } else {
       // 添加更多错误处理和重试逻辑
       message.error(t('user.message.loadFailed'));
@@ -376,8 +381,7 @@ watch(
   (newPath) => {
     console.log('newPath', newPath);
     if (newPath === '/user') {
-      checkLoginStatus();
-      loadData();
+      if (user.value) void loadData();
     }
   }
 );
@@ -388,8 +392,7 @@ watch(
   (newUser) => {
     if (!mounted.value) return;
     if (newUser) {
-      checkLoginStatus();
-      loadPage();
+      void loadPage();
     }
   }
 );
@@ -408,7 +411,7 @@ watch(currentTab, async (newTab) => {
 
 // 页面挂载时检查登录状态
 onMounted(() => {
-  checkLoginStatus() && loadData();
+  if (user.value) void loadPage();
 });
 
 // 替换显示歌单的方法
@@ -453,14 +456,7 @@ const showFollowList = () => {
 //   router.push('/user/followers');
 // };
 
-const handleLoginSuccess = () => {
-  // 处理登录成功后的逻辑
-  checkLoginStatus();
-  loadData();
-};
-
-const isLoggedIn = computed(() => userStore.user);
-const currentLoginType = computed(() => userStore.loginType);
+const isLoggedIn = computed(() => Boolean(userStore.user));
 </script>
 
 <style lang="scss" scoped>
@@ -581,18 +577,14 @@ const currentLoginType = computed(() => userStore.loginType);
   }
 }
 
-.login-type {
-  @apply text-sm text-green-500 dark:text-green-400;
+.guest-action {
+  @apply inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white/80 px-5 py-3 text-sm font-medium text-neutral-700 transition hover:-translate-y-0.5 hover:border-neutral-300 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-neutral-200 dark:hover:bg-white/10;
 }
 
 .mobile {
   .user-page {
     padding-left: var(--page-pl);
     padding-right: var(--page-pr);
-  }
-
-  .login-container {
-    @apply flex justify-center items-center h-full w-full;
   }
 }
 

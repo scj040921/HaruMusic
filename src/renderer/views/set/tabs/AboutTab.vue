@@ -12,9 +12,32 @@
           <i class="ri-information-line mr-1"></i>
           {{ appUpdateState.errorMessage || t('settings.about.messages.checkError') }}
         </div>
+        <div v-if="updateInfo.error" class="mt-2 max-w-xl text-xs text-amber-600">
+          {{ updateInfo.error }}
+        </div>
       </template>
       <template #action>
         <div class="flex items-center gap-2 flex-wrap">
+          <label
+            v-if="isAndroidApp"
+            class="flex items-center gap-2 rounded-xl bg-gray-100/80 px-3 py-2 text-xs dark:bg-white/5"
+          >
+            <span>更新通道</span>
+            <select
+              v-model="releaseChannel"
+              class="bg-transparent font-semibold outline-none"
+              aria-label="更新通道"
+              @change="changeReleaseChannel"
+            >
+              <option
+                v-for="option in UPDATE_CHANNEL_OPTIONS"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
           <s-btn :loading="checking" @click="checkForUpdates(true)">
             {{ checking ? t('settings.about.checking') : t('settings.about.checkUpdate') }}
           </s-btn>
@@ -42,12 +65,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue';
+import { App as NativeApp } from '@capacitor/app';
+import { Browser } from '@capacitor/browser';
+import { computed, inject, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { useSettingsStore } from '@/store/modules/settings';
-import { isElectron } from '@/utils';
-import { checkUpdate, UpdateResult } from '@/utils/update';
+import { isAndroidApp, isElectron } from '@/utils';
+import {
+  checkUpdate,
+  getUpdateChannel,
+  setUpdateChannel,
+  UPDATE_CHANNEL_OPTIONS,
+  UpdateChannel,
+  UpdateResult
+} from '@/utils/update';
 
 import config from '../../../../../package.json';
 import { APP_UPDATE_STATUS, hasAvailableAppUpdate } from '../../../../shared/appUpdate';
@@ -62,10 +94,13 @@ const setData = inject(SETTINGS_DATA_KEY)!;
 const message = inject(SETTINGS_MESSAGE_KEY)!;
 
 const checking = ref(false);
+const releaseChannel = ref<UpdateChannel>(getUpdateChannel());
+const currentVersion = ref(config.version);
 const webUpdateInfo = ref<UpdateResult>({
   hasUpdate: false,
   latestVersion: '',
   currentVersion: config.version,
+  channel: releaseChannel.value,
   releaseInfo: null
 });
 
@@ -84,6 +119,7 @@ const updateInfo = computed<UpdateResult>(() => {
     hasUpdate: hasAppUpdate.value,
     latestVersion: appUpdateState.value.availableVersion ?? '',
     currentVersion: appUpdateState.value.currentVersion || config.version,
+    channel: 'stable',
     releaseInfo: appUpdateState.value.availableVersion
       ? {
           tag_name: appUpdateState.value.availableVersion,
@@ -115,13 +151,11 @@ const checkForUpdates = async (isClick = false) => {
       return;
     }
 
-    const result = await checkUpdate(config.version);
-    if (result) {
-      webUpdateInfo.value = result;
-      if (!result.hasUpdate && isClick) {
-        message.success(t('settings.about.latest'));
-      }
-    } else if (isClick) {
+    const result = await checkUpdate(currentVersion.value, releaseChannel.value);
+    webUpdateInfo.value = result;
+    if (result.error && isClick) {
+      message.error(result.error);
+    } else if (!result.hasUpdate && isClick) {
       message.success(t('settings.about.latest'));
     }
   } catch (error) {
@@ -140,7 +174,18 @@ const openReleasePage = () => {
     return;
   }
 
-  window.open(updateInfo.value.releaseInfo?.html_url || setData.value.authorUrl);
+  const androidAsset = updateInfo.value.releaseInfo?.assets.find((asset) =>
+    /\.apk$/i.test(asset.name)
+  );
+  const url =
+    androidAsset?.browser_download_url ||
+    updateInfo.value.releaseInfo?.html_url ||
+    setData.value.authorUrl;
+  if (isAndroidApp) {
+    void Browser.open({ url }).catch(() => window.open(url, '_blank', 'noopener,noreferrer'));
+    return;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
 };
 
 const openManualUpdatePage = async () => {
@@ -155,6 +200,21 @@ const openManualUpdatePage = async () => {
 const openAuthor = () => {
   window.open('https://github.com/scj040921/HaruMusic', '_blank');
 };
+
+const changeReleaseChannel = async () => {
+  setUpdateChannel(releaseChannel.value);
+  await checkForUpdates(true);
+};
+
+onMounted(async () => {
+  if (!isAndroidApp) return;
+  try {
+    const info = await NativeApp.getInfo();
+    if (info.version) currentVersion.value = info.version;
+  } catch {
+    // Use the bundled version string if the native version bridge is unavailable.
+  }
+});
 
 defineExpose({ checkForUpdates });
 </script>

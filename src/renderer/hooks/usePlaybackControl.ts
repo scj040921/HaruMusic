@@ -2,6 +2,7 @@ import { computed } from 'vue';
 
 import { playMusic } from '@/hooks/MusicHook';
 import { usePlayerStore } from '@/store/modules/player';
+import { isElectron } from '@/utils';
 
 /**
  * 播放控制 composable（播放/暂停、上一首、下一首）
@@ -14,11 +15,16 @@ export function usePlaybackControl() {
 
   /** 播放/暂停切换 */
   const playMusicEvent = async () => {
+    // The player store is the source of truth. The old MusicHook singleton can
+    // still be empty during the first app restore, leaving lyric controls inert.
+    const currentSong = isElectron ? playerStore.playMusic : playMusic.value;
+    if (!currentSong?.id) return false;
     try {
-      await playerStore.setPlay({ ...playMusic.value });
+      return await playerStore.setPlay({ ...currentSong });
     } catch (error) {
       console.error('播放出错:', error);
       playerStore.nextPlay();
+      return false;
     }
   };
 

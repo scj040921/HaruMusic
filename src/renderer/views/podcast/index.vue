@@ -22,7 +22,7 @@
           </h2>
           <div class="h-1.5 w-1.5 rounded-full bg-primary" />
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+        <div class="podcast-subscriptions grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
           <radio-card
             v-for="(radio, index) in subscribedRadios.slice(0, 10)"
             :key="`sub-${radio.id}`"
@@ -88,20 +88,26 @@
       </section>
 
       <!-- Recommended -->
-      <section>
+      <section class="podcast-recommendations">
         <div class="mb-6 flex items-center gap-3">
           <h2 class="text-xl font-bold tracking-tight text-neutral-900 md:text-2xl dark:text-white">
             {{ t('podcast.recommended') }}
           </h2>
           <div class="h-1.5 w-1.5 rounded-full bg-primary" />
         </div>
-        <div v-if="recommendLoading" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+        <div
+          v-if="recommendLoading"
+          class="podcast-feature-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6"
+        >
           <div v-for="i in 10" :key="`skeleton-${i}`" class="space-y-3">
             <div class="aspect-square skeleton-shimmer rounded-2xl" />
             <div class="h-4 w-3/4 skeleton-shimmer rounded-lg" />
           </div>
         </div>
-        <div v-else class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+        <div
+          v-else
+          class="podcast-feature-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6"
+        >
           <radio-card
             v-for="(radio, index) in recommendRadios.slice(0, 10)"
             :key="`recommend-${radio.id}`"
@@ -114,7 +120,7 @@
 
     <!-- Category View -->
     <div v-else>
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+      <div class="podcast-category-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
         <template v-if="categoryLoading && categoryPage === 0">
           <div v-for="i in 15" :key="`loading-${i}`" class="space-y-3">
             <div class="aspect-square skeleton-shimmer rounded-2xl" />

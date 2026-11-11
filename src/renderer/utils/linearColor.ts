@@ -42,6 +42,64 @@ export const getImageLinearBackground = async (imageSrc: string): Promise<IColor
   }
 };
 
+/** Extracts the most common color family from a small image sample. */
+export const getImageDominantColor = async (imageSrc: string): Promise<string> => {
+  try {
+    const image = new Image();
+    image.crossOrigin = 'Anonymous';
+    image.src = imageSrc;
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('图片加载失败'));
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return '';
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const buckets = new Map<
+      string,
+      { count: number; weight: number; color: [number, number, number] }
+    >();
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (pixels[index + 3] < 180) continue;
+      const red = pixels[index];
+      const green = pixels[index + 1];
+      const blue = pixels[index + 2];
+      const high = Math.max(red, green, blue);
+      const low = Math.min(red, green, blue);
+      const saturation = high === 0 ? 0 : (high - low) / high;
+      const lightness = (high + low) / 510;
+      const key = [red, green, blue].map((channel) => Math.round(channel / 16)).join(':');
+      const bucket = buckets.get(key) ?? {
+        count: 0,
+        weight: 0,
+        color: [0, 0, 0] as [number, number, number]
+      };
+      bucket.count += 1;
+      bucket.weight +=
+        (0.7 + saturation * 0.45) * (lightness < 0.08 || lightness > 0.94 ? 0.55 : 1);
+      bucket.color[0] += red;
+      bucket.color[1] += green;
+      bucket.color[2] += blue;
+      buckets.set(key, bucket);
+    }
+
+    let dominant: (typeof buckets extends Map<string, infer T> ? T : never) | undefined;
+    for (const bucket of buckets.values()) {
+      if (!dominant || bucket.weight > dominant.weight) dominant = bucket;
+    }
+    if (!dominant || dominant.count === 0) return '';
+    return `rgb(${dominant.color.map((channel) => Math.round(channel / dominant!.count)).join(',')})`;
+  } catch {
+    return '';
+  }
+};
+
 export const getImageBackground = async (img: HTMLImageElement): Promise<IColor> => {
   try {
     const primaryColor = await getImageColor(img);

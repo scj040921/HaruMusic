@@ -2,6 +2,7 @@ import { computed } from 'vue';
 
 import { playMusic } from '@/hooks/MusicHook';
 import { usePlayerStore } from '@/store/modules/player';
+import { playFavoriteFeedback } from '@/utils/favoriteFeedback';
 
 /**
  * 当前歌曲的收藏状态管理 composable
@@ -21,11 +22,13 @@ export function useFavorite() {
     if (!playMusic?.value?.id) return;
 
     const favoriteId = playMusic.value.id;
-    if (isFavorite.value) {
+    const nextFavorite = !isFavorite.value;
+    if (!nextFavorite) {
       playerStore.removeFromFavorite(favoriteId);
     } else {
       playerStore.addToFavorite(favoriteId);
     }
+    playFavoriteFeedback(e?.currentTarget ?? null, nextFavorite);
   };
 
   return {

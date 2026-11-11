@@ -44,6 +44,17 @@
       />
     </div>
 
+    <div
+      v-else-if="loadError"
+      class="flex flex-col items-center justify-center py-16 text-neutral-400"
+    >
+      <i class="ri-wifi-off-line mb-3 text-3xl opacity-60" />
+      <p class="text-sm">{{ t('common.loadFailed') }}</p>
+      <button class="mt-3 text-sm font-medium text-primary" @click="fetchAlbums">
+        {{ t('common.retry') }}
+      </button>
+    </div>
+
     <!-- Empty State -->
     <div v-else class="flex flex-col items-center justify-center py-20 text-neutral-400">
       <i class="ri-album-line mb-4 text-5xl opacity-20" />
@@ -88,6 +99,7 @@ const { t } = useI18n();
 const router = useRouter();
 const albums = ref<any[]>([]);
 const loading = ref(true);
+const loadError = ref(false);
 const albumTracksMap = reactive<Record<number, any[]>>({});
 
 // Calculate display count to fill exactly N rows
@@ -104,16 +116,25 @@ const displayAlbums = computed(() => {
 });
 
 const fetchAlbums = async () => {
+  loading.value = true;
+  loadError.value = false;
   try {
     const { data } = await getTopAlbum({ limit: props.limit || displayCount.value + 5 });
-    if (data.code === 200) {
-      albums.value = data.weekData || data.monthData || data.albums || [];
+    const payload = data?.data && typeof data.data === 'object' ? data.data : data;
+    const availableLists = [payload?.weekData, payload?.monthData, payload?.albums].filter(
+      (items): items is any[] => Array.isArray(items)
+    );
+    const results = availableLists.find((items) => items.length) || availableLists[0] || [];
+    if (data?.code === 200 || payload?.code === 200 || results.length > 0) {
+      albums.value = results;
+      loadError.value = false;
       // Preload tracks for displayed albums (Electron only)
       if (isElectron && !isMobile.value) {
         preloadAllTracks();
       }
     }
   } catch (error) {
+    loadError.value = true;
     console.error('Failed to fetch albums:', error);
   } finally {
     loading.value = false;

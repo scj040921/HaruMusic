@@ -6,13 +6,14 @@
   >
     <!-- Cover -->
     <div
-      class="relative aspect-square overflow-hidden rounded-xl bg-neutral-100 transition-all duration-300 ease-out dark:bg-neutral-800"
+      class="relative aspect-square overflow-hidden rounded-[14px] bg-neutral-100 shadow-sm ring-1 ring-black/5 transition-shadow duration-200 group-hover:shadow-md dark:bg-neutral-800 dark:ring-white/10"
     >
       <img
         ref="coverRef"
-        :src="getImgUrl(cover, '512y512')"
+        :src="getImgUrl(cover, '800y800')"
         class="h-full w-full object-cover cover-art"
         loading="lazy"
+        decoding="async"
         :alt="title"
         crossorigin="anonymous"
         @load="extractColor"
@@ -21,14 +22,14 @@
       <!-- Hover Overlay with Song Preview -->
       <div
         v-if="showHoverTracks"
-        class="absolute inset-0 flex items-end opacity-0 transition-all duration-500 ease-out group-hover:opacity-100"
+        class="absolute inset-0 flex items-end opacity-0 transition-opacity duration-200 group-hover:opacity-100"
         :style="overlayStyle"
       >
         <!-- Song Preview + Play Button Container -->
         <div class="flex w-full items-end justify-between gap-3 p-4">
           <!-- Song List -->
           <div
-            class="min-w-0 flex-1 translate-y-3 space-y-1.5 transition-all duration-500 ease-out group-hover:translate-y-0"
+            class="min-w-0 flex-1 translate-y-2 space-y-1.5 transition-transform duration-300 ease-out group-hover:translate-y-0"
           >
             <div
               v-for="(track, idx) in displayTracks"
@@ -47,7 +48,7 @@
 
           <!-- Play Button -->
           <button
-            class="flex h-12 w-12 flex-shrink-0 translate-y-2 items-center justify-center rounded-full bg-white text-neutral-900 shadow-2xl transition-all duration-500 ease-out hover:scale-110 group-hover:translate-y-0 active:scale-95"
+            class="flex h-10 w-10 flex-shrink-0 translate-y-1 items-center justify-center rounded-full bg-white text-neutral-900 shadow-lg transition-transform duration-300 ease-out hover:scale-105 group-hover:translate-y-0 active:scale-95"
             @click.stop="$emit('play')"
           >
             <i class="ri-play-fill ml-0.5 text-lg" />
@@ -58,7 +59,7 @@
       <!-- Badge -->
       <div
         v-if="badge"
-        class="absolute left-3 top-3 rounded-lg px-2.5 py-1 text-[11px] font-bold text-white shadow-lg backdrop-blur-sm"
+        class="absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm"
         :class="badgeClass"
       >
         {{ badge }}
@@ -67,7 +68,7 @@
       <!-- Play Count (for playlists) -->
       <div
         v-if="playCount"
-        class="absolute right-3 top-3 flex items-center gap-1.5 rounded-lg bg-black/40 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-md"
+        class="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-black/65 px-2.5 py-1 text-[11px] font-semibold text-white"
       >
         <i class="ri-play-fill text-[10px]" />
         <span>{{ formatNumber(playCount) }}</span>
@@ -75,15 +76,15 @@
     </div>
 
     <!-- Info -->
-    <div class="mt-3 px-0.5">
+    <div class="mt-3 min-w-0 px-0.5">
       <h3
-        class="truncate text-base font-bold tracking-tight text-neutral-900 transition-colors duration-200 group-hover:text-primary dark:text-neutral-50 dark:group-hover:text-white"
+        class="truncate text-[15px] font-semibold leading-5 tracking-[-0.015em] text-neutral-900 transition-colors duration-200 group-hover:text-primary dark:text-neutral-50 dark:group-hover:text-white"
       >
         {{ title }}
       </h3>
       <p
         v-if="subtitle"
-        class="mt-1.5 truncate text-sm font-medium text-neutral-500 transition-colors duration-200 group-hover:text-neutral-600 dark:text-neutral-400 dark:group-hover:text-neutral-300"
+        class="mt-1 truncate text-[13px] leading-5 text-neutral-500 transition-colors duration-200 group-hover:text-neutral-600 dark:text-neutral-400 dark:group-hover:text-neutral-300"
       >
         {{ subtitle }}
       </p>
@@ -138,13 +139,13 @@ const displayTracks = computed(() => props.tracks.slice(0, 3));
 const badgeClass = computed(() => {
   switch (props.badgeType) {
     case 'new':
-      return 'bg-gradient-to-r from-orange-500 to-rose-500';
+      return 'bg-rose-600';
     case 'hot':
-      return 'bg-gradient-to-r from-rose-500 to-pink-500';
+      return 'bg-neutral-900/80';
     case 'recommend':
-      return 'bg-gradient-to-r from-primary to-blue-500';
+      return 'bg-primary';
     default:
-      return 'bg-gradient-to-r from-primary to-blue-500';
+      return 'bg-primary';
   }
 });
 
@@ -200,11 +201,13 @@ const extractColor = async () => {
 }
 
 .cover-art {
-  transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1);
+  backface-visibility: hidden;
+  image-rendering: auto;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (hover: hover) and (pointer: fine) {
   .home-list-card:hover .cover-art {
-    transform: scale(1.035);
+    transform: scale(1.015);
   }
 }
 @media (prefers-reduced-motion: reduce) {

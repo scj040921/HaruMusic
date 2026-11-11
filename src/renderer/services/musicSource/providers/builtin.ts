@@ -7,6 +7,7 @@
 import { parseFromGDMusic } from '@/api/gdmusic';
 import { getMusicUrl } from '@/api/music';
 import { parseFromCustomApi } from '@/api/parseFromCustomApi';
+import { resolveUnblockMusic } from '@/services/musicSource/transport';
 import { useSettingsStore } from '@/store';
 import type { SongResult } from '@/types/music';
 import type { PluginMediaSource } from '@/types/musicSourcePlugin';
@@ -106,9 +107,15 @@ export const customApiProvider: MusicSourceProvider = {
   resolve: async (song: SongResult, quality: string) => {
     const settingsStore = useSettingsStore();
     if (!settingsStore.setData.customApiPlugin) return null;
-    const result = await parseFromCustomApi(song.id as number, song, quality);
-    const url = extractLegacyUrl(result);
-    return url ? toMediaSource(url) : null;
+    const levels =
+      quality === 'auto' ? ['hires', 'lossless', 'exhigh', 'higher', 'standard'] : [quality];
+    for (const level of levels) {
+      const result = await parseFromCustomApi(song.id as number, song, level);
+      const url = extractLegacyUrl(result);
+      const media = url ? toMediaSource(url) : null;
+      if (media) return media;
+    }
+    return null;
   }
 };
 
@@ -157,7 +164,7 @@ const createUnblockProvider = (
   available: true,
   resolve: async (song: SongResult, _quality: string) => {
     const result = await Promise.race([
-      window.api.unblockMusic(song.id as number, { ...song }, [platform.key]),
+      resolveUnblockMusic(song.id as number, { ...song }, [platform.key]),
       new Promise((resolve) => setTimeout(() => resolve(null), UNBLOCK_TIMEOUT))
     ]);
     const url = extractLegacyUrl(result);

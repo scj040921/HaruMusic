@@ -1,6 +1,7 @@
 <template>
   <div class="home-container h-full w-full bg-white dark:bg-black transition-colors duration-500">
-    <n-scrollbar class="h-full">
+    <desktop-home v-if="isElectron || isAndroidApp" />
+    <n-scrollbar v-else class="h-full">
       <div class="home-content w-full pb-32 page-padding">
         <div class="home-heading">
           <div>
@@ -45,11 +46,14 @@ import { NScrollbar } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
+import { isAndroidApp, isElectron } from '@/utils';
+
 import HomeAlbumSection from './components/HomeAlbumSection.vue';
 import HomeArtists from './components/HomeArtists.vue';
 import HomeHero from './components/HomeHero.vue';
 import HomeNewSongs from './components/HomeNewSongs.vue';
 import HomePlaylistSection from './components/HomePlaylistSection.vue';
+import DesktopHome from './DesktopHome.vue';
 
 defineOptions({
   name: 'Home'
