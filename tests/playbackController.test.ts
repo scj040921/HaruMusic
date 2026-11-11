@@ -236,6 +236,30 @@ describe('playback recovery ownership (#769)', () => {
     expect(mocks.core.playMusic.id).toBe(local.id);
   });
 
+  it('does not let a late preloaded song replace a newer selection', async () => {
+    const { preloadService } = await import('@/services/preloadService');
+    const pending = deferred<HTMLAudioElement | undefined>();
+    const consume = vi.spyOn(preloadService, 'consumeSound');
+    consume.mockReturnValueOnce(pending.promise).mockResolvedValue(undefined);
+    const first = controller.playTrack(makeSong(1));
+    await vi.waitFor(() => expect(consume).toHaveBeenCalledTimes(1));
+    expect(await controller.playTrack(makeSong(2))).toBe(true);
+    const abandoned = { pause: vi.fn(), removeAttribute: vi.fn(), load: vi.fn() };
+    pending.resolve(abandoned as unknown as HTMLAudioElement);
+    expect(await first).toBe(false);
+    expect(mocks.audio.play).toHaveBeenCalledTimes(1);
+    expect(mocks.audio.play).toHaveBeenCalledWith(
+      'https://example.com/2.mp3',
+      expect.anything(),
+      true,
+      0,
+      undefined
+    );
+    expect(abandoned.pause).toHaveBeenCalledOnce();
+    expect(mocks.core.playMusic.id).toBe(2);
+    consume.mockRestore();
+  });
+
   it('discards a stale request without stopping the current track', async () => {
     const results = await Promise.all([
       controller.playTrack(makeSong(1)),

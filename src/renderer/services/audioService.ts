@@ -546,6 +546,10 @@ class AudioService {
       return Promise.reject(new Error('缺少必要参数: url和track'));
     }
 
+    const hadPendingLoad = Boolean(this.pendingLoadCleanup);
+    this.pendingLoadCleanup?.();
+
+    let adoptedPreloaded = false;
     if (
       _existingSound &&
       _existingSound !== this.audio &&
@@ -554,13 +558,16 @@ class AudioService {
       !_existingSound.error
     ) {
       this.adoptAudioElement(_existingSound);
+      adoptedPreloaded = true;
     }
 
     const currentSrc = this.audio.src;
     const isSameUrl =
-      currentSrc && currentSrc === url && !this.pendingLoadCleanup && !this.audio.error;
+      currentSrc &&
+      currentSrc === url &&
+      (!hadPendingLoad || adoptedPreloaded) &&
+      !this.audio.error;
 
-    this.pendingLoadCleanup?.();
     this.forceResetOperationLock();
     this.setOperationLock();
 

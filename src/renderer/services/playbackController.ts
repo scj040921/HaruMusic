@@ -102,7 +102,16 @@ const loadAndPlayAudio = async (
 
   // 优先切换到下一首已预热的媒体元素，未预热时继续沿用常规加载路径。
   console.log(`[playbackController] 开始播放: ${song.name}`);
+  const generation = getCurrentGeneration();
   const preloadedSound = await preloadService.consumeSound(song.id, song.playMusicUrl);
+  if (generation !== getCurrentGeneration()) {
+    if (preloadedSound) {
+      preloadedSound.pause();
+      preloadedSound.removeAttribute('src');
+      preloadedSound.load();
+    }
+    throw new DOMException('Playback cancelled', 'AbortError');
+  }
   await audioService.play(song.playMusicUrl, song, shouldPlay, startTime, preloadedSound);
 };
 

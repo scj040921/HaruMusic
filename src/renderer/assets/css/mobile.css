@@ -1,5 +1,6 @@
 /* 移动端 message 容器：移到底部 */
-.mobile .n-message-container {
+.mobile .n-message-container,
+body:has(.android-native) .n-message-container {
   top: auto !important;
   bottom: calc(200px + var(--safe-area-inset-bottom, 0px)) !important;
   left: 50% !important;
@@ -8,7 +9,7 @@
   min-width: 70vw !important;
   max-width: 90vw !important;
   padding: 0 !important;
-  z-index: 99999999999 !important;
+  z-index: 2147483647 !important;
 }
 
 /* 移动端 message 项目样式 */

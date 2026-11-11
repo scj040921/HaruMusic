@@ -233,9 +233,11 @@ async function start() {
     init.signal = controller.signal;
     try {
       const upstream = await fetch(target, init);
-      const rawBody = method === 'HEAD' ? '' : await readResponseText(upstream);
-      let parsedBody = rawBody;
       const contentType = upstream.headers.get('content-type') || '';
+      const mediaProbe = options.responseType === 'media-probe' && /audio\/|octet-stream|video\/|mpeg/i.test(contentType);
+      if (mediaProbe && upstream.body) await upstream.body.cancel();
+      const rawBody = method === 'HEAD' || mediaProbe ? '' : await readResponseText(upstream);
+      let parsedBody = rawBody;
       if (contentType.includes('application/json') || /^[\s]*[\[{]/.test(rawBody)) {
         try { parsedBody = JSON.parse(rawBody); } catch { /* Preserve a non-JSON response. */ }
       }

@@ -187,7 +187,7 @@
   --text-secondary: #77777c;
   --accent: #fa2d48;
   --divider: #d9d9de;
-  --surface-glass: rgba(255, 255, 255, 0.78);
+  --surface-glass: rgba(255, 255, 255, 0.62);
   color: var(--text-primary);
   background: var(--canvas);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -201,7 +201,7 @@ html.dark .android-native {
   --text-secondary: #a1a1a6;
   --accent: #ff5268;
   --divider: #38383a;
-  --surface-glass: rgba(28, 28, 30, 0.8);
+  --surface-glass: rgba(28, 28, 30, 0.65);
 }
 
 .android-native .mobile-layout {
@@ -247,16 +247,20 @@ html.dark .android-native {
 
 .android-native .mobile-bottom-menu {
   position: fixed;
-  left: 16px;
-  right: 16px;
+  left: 50%;
+  right: auto;
+  width: min(520px, calc(100vw - 32px));
+  transform: translateX(-50%);
   bottom: calc(12px + var(--safe-area-inset-bottom, 0px));
   z-index: 11000;
-  border-radius: 24px;
-  overflow: hidden;
+  border-radius: 32px;
+  overflow: visible;
   background: var(--surface-glass);
   border: 1px solid color-mix(in srgb, var(--divider) 74%, transparent);
   padding-bottom: 0;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.13);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.18),
+    0 1px 0 rgba(255, 255, 255, 0.55) inset;
   backdrop-filter: blur(22px) saturate(1.45);
   -webkit-backdrop-filter: blur(22px) saturate(1.45);
 }
@@ -271,10 +275,10 @@ html.dark .android-native {
 }
 
 .android-native .mobile-content.has-bottom-menu {
-  padding-bottom: calc(88px + var(--safe-area-inset-bottom, 0px));
+  padding-bottom: 0;
 }
 .android-native .mobile-content.has-bottom-menu.has-player {
-  padding-bottom: calc(152px + var(--safe-area-inset-bottom, 0px));
+  padding-bottom: 0;
 }
 .android-native .mobile-header .header-btn {
   background: var(--surface-glass);
@@ -286,9 +290,13 @@ html.dark .android-native {
 
 .android-native .android-native-player.play-bar-mini {
   bottom: calc(16px + var(--safe-area-inset-bottom, 0px));
-  width: 100%;
+  left: 50%;
+  width: min(500px, calc(100vw - 32px));
+  translate: -50% 0;
   height: 56px;
   pointer-events: none;
+  background: transparent;
+  animation: none !important;
 }
 
 .android-liquidglass .android-native-player.play-bar-mini.is-menu-show {
@@ -297,13 +305,13 @@ html.dark .android-native {
 
 .android-native .android-native-player .mobile-mini-controls {
   pointer-events: auto;
-  width: calc(100% - 32px);
+  width: 100%;
   height: 56px;
-  margin: 0 16px;
+  margin: 0;
   padding: 6px 8px 6px 6px;
   gap: 8px;
   border: 1px solid color-mix(in srgb, var(--divider) 70%, transparent);
-  border-radius: 20px;
+  border-radius: 28px;
   background: var(--surface-glass);
   box-shadow:
     0 10px 30px rgba(0, 0, 0, 0.12),
@@ -440,6 +448,20 @@ html.dark .android-native {
 .android-native .android-native-player .mini-list-icon:active {
   color: var(--accent);
   transform: scale(0.9);
+}
+
+.android-native .mobile-header .header-btn,
+.android-native .mobile-bottom-menu .app-menu-item-link,
+.android-native .android-native-player .mini-control-btn.play,
+.android-native .android-native-player .mini-list-icon {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.android-native .mobile-header .header-btn:focus-visible,
+.android-native .android-native-player button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 html.dark .android-native .android-native-player .mobile-mini-controls {

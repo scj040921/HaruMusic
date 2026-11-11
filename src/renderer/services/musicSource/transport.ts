@@ -10,6 +10,7 @@ export type MusicSourceHttpOptions = {
   form?: Record<string, string>;
   formData?: Record<string, string>;
   timeout?: number;
+  responseType?: 'media-probe';
 };
 
 export type MusicSourceHttpResponse = {

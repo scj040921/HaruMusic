@@ -259,6 +259,24 @@ describe('audio loading ownership (#769)', () => {
     expect(preloaded.play).toHaveBeenCalledOnce();
   });
 
+  it('cancels the old load before adopting a prebuffered element', async () => {
+    const oldSong = makeSong(1, 'https://example.com/old.mp3');
+    const nextSong = makeSong(2, 'https://example.com/next.mp3');
+    let cancelled: Error | undefined;
+    void service.play(oldSong.playMusicUrl!, oldSong).catch((error) => {
+      cancelled = error;
+    });
+    const preloaded = new TestAudio();
+    preloaded.src = nextSong.playMusicUrl!;
+    preloaded.readyState = 2;
+    await service.play(nextSong.playMusicUrl!, nextSong, true, 0, preloaded as any);
+    audio.ready();
+    await Promise.resolve();
+    expect(cancelled?.name).toBe('AbortError');
+    expect(preloaded.play).toHaveBeenCalledOnce();
+    expect(service.getCurrentTrack()?.id).toBe(nextSong.id);
+  });
+
   it('clamps seek targets and ignores non-finite values', async () => {
     const song = makeSong(1, 'https://example.com/song.mp3');
     const playback = service.play(song.playMusicUrl!, song);

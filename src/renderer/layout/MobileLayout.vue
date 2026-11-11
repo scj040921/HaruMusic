@@ -136,37 +136,30 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
 }
 
 .android-liquidglass .mobile-content.has-bottom-menu {
-  padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + 88px);
+  scroll-padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + 88px);
 }
 
 .android-liquidglass .mobile-content.has-bottom-menu.has-player {
-  padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + 156px);
+  scroll-padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + 156px);
 }
 
 .android-liquidglass .mobile-content.has-player:not(.has-bottom-menu) {
-  padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + 80px);
+  scroll-padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + 80px);
 }
 
-.android-liquidglass .mobile-bottom-menu {
-  position: fixed;
-  z-index: 10001;
-  left: 50%;
-  bottom: calc(var(--safe-area-inset-bottom, 0px) + 12px);
-  width: min(520px, calc(100vw - 32px));
-  padding: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.58);
-  border-radius: 26px;
-  background: rgba(255, 255, 255, 0.76);
-  box-shadow: 0 12px 38px rgba(18, 24, 22, 0.16);
-  backdrop-filter: blur(28px) saturate(1.7);
-  -webkit-backdrop-filter: blur(28px) saturate(1.7);
-  transform: translateX(-50%);
+.android-liquidglass .mobile-content::after {
+  content: '';
+  display: block;
+  height: calc(var(--safe-area-inset-bottom, 0px) + 88px);
+  pointer-events: none;
 }
 
-:global(.dark) .android-liquidglass .mobile-bottom-menu {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: rgba(28, 28, 30, 0.78);
-  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.38);
+.android-liquidglass .mobile-content.has-bottom-menu.has-player::after {
+  height: calc(var(--safe-area-inset-bottom, 0px) + 156px);
+}
+
+.android-liquidglass .mobile-content:not(.has-bottom-menu):not(.has-player)::after {
+  display: none;
 }
 
 .android-liquidglass .mobile-menu :deep(.app-menu) {

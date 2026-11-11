@@ -17,6 +17,11 @@ const bridgeShimPath = join(temporaryDir, 'bridge-shim.cjs');
 const serverPath = join(projectDir, 'server.cjs');
 const mockAudio = Buffer.from('0123456789');
 const mockUpstream = createServer((request, response) => {
+  if (request.url === '/audio-no-range') {
+    response.writeHead(200, { 'Content-Type': 'audio/mpeg' });
+    response.end(Buffer.alloc(9 * 1024 * 1024));
+    return;
+  }
   if (request.url === '/source.js') {
     response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
     response.end('module.exports = { platform: "smoke" };');
@@ -131,6 +136,23 @@ try {
   assert.equal(fetchedPlugin.status, 200);
   assert.equal(fetchedPlugin.headers.get('access-control-allow-origin'), origin);
   assert.match((await fetchedPlugin.json()).body, /platform: "smoke"/);
+
+  // Some hosts ignore Range and return a whole track. A probe must inspect
+  // the response headers without buffering the entire audio file as text.
+  const mediaProbe = await fetch(`http://127.0.0.1:${gatewayPort}/__http`, {
+    method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: `http://127.0.0.1:${mockPort}/audio-no-range`,
+      options: { method: 'GET', headers: { Range: 'bytes=0-8191' }, responseType: 'media-probe' },
+      requestId: 'smoke-media-probe'
+    })
+  });
+  assert.equal(mediaProbe.status, 200);
+  const probeResult = await mediaProbe.json();
+  assert.equal(probeResult.statusCode, 200);
+  assert.equal(probeResult.headers['content-type'], 'audio/mpeg');
+  assert.equal(probeResult.body, '');
 
   const mediaDescriptor = encodeURIComponent(
     JSON.stringify({ url: `http://127.0.0.1:${mockPort}/audio`, headers: {} })
