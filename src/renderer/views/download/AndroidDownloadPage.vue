@@ -228,7 +228,7 @@ header p,
   min-height: 48px;
   border-radius: 999px;
   padding: 12px 24px;
-  background: color-mix(in srgb, var(--canvas, #fff) 72%, transparent);
+  background: color-mix(in srgb, var(--canvas, #fff) 28%, transparent);
   border: 1px solid #8882;
   backdrop-filter: blur(20px) saturate(1.5);
   box-shadow:

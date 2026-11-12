@@ -344,7 +344,7 @@ watch(
     padding-right: 12px;
     border: 1px solid rgba(255, 255, 255, 0.62);
     border-radius: 22px;
-    background: rgba(255, 255, 255, 0.76);
+    background: var(--surface-glass);
     box-shadow: 0 12px 34px rgba(18, 24, 22, 0.18);
     backdrop-filter: blur(28px) saturate(1.7);
     -webkit-backdrop-filter: blur(28px) saturate(1.7);
@@ -391,7 +391,7 @@ watch(
 
   :global(.dark) &.android-native-player .mobile-mini-controls {
     border-color: rgba(255, 255, 255, 0.16);
-    background: rgba(28, 28, 30, 0.8);
+    background: var(--surface-glass);
     box-shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
   }
 }

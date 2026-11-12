@@ -299,7 +299,6 @@
       v-model="musicFullVisible"
       :background="background"
       :liquid="liquid"
-      :salt="salt"
     />
   </div>
 </template>
@@ -333,9 +332,8 @@ import { audioService } from '@/services/audioService';
 import { usePlayerStore } from '@/store/modules/player';
 import { useSettingsStore } from '@/store/modules/settings';
 import { getImgUrl, isElectron, isMobile, secondToMinute, setAnimationClass } from '@/utils';
-import { readLyricConfig } from '@/utils/lyricConfig';
 
-defineProps<{ liquid?: boolean; salt?: boolean }>();
+defineProps<{ liquid?: boolean }>();
 
 const playerStore = usePlayerStore();
 const settingsStore = useSettingsStore();
@@ -458,9 +456,6 @@ const handleBarClick = (event: MouseEvent) => {
 
 const openLyricWindow = async () => {
   await openLyric();
-  if (isElectron && readLyricConfig().saltStatusLyrics) {
-    window.electron.ipcRenderer.send('top-lyric', true);
-  }
 };
 
 const { navigateToArtist } = useArtist();

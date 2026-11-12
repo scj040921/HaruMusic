@@ -267,7 +267,7 @@ const handleDeleteSong = (song: SongResult) => {
 <style lang="scss" scoped>
 .fixed-overlay {
   @apply fixed inset-0 z-[999999];
-  pointer-events: auto; // 允许点击关闭
+  pointer-events: auto; /* 允许点击关闭*/
   cursor: default;
 }
 
@@ -275,18 +275,18 @@ const handleDeleteSong = (song: SongResult) => {
   @apply fixed right-0 z-[9999999] rounded-l-xl overflow-hidden;
   width: 350px;
   height: 70vh;
-  top: 15vh; // 距离顶部15%
-  animation-duration: 0.4s !important; // 动画持续时间
+  top: 15vh; /* 距离顶部15%*/
+  animation-duration: 0.4s !important; /* 动画持续时间*/
 
   @apply bg-light dark:bg-dark shadow-2xl dark:border dark:border-gray-700;
 
   &-header {
     @apply flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-gray-900;
     backdrop-filter: blur(10px);
-    background-color: rgba(255, 255, 255, 0.7);
+    background-color: var(--surface-glass);
 
     .dark & {
-      background-color: rgba(18, 18, 18, 0.7);
+      background-color: var(--surface-glass);
     }
 
     .title {
@@ -353,46 +353,6 @@ const handleDeleteSong = (song: SongResult) => {
     }
   }
 }
-:global(.salt-mode .playlist-panel) {
-  --accent: var(--highlight);
-  border-radius: var(--corner, 16px);
-  border: 0;
-  background: var(--background, #f5f1e9);
-  box-shadow: 0 18px 56px #0002;
-  backdrop-filter: none;
-}
-:global(.salt-mode .playlist-panel-header) {
-  border-color: var(--stroke, #d7cec1);
-  background: var(--background, #f5f1e9);
-  backdrop-filter: none;
-}
-:global(.salt-mode .music-play-list-content) {
-  min-height: 54px;
-  border-color: var(--stroke, #d7cec1);
-  background: transparent;
-  transition:
-    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 180ms;
-}
-:global(.salt-mode .music-play-list-content.queue-dragging) {
-  z-index: 2;
-  transform: scale(1.025) translateY(-2px);
-  opacity: 0.92;
-  box-shadow: 0 10px 24px #0002;
-}
-:global(.salt-mode .queue-song img) {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--corner, 16px);
-}
-:global(.salt-mode .queue-song-copy .queue-current),
-:global(.salt-mode .queue-playing) {
-  color: var(--highlight);
-  background: transparent;
-}
-:global(.salt-mode .queue-order button:focus-visible) {
-  outline-color: var(--highlight);
-}
 .queue-song {
   display: flex;
   align-items: center;
@@ -446,14 +406,14 @@ const handleDeleteSong = (song: SongResult) => {
   outline: 2px solid var(--accent, #fa2d48);
 }
 
-// 移动端适配
+/* 移动端适配*/
 @media (max-width: 768px) {
   .playlist-panel {
     position: fixed;
     width: 100%;
     height: 80vh;
     top: auto;
-    bottom: 0; // 移动端底部留出导航栏高度
+    bottom: 0; /* 移动端底部留出导航栏高度*/
     border-radius: 30px 30px 0 0;
     border-left: none;
     border-top: 1px solid theme('colors.gray.200');

@@ -1,7 +1,6 @@
 <template>
   <div
-    class="w-80 rounded-2xl bg-black/30 backdrop-blur-3xl border border-white/10 shadow-2xl overflow-hidden"
-    :class="{ 'salt-settings': salt }"
+    class="w-80 rounded-2xl bg-black/20 backdrop-blur-3xl border border-white/10 shadow-2xl overflow-hidden"
   >
     <!-- 标题栏 -->
     <div class="px-6 py-4 border-b border-white/5">
@@ -396,7 +395,7 @@ import { DEFAULT_LYRIC_CONFIG, LyricConfig } from '@/types/lyric';
 import { readLyricConfig, writeLyricConfig } from '@/utils/lyricConfig';
 
 const { t } = useI18n();
-const props = defineProps<{ modelValue?: LyricConfig; salt?: boolean }>();
+const props = defineProps<{ modelValue?: LyricConfig }>();
 const emit = defineEmits(['themeChange', 'update:modelValue']);
 const localConfig = ref<LyricConfig>({ ...DEFAULT_LYRIC_CONFIG });
 const config = computed({
@@ -536,57 +535,6 @@ defineExpose({
 
 .setting-item:hover {
   background: rgba(255, 255, 255, 0.06);
-}
-
-.salt-settings {
-  color: var(--text);
-  background: var(--popup) !important;
-  border: 1px solid var(--stroke) !important;
-  border-radius: var(--corner) !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-}
-.salt-settings h2,
-.salt-settings label,
-.salt-settings .setting-item {
-  color: var(--text);
-}
-.salt-settings .border-b {
-  border-color: var(--stroke) !important;
-}
-.salt-settings .setting-item,
-.salt-settings .slider-group,
-.salt-settings .select-group {
-  border: 0;
-  border-bottom: 1px solid var(--stroke);
-  border-radius: 0;
-  color: var(--text);
-  background: transparent;
-  box-shadow: none;
-}
-.salt-settings .setting-item:hover {
-  background: var(--sub-background);
-}
-.salt-settings .slider-label,
-.salt-settings .radio-label,
-.salt-settings .radio-item,
-.salt-settings .color-picker-label {
-  color: var(--text-sub);
-}
-.salt-settings button[class*='bg-emerald-500'] {
-  color: var(--on-highlight) !important;
-  background: var(--highlight) !important;
-  box-shadow: none !important;
-}
-.salt-settings input[type='checkbox']:checked,
-.salt-settings .slider-emerald::-webkit-slider-thumb {
-  background: var(--highlight);
-}
-.salt-settings .select-input {
-  color: var(--text);
-  background: var(--sub-background);
-  border-color: var(--stroke);
-  border-radius: var(--corner);
 }
 
 /* 切换开关 */

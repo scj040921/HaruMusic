@@ -30,19 +30,6 @@ export interface LyricConfig {
   imageBlur: number; // 图片模糊度 (0-20px)
   imageBrightness: number; // 图片明暗度 (0-200%, 100为正常)
   customCss?: string; // 自定义 CSS 样式
-  saltPlayerTheme: 'system' | 'light' | 'dark';
-  saltSplitTheme: boolean;
-  saltHomeHighlight: string;
-  saltPlayerHighlight: string;
-  saltSampleWallpaper: boolean;
-  saltDynamicFlow: boolean;
-  saltKaraokePolicy: 'current' | 'expanded' | 'always';
-  saltKaraokeFps: number;
-  saltKaraokeOpacity: number;
-  saltImmersiveOnHold: boolean;
-  saltDesktopLyrics: boolean;
-  saltStatusLyrics: boolean;
-  saltKeepAwake: boolean;
 }
 
 export const DEFAULT_LYRIC_CONFIG: LyricConfig = {
@@ -77,20 +64,7 @@ export const DEFAULT_LYRIC_CONFIG: LyricConfig = {
   backgroundImage: undefined,
   imageBlur: 0,
   imageBrightness: 100,
-  customCss: undefined,
-  saltPlayerTheme: 'system',
-  saltSplitTheme: false,
-  saltHomeHighlight: '#7a4b2a',
-  saltPlayerHighlight: '#7a4b2a',
-  saltSampleWallpaper: true,
-  saltDynamicFlow: true,
-  saltKaraokePolicy: 'current',
-  saltKaraokeFps: 30,
-  saltKaraokeOpacity: 48,
-  saltImmersiveOnHold: true,
-  saltDesktopLyrics: false,
-  saltStatusLyrics: false,
-  saltKeepAwake: false
+  customCss: undefined
 };
 
 export interface ILyric {

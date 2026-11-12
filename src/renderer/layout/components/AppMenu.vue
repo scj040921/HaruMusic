@@ -24,11 +24,21 @@
           <span v-if="settingsStore.setData.isMenuExpanded" class="haru-name">HaruMusic</span>
         </button>
       </div>
-      <div ref="menuListRef" class="app-menu-list">
+      <div
+        ref="menuListRef"
+        class="app-menu-list"
+        @pointerdown="startSliderDrag"
+        @pointermove="moveSliderDrag"
+        @pointerup="finishSliderDrag"
+        @pointercancel="cancelSliderDrag"
+        @lostpointercapture="handleLostSliderCapture"
+        @click.capture="guardSliderClick"
+        @dragstart.prevent
+      >
         <span
           v-if="isAndroidApp && isMobile"
           class="liquid-tab-slider"
-          :class="{ 'is-swapping': sliderSwapping }"
+          :class="{ 'is-dragging': sliderDragging }"
           :style="sliderStyle"
           aria-hidden="true"
         />
@@ -40,6 +50,7 @@
           >
             <template #trigger>
               <router-link
+                :draggable="false"
                 class="app-menu-item-link"
                 :class="{ 'is-active': isChecked(item) }"
                 :aria-label="t(item.meta.title)"
@@ -69,10 +80,11 @@
 <script lang="ts" setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import { useSettingsStore } from '@/store';
 import { isAndroidApp, isMobile } from '@/utils';
+import { nearestTab, stepLiquidSpring } from '@/utils/liquidSpring';
 
 const props = defineProps({
   size: {
@@ -94,58 +106,232 @@ const props = defineProps({
 });
 
 const route = useRoute();
+const router = useRouter();
 const path = ref(route.path);
 const settingsStore = useSettingsStore();
 const menuListRef = ref<HTMLElement | null>(null);
-const sliderSwapping = ref(false);
-const sliderStyle = ref<Record<string, string>>({
-  opacity: '0',
-  left: '0px',
-  top: '0px',
-  width: '0px',
-  height: '0px'
-});
+const sliderDragging = ref(false);
+const sliderStyle = ref<Record<string, string>>({ opacity: '0' });
 let sliderFrame = 0;
 let menuResizeObserver: ResizeObserver | null = null;
-const handleSliderResize = () => updateLiquidSlider();
+const handleSliderResize = () => {
+  cancelSliderDrag();
+  updateLiquidSlider();
+};
 const visibleMenus = computed(() =>
   isAndroidApp && isMobile.value
     ? props.menus.filter((item: any) => item.path !== '/album')
     : props.menus
 );
+const lens = { x: 0, width: 0, stretch: 0, vx: 0, vw: 0, vs: 0 };
+let target = { x: 0, width: 0, stretch: 0 };
+let drag: {
+  id: number;
+  start: number;
+  y: number;
+  origin: number;
+  lastX: number;
+  lastTime: number;
+  velocity: number;
+  moved: boolean;
+} | null = null;
+let suppressClick = false;
+let initialized = false;
+let lensTop = 0;
+let lensHeight = 0;
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const tabRects = () => {
+  const list = menuListRef.value;
+  if (!list) return [];
+  const bounds = list.getBoundingClientRect();
+  return [...list.querySelectorAll<HTMLElement>('.app-menu-item-link')].map((link) => {
+    const rect = link.getBoundingClientRect();
+    return {
+      x: rect.left - bounds.left,
+      width: rect.width,
+      top: rect.top - bounds.top,
+      height: rect.height
+    };
+  });
+};
+function paintLens() {
+  sliderStyle.value = {
+    opacity: '1',
+    left: '0px',
+    top: lensTop + 'px',
+    width: lens.width + 'px',
+    height: lensHeight + 'px',
+    transform:
+      'translate3d(' +
+      lens.x +
+      'px,0,0) scale(' +
+      (1 + lens.stretch) +
+      ',' +
+      (1 - Math.abs(lens.stretch) * 0.48) +
+      ')',
+    borderRadius: 24 - Math.min(8, Math.abs(lens.stretch) * 40) + 'px'
+  };
+}
+function springLens() {
+  cancelAnimationFrame(sliderFrame);
+  if (reducedMotion()) {
+    Object.assign(lens, target, { vx: 0, vw: 0, vs: 0 });
+    paintLens();
+    return;
+  }
+  let previous = performance.now();
+  const tick = (now: number) => {
+    const dt = (now - previous) / 1000;
+    previous = now;
+    const x = stepLiquidSpring(lens.x, lens.vx, target.x, dt);
+    const w = stepLiquidSpring(lens.width, lens.vw, target.width, dt);
+    const shape = stepLiquidSpring(lens.stretch, lens.vs, target.stretch, dt);
+    Object.assign(lens, {
+      x: x.position,
+      vx: x.velocity,
+      width: w.position,
+      vw: w.velocity,
+      stretch: shape.position,
+      vs: shape.velocity
+    });
+    paintLens();
+    if (
+      Math.abs(lens.x - target.x) +
+        Math.abs(lens.width - target.width) +
+        Math.abs(lens.vx) +
+        Math.abs(lens.vw) +
+        Math.abs(lens.stretch) * 100 +
+        Math.abs(lens.vs) * 100 >
+      0.08
+    )
+      sliderFrame = requestAnimationFrame(tick);
+    else {
+      Object.assign(lens, target, { vx: 0, vw: 0, vs: 0 });
+      paintLens();
+      sliderFrame = 0;
+    }
+  };
+  sliderFrame = requestAnimationFrame(tick);
+}
+function updateLiquidSlider(animate = false) {
+  if (!isAndroidApp || !isMobile.value || drag) return;
+  const index = visibleMenus.value.findIndex((item: any) => item.path === route.path);
+  const rect = tabRects()[index];
+  if (!rect || !rect.width) {
+    sliderStyle.value = { opacity: '0' };
+    return;
+  }
+  lensTop = rect.top;
+  lensHeight = rect.height;
+  target = { x: rect.x, width: rect.width, stretch: 0 };
+  if (!initialized || !animate) {
+    cancelAnimationFrame(sliderFrame);
+    Object.assign(lens, target, { vx: 0, vw: 0, vs: 0 });
+    initialized = true;
+    paintLens();
+  } else springLens();
+}
 watch(
   () => route.path,
-  async (newParams) => {
-    path.value = newParams;
+  async (value) => {
+    path.value = value;
+    if (drag) cancelSliderDrag();
     await nextTick();
     updateLiquidSlider(true);
   }
 );
-
-function updateLiquidSlider(animate = false) {
-  if (!isAndroidApp || !isMobile.value || !menuListRef.value) return;
-  const list = menuListRef.value;
-  const active = list.querySelector<HTMLElement>('.app-menu-item-link.is-active');
-  if (!active) {
-    sliderStyle.value = { ...sliderStyle.value, opacity: '0' };
+function startSliderDrag(event: PointerEvent) {
+  if (!isAndroidApp || !isMobile.value || !event.isPrimary || event.button !== 0) return;
+  suppressClick = false;
+  drag = {
+    id: event.pointerId,
+    start: event.clientX,
+    y: event.clientY,
+    origin: lens.x,
+    lastX: event.clientX,
+    lastTime: event.timeStamp,
+    velocity: 0,
+    moved: false
+  };
+}
+function moveSliderDrag(event: PointerEvent) {
+  if (!drag || drag.id !== event.pointerId) return;
+  const dx = event.clientX - drag.start;
+  if (
+    !drag.moved &&
+    Math.abs(event.clientY - drag.y) > Math.abs(dx) &&
+    Math.abs(event.clientY - drag.y) > 8
+  ) {
+    cancelSliderDrag();
     return;
   }
-  const listRect = list.getBoundingClientRect();
-  const activeRect = active.getBoundingClientRect();
-  if (!activeRect.width || !activeRect.height) return;
-
-  if (animate) {
-    sliderSwapping.value = true;
+  if (!drag.moved && Math.abs(dx) < 8) return;
+  if (!drag.moved) {
+    drag.moved = true;
+    sliderDragging.value = true;
+    menuListRef.value?.setPointerCapture(event.pointerId);
     cancelAnimationFrame(sliderFrame);
   }
-  sliderStyle.value = {
-    opacity: '1',
-    left: `${activeRect.left - listRect.left}px`,
-    top: `${activeRect.top - listRect.top}px`,
-    width: `${activeRect.width}px`,
-    height: `${activeRect.height}px`
-  };
-  if (animate) sliderFrame = requestAnimationFrame(() => (sliderSwapping.value = false));
+  event.preventDefault();
+  const elapsed = Math.max(8, event.timeStamp - drag.lastTime);
+  drag.velocity = (event.clientX - drag.lastX) / elapsed;
+  drag.lastX = event.clientX;
+  drag.lastTime = event.timeStamp;
+  const rects = tabRects();
+  const min = rects[0]?.x || 0,
+    max = rects.at(-1)?.x || min;
+  const raw = drag.origin + dx;
+  lens.x = raw < min ? min + (raw - min) * 0.18 : raw > max ? max + (raw - max) * 0.18 : raw;
+  lens.stretch = reducedMotion()
+    ? 0
+    : Math.min(0.22, Math.abs(drag.velocity) * 0.065 + Math.abs(dx) * 0.0003);
+  lens.vx = Math.max(-900, Math.min(900, drag.velocity * 600));
+  lens.vs = 0;
+  paintLens();
+}
+function finishSliderDrag(event: PointerEvent) {
+  if (!drag || drag.id !== event.pointerId) return;
+  const moved = drag.moved;
+  drag = null;
+  sliderDragging.value = false;
+  if (!moved) return;
+  suppressClick = true;
+  const rects = tabRects();
+  const index = nearestTab(
+    lens.x + lens.width / 2,
+    rects.map((r) => r.x + r.width / 2)
+  );
+  const rect = rects[index];
+  if (rect) {
+    target = { x: rect.x, width: rect.width, stretch: 0 };
+    springLens();
+    void router.push(visibleMenus.value[index].path);
+  }
+  if (menuListRef.value?.hasPointerCapture(event.pointerId))
+    menuListRef.value.releasePointerCapture(event.pointerId);
+}
+function cancelSliderDrag() {
+  const id = drag?.id;
+  const moved = drag?.moved;
+  drag = null;
+  sliderDragging.value = false;
+  if (moved) {
+    suppressClick = true;
+    updateLiquidSlider(true);
+  }
+  if (id !== undefined && menuListRef.value?.hasPointerCapture(id))
+    menuListRef.value.releasePointerCapture(id);
+}
+function handleLostSliderCapture(event: PointerEvent) {
+  // Touch starts with implicit capture on the icon/link. Transferring capture
+  // to the list emits a bubbling loss on that child; it is not a cancellation.
+  if (event.target === menuListRef.value && drag?.id === event.pointerId) cancelSliderDrag();
+}
+function guardSliderClick(event: MouseEvent) {
+  if (!suppressClick || event.detail === 0) return;
+  suppressClick = false;
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 onMounted(async () => {
@@ -345,6 +531,9 @@ const toggleMenu = () => {
   padding: 0;
 
   .app-menu-list {
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
     display: flex;
     justify-content: space-around;
     align-items: stretch;
@@ -415,8 +604,8 @@ const toggleMenu = () => {
   border: 1px solid rgba(255, 255, 255, 0.56);
   border-radius: 22px;
   background:
-    radial-gradient(ellipse at 24% 10%, rgba(255, 255, 255, 0.68), transparent 62%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.12));
+    radial-gradient(ellipse at 24% 10%, rgba(255, 255, 255, 0.22), transparent 62%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04));
   box-shadow:
     0 4px 14px rgba(80, 72, 70, 0.1),
     0 1px 0 rgba(255, 255, 255, 0.72) inset,
@@ -425,24 +614,18 @@ const toggleMenu = () => {
   -webkit-backdrop-filter: blur(18px) saturate(1.55);
   pointer-events: none;
   opacity: 0;
-  transition:
-    left 480ms cubic-bezier(0.2, 1.28, 0.3, 1),
-    top 480ms cubic-bezier(0.2, 1.28, 0.3, 1),
-    width 480ms cubic-bezier(0.2, 1.28, 0.3, 1),
-    height 360ms cubic-bezier(0.2, 1.28, 0.3, 1),
-    opacity 140ms ease,
-    transform 360ms cubic-bezier(0.2, 1.28, 0.3, 1);
+  will-change: transform;
 }
 
-.app-menu.android-hig-tabs .liquid-tab-slider.is-swapping {
-  transform: scaleX(0.84) scaleY(0.92);
+.app-menu.android-hig-tabs .liquid-tab-slider.is-dragging {
+  backdrop-filter: blur(12px) saturate(1.65);
 }
 
 :global(.dark) .app-menu.android-hig-tabs .liquid-tab-slider {
   border-color: rgba(255, 255, 255, 0.2);
   background:
     radial-gradient(ellipse at 24% 10%, rgba(255, 255, 255, 0.25), transparent 62%),
-    linear-gradient(145deg, rgba(92, 92, 98, 0.58), rgba(40, 40, 44, 0.4));
+    linear-gradient(145deg, rgba(92, 92, 98, 0.2), rgba(40, 40, 44, 0.12));
   box-shadow:
     0 5px 16px rgba(0, 0, 0, 0.22),
     0 1px 0 rgba(255, 255, 255, 0.2) inset;

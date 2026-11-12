@@ -197,7 +197,7 @@
   --space-16: 16px;
   --space-24: 24px;
   --space-32: 32px;
-  --surface-glass: rgba(255, 255, 255, 0.76);
+  --surface-glass: rgba(255, 255, 255, 0.3);
 }
 .dark,
 :root:has(.dark) {
@@ -207,7 +207,7 @@
   --text-secondary: #a1a1a6;
   --accent: #ff5268;
   --divider: #38383a;
-  --surface-glass: rgba(28, 28, 30, 0.78);
+  --surface-glass: rgba(28, 28, 30, 0.36);
 }
 
 :root {
@@ -259,7 +259,7 @@
   --text-secondary: #77777c;
   --accent: #fa2d48;
   --divider: #d9d9de;
-  --surface-glass: rgba(255, 255, 255, 0.62);
+  --surface-glass: rgba(255, 255, 255, 0.26);
   color: var(--text-primary);
   background: var(--canvas);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -273,7 +273,7 @@ html.dark .android-native {
   --text-secondary: #a1a1a6;
   --accent: #ff5268;
   --divider: #38383a;
-  --surface-glass: rgba(28, 28, 30, 0.65);
+  --surface-glass: rgba(28, 28, 30, 0.32);
 }
 
 .android-native .mobile-layout {
@@ -303,13 +303,12 @@ html.dark .android-native {
 
 .android-native .mobile-content {
   position: absolute;
-  inset: calc(var(--safe-area-inset-top, 0px) + 72px) 0 0;
+  inset: 0;
   width: 100%;
   height: auto !important;
   min-height: 0;
   flex: none;
-  /* Reserve the toolbar once at layout level. Nested scrollbars are clipped
-     below it, so scrolled covers and headings cannot pass behind the controls. */
+  /* Full-height viewport: only individual floating controls own glass surfaces. */
   padding-top: 0;
   padding-bottom: 0 !important;
 }
@@ -333,11 +332,11 @@ html.dark .android-native {
 .android-native .mobile-layout .mobile-bottom-menu,
 .android-native .mobile-layout .android-native-player .mobile-mini-controls {
   background:
-    linear-gradient(145deg, rgb(255 255 255 / 30%), rgb(255 255 255 / 8%)), var(--surface-glass);
-  border-color: rgb(255 255 255 / 58%);
+    linear-gradient(145deg, rgb(255 255 255 / 10%), rgb(255 255 255 / 2%)), var(--surface-glass);
+  border-color: rgb(255 255 255 / 32%);
   box-shadow:
-    0 16px 32px rgb(0 0 0 / 14%),
-    0 2px 3px rgb(255 255 255 / 85%) inset,
+    0 8px 24px rgb(0 0 0 / 9%),
+    0 1px 2px rgb(255 255 255 / 32%) inset,
     0 -2px 4px rgb(0 0 0 / 9%) inset;
 }
 
@@ -714,4 +713,52 @@ html.dark .android-native .android-native-player .mobile-mini-controls {
 
 .android-native .mobile-layout.player-expanded .mobile-content {
   inset: 0;
+}
+
+/* Insets scroll away with the page; no full-width top/bottom scrim or spacer. */
+.android-native .mobile-content {
+  --floating-bottom-space: 24px;
+  background: transparent;
+}
+.android-native .mobile-content.has-bottom-menu {
+  --floating-bottom-space: calc(96px + var(--safe-area-inset-bottom, 0px));
+}
+.android-native .mobile-content.has-player {
+  --floating-bottom-space: calc(88px + var(--safe-area-inset-bottom, 0px));
+}
+.android-native .mobile-content.has-player.has-bottom-menu {
+  --floating-bottom-space: calc(168px + var(--safe-area-inset-bottom, 0px));
+}
+.android-native .mobile-content .mobile-edge-body {
+  padding-top: calc(var(--safe-area-inset-top, 0px) + 72px) !important;
+  padding-bottom: var(--floating-bottom-space) !important;
+  box-sizing: border-box;
+}
+.android-native .mobile-content.owns-page-scroll > .mobile-page {
+  height: auto !important;
+  min-height: 100%;
+}
+.android-native .mobile-content:not(.owns-page-scroll) {
+  overflow: hidden;
+}
+.android-native .mobile-header.android-hig-header {
+  transition:
+    transform 380ms linear(0, 0.34, 0.72, 0.96, 1.025, 1.01, 1),
+    opacity 180ms ease;
+}
+.android-native .mobile-header.android-hig-header.is-content-scrolled {
+  transform: translateY(calc(-100% - var(--safe-area-inset-top, 0px) - 16px));
+  opacity: 0;
+  pointer-events: none;
+}
+.android-native .mobile-header.is-content-scrolled :is(.header-left, .header-title, .header-right) {
+  pointer-events: none;
+}
+.android-native .player-expanded .mobile-edge-body {
+  padding-top: 0 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .android-native .mobile-header.android-hig-header {
+    transition: none;
+  }
 }

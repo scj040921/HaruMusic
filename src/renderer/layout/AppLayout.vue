@@ -9,7 +9,6 @@
     :class="{
       mobile: settingsStore.isMobile,
       liquid: liquidMode,
-      'salt-home': saltMode,
       'desktop-editorial-shell': isElectron && !settingsStore.isMobile
     }"
     :style="layoutStyle"
@@ -93,14 +92,7 @@
               type="button"
               @click="toggleLiquidMode"
             >
-              {{ liquidMode ? '关闭 Liquid Glass' : '切换 Liquid Glass' }}</button
-            ><button
-              v-if="!settingsStore.isMobile"
-              class="mode-switch"
-              type="button"
-              @click="toggleSaltMode"
-            >
-              {{ saltMode ? '关闭 Salt UI' : '切换 Salt UI' }}
+              {{ liquidMode ? '关闭 Liquid Glass' : '切换 Liquid Glass' }}
             </button>
           </div>
           <!-- 主页面路由 -->
@@ -119,7 +111,7 @@
               </keep-alive>
             </router-view>
           </div>
-          <play-bottom v-if="!liquidMode && !saltMode" />
+          <play-bottom v-if="!liquidMode" />
           <!-- 移动端底部菜单（浏览器模拟移动端时使用） -->
           <app-menu v-if="shouldShowMobileMenu" class="menu mobile-menu" :menus="menuStore.menus" />
         </div>
@@ -128,7 +120,6 @@
       <template v-if="!settingsStore.isMiniMode">
         <play-bar
           :liquid="liquidMode"
-          :salt="saltMode"
           v-if="!settingsStore.isMobile"
           v-show="isPlay && !playerStore.musicFull"
           :style="playerStore.musicFull ? 'bottom: 0;' : ''"
@@ -149,7 +140,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, provide, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 
@@ -162,7 +153,6 @@ import { useMenuStore } from '@/store/modules/menu';
 import { usePlayerStore } from '@/store/modules/player';
 import { useSettingsStore } from '@/store/modules/settings';
 import { isElectron } from '@/utils';
-import { LYRIC_CONFIG_CHANGE_EVENT, readLyricConfig } from '@/utils/lyricConfig';
 
 // 关键布局组件同步导入（始终可见，避免加载闪烁）
 import AppMenu from './components/AppMenu.vue';
@@ -196,25 +186,24 @@ const PlaylistDrawer = defineAsyncComponent(() => import('@/components/common/Pl
 
 const { t } = useI18n();
 const liquidMode = ref(false);
-const saltMode = ref(false);
 const sidebarCollapsed = ref(false);
 try {
   liquidMode.value = localStorage.getItem('haru-liquid-mode') === 'true';
-  saltMode.value = localStorage.getItem('haru-salt-mode') === 'true';
+  // Migrate removed UI mode without changing any music or source settings.
+  if (localStorage.getItem('haru-salt-mode') === 'true') {
+    liquidMode.value = true;
+    localStorage.setItem('haru-liquid-mode', 'true');
+  }
+  localStorage.removeItem('haru-salt-mode');
   sidebarCollapsed.value = localStorage.getItem('haru-sidebar-collapsed') === 'true';
 } catch {
   /* Storage can be unavailable. */
 }
 const toggleLiquidMode = () => {
   liquidMode.value = !liquidMode.value;
-  if (liquidMode.value && saltMode.value) {
-    saltMode.value = false;
-    document.documentElement.classList.remove('salt-mode');
-  }
   document.documentElement.classList.toggle('liquid-mode', liquidMode.value);
   try {
     localStorage.setItem('haru-liquid-mode', String(liquidMode.value));
-    if (liquidMode.value) localStorage.setItem('haru-salt-mode', 'false');
   } catch {
     /* Keep the session choice usable. */
   }
@@ -227,30 +216,7 @@ const toggleSidebar = () => {
     /* Keep the session choice usable. */
   }
 };
-const toggleSaltMode = () => {
-  saltMode.value = !saltMode.value;
-  if (saltMode.value && liquidMode.value) {
-    liquidMode.value = false;
-    document.documentElement.classList.remove('liquid-mode');
-  }
-  document.documentElement.classList.toggle('salt-mode', saltMode.value);
-  try {
-    localStorage.setItem('haru-salt-mode', String(saltMode.value));
-    if (saltMode.value) localStorage.setItem('haru-liquid-mode', 'false');
-  } catch {
-    /* Keep the session choice usable. */
-  }
-};
 onMounted(() => document.documentElement.classList.toggle('liquid-mode', liquidMode.value));
-onMounted(() => document.documentElement.classList.toggle('salt-mode', saltMode.value));
-if (saltMode.value && liquidMode.value) {
-  liquidMode.value = false;
-  try {
-    localStorage.setItem('haru-liquid-mode', 'false');
-  } catch {
-    /* The in-memory selection still works for this session. */
-  }
-}
 const playerStore = usePlayerStore();
 const settingsStore = useSettingsStore();
 const menuStore = useMenuStore();
@@ -260,25 +226,12 @@ const liquidTone = computed(() => {
     ? color
     : '#FA2D48';
 });
-const saltConfig = ref(readLyricConfig());
-const refreshSaltConfig = () => (saltConfig.value = readLyricConfig());
-onMounted(() => window.addEventListener(LYRIC_CONFIG_CHANGE_EVENT, refreshSaltConfig));
-onBeforeUnmount(() => window.removeEventListener(LYRIC_CONFIG_CHANGE_EVENT, refreshSaltConfig));
 const layoutStyle = computed(() => ({
-  '--content-sidebar-width': `${(settingsStore.setData?.isMenuExpanded ? 196 : 84) + (saltMode.value ? 20 : 0)}px`,
+  '--content-sidebar-width': `${settingsStore.setData?.isMenuExpanded ? 196 : 84}px`,
   ...(liquidMode.value
     ? {
         '--liquid-tone': liquidTone.value,
         '--sidebar-width': sidebarCollapsed.value ? '76px' : '260px'
-      }
-    : {}),
-  ...(saltMode.value
-    ? {
-        '--highlight': saltConfig.value.saltSplitTheme
-          ? saltConfig.value.saltHomeHighlight
-          : settingsStore.theme === 'dark'
-            ? '#d6a77d'
-            : '#7a4b2a'
       }
     : {})
 }));
@@ -362,76 +315,6 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
   outline: 2px solid #f0576c;
   outline-offset: 3px;
 }
-.salt-home {
-  color: var(--text, #26231f);
-  background: var(--background, #f5f1e9);
-}
-.salt-home .layout-main,
-.salt-home .layout-main-page,
-.salt-home .main,
-.salt-home .main-content {
-  background: var(--background, #f5f1e9);
-}
-.salt-home .menu {
-  height: calc(100% - 24px);
-  margin: 12px 8px 12px 12px;
-  border: 0;
-  border-radius: var(--corner, 16px);
-  corner-shape: squircle;
-  background: var(--sub-background, #e9e2d7);
-}
-.salt-home .mode-switch {
-  min-height: 40px;
-  border: 0;
-  border-radius: var(--corner, 16px);
-  corner-shape: squircle;
-  box-shadow: none;
-  background: var(--sub-background, #e9e2d7);
-  color: var(--text, #26231f);
-}
-.salt-home :deep(.app-menu) {
-  --haru-nav-icon: var(--sub-text, #706b64);
-  --haru-nav-active: var(--highlight, #7a4b2a);
-}
-.salt-home :deep(.app-menu-logo) {
-  border-radius: var(--corner, 16px);
-}
-.salt-home :deep(.app-menu-item-link) {
-  border-radius: var(--corner, 16px);
-  color: var(--sub-text, #706b64);
-}
-.salt-home :deep(.app-menu-item-link:hover),
-.salt-home :deep(.app-menu-item-link.is-active) {
-  color: var(--highlight, #7a4b2a);
-  background: var(--sub-background, #e9e2d7);
-}
-.salt-home :deep(.haru-mark) {
-  border-radius: var(--corner, 16px);
-  color: var(--on-highlight, #fffaf4);
-  background: var(--highlight, #7a4b2a);
-}
-.salt-home :deep(.music-play-bar) {
-  position: fixed;
-  left: calc(var(--content-sidebar-width, 84px) + (100vw - var(--content-sidebar-width, 84px)) / 2);
-  bottom: 24px;
-  width: min(1000px, calc(100vw - var(--content-sidebar-width, 84px) - 64px));
-  transform: translateX(-50%);
-  border-radius: var(--corner, 20px);
-  corner-shape: squircle;
-  background: var(--popup, #fffdf9);
-  border-color: var(--stroke, #d7cec1);
-  box-shadow:
-    0 10px 30px rgba(49, 42, 32, 0.2),
-    0 2px 7px rgba(49, 42, 32, 0.1);
-  backdrop-filter: none;
-}
-.salt-home :deep(.music-play-bar .music-content-title),
-.salt-home :deep(.music-play-bar .music-buttons > button) {
-  color: var(--text, #26231f);
-}
-.salt-home :deep(.music-play-bar .music-content-name) {
-  color: var(--sub-text, #706b64);
-}
 .liquid-sidebar {
   position: relative;
   isolation: isolate;
@@ -440,7 +323,7 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
   display: flex;
   flex-direction: column;
   padding: 26px 18px 24px;
-  background: linear-gradient(150deg, rgba(255, 255, 255, 0.82), var(--surface-glass) 58%);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.24), var(--surface-glass) 58%);
   border-right: 1px solid rgba(0, 0, 0, 0.06);
   backdrop-filter: blur(34px) saturate(175%);
   overflow: auto;
@@ -820,35 +703,6 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
 :global(.liquid-mode) {
   --radius-control: 14px;
   --radius-surface: 22px;
-}
-:global(.salt-home .menu),
-:global(.salt-home .menu .menu-item) {
-  border-radius: var(--corner, 16px);
-  backdrop-filter: none;
-  box-shadow: none;
-}
-:global(.salt-mode .n-message) {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-:global(.salt-mode button),
-:global(.salt-mode input:not([type='checkbox']):not([type='radio']):not([type='range'])),
-:global(.salt-mode select),
-:global(.salt-mode textarea) {
-  border-radius: var(--corner, 16px);
-}
-:global(.salt-mode button),
-:global(.salt-mode input),
-:global(.salt-mode select),
-:global(.salt-mode textarea),
-:global(.salt-mode .n-card),
-:global(.salt-mode .n-popover),
-:global(.salt-mode .n-modal),
-:global(.salt-mode .n-dropdown-menu),
-:global(.salt-mode .n-base-selection),
-:global(.salt-mode .home-list-card),
-:global(.salt-mode .music-play-bar) {
-  corner-shape: squircle;
 }
 :global(.liquid-mode button),
 :global(.liquid-mode input:not([type='checkbox']):not([type='radio']):not([type='range'])),

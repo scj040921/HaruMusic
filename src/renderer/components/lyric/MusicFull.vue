@@ -8,15 +8,14 @@
     :z-index="9998"
   >
     <div
-      v-if="liquid || salt"
+      v-if="liquid"
       ref="auroraField"
       class="aurora-field"
       :class="{
-        'salt-aurora-field': salt,
         'desktop-audio-visuals': isElectron && liquid,
         'is-animating': isElectron && liquid && isVisible && playerStore.play
       }"
-      :style="salt ? saltAuroraStyle : auroraStyle"
+      :style="auroraStyle"
       aria-hidden="true"
     >
       <div class="aurora-orb aurora-a"></div>
@@ -33,13 +32,11 @@
     ></div>
     <div
       id="drawer-target"
-      :class="[config.theme, { 'liquid-full': liquid, 'salt-full': salt, 'salt-dark': saltDark }]"
-      :style="salt ? saltPlayerTokens : undefined"
+      :class="[config.theme, { 'liquid-full': liquid }]"
       class="relative z-10"
     >
       <!-- 左侧关闭按钮 -->
       <div
-        v-if="!salt || !immersiveMode"
         class="control-left absolute top-8 left-8 z-[9999] flex items-center gap-2"
         :class="{ 'pure-mode': config.pureModeEnabled }"
       >
@@ -59,7 +56,6 @@
 
       <!-- 右侧功能按钮组 -->
       <div
-        v-if="!salt || !immersiveMode"
         class="control-right absolute top-8 right-8 z-[9999]"
         :class="{ 'pure-mode': config.pureModeEnabled }"
       >
@@ -69,7 +65,7 @@
               <i class="ri-settings-3-line"></i>
             </button>
           </template>
-          <lyric-settings v-model="config" :salt="salt" />
+          <lyric-settings v-model="config" />
         </n-popover>
 
         <button type="button" class="control-btn" aria-label="切换全屏" @click="toggleFullScreen">
@@ -133,224 +129,7 @@
       </transition>
 
       <div
-        v-if="salt"
-        class="salt-now-playing"
-        :class="{
-          'cover-hidden': config.hideCover,
-          'lyrics-hidden': config.hideLyrics,
-          'content-centered': config.centerLyrics,
-          'salt-lyrics-focus': saltFocus === 'lyrics',
-          'salt-info-focus': saltFocus === 'info',
-          'salt-immersive': immersiveMode
-        }"
-        @touchstart.passive="startSaltGesture"
-        @touchend="finishSaltGesture"
-        @pointerdown="startSaltPointerGesture"
-        @pointerup="finishSaltPointerGesture"
-        @click="lyricMenu.show = false"
-        @keydown.esc="lyricMenu.show = false"
-      >
-        <div v-if="!immersiveMode" class="salt-track-heading">
-          <strong v-html="playMusic?.name"></strong>
-          <span>{{ artistList.map((artist: any) => artist.name).join(' / ') }}</span>
-        </div>
-        <div
-          v-if="!config.hideCover && saltFocus === 'cover'"
-          class="salt-record-stage"
-          :class="{ 'is-playing': playerStore.play, 'is-hovering': recordTiltState.active }"
-          @pointermove="tiltRecord"
-          @pointerleave="resetRecordTilt"
-        >
-          <div class="salt-record" :style="recordTiltStyle">
-            <span class="salt-record-sheen" aria-hidden="true"></span>
-            <span v-if="!playMusic?.picUrl" class="record-placeholder" aria-label="暂无专辑封面"
-              ><i class="ri-music-2-line"
-            /></span>
-            <img
-              v-if="playMusic?.picUrl"
-              :src="getImgUrl(playMusic?.picUrl, '500y500')"
-              :alt="playMusic?.name || ''"
-            />
-          </div>
-          <div v-if="audioMeta" class="salt-record-meta">{{ audioMeta }}</div>
-          <div v-if="playMusic?.picUrl" class="salt-record-reflection" aria-hidden="true">
-            <img :src="getImgUrl(playMusic?.picUrl, '500y500')" />
-          </div>
-        </div>
-        <section v-if="saltFocus === 'info'" class="salt-info-panel" aria-label="歌曲信息">
-          <div class="salt-info-group">
-            <p class="salt-eyebrow">歌曲</p>
-            <h1 v-html="playMusic?.name"></h1>
-            <button
-              v-for="artist in artistList"
-              :key="artist.id"
-              class="salt-info-link"
-              @click="handleArtistClick(artist.id)"
-            >
-              {{ artist.name }}
-            </button>
-            <p v-if="playMusic?.al?.name">{{ playMusic.al.name }}</p>
-            <div v-if="playMusic?.al?.publishTime" class="salt-info-row">
-              <span>发行时间</span
-              ><b>{{ new Date(playMusic.al.publishTime).toLocaleDateString() }}</b>
-            </div>
-            <div v-if="playMusic?.al?.company" class="salt-info-row">
-              <span>发行公司</span><b>{{ playMusic.al.company }}</b>
-            </div>
-            <div class="salt-info-actions">
-              <button :aria-pressed="isFavorite" @click="toggleFavorite">
-                <i :class="isFavorite ? 'ri-heart-3-fill' : 'ri-heart-3-line'" />{{
-                  isFavorite ? '已喜欢' : '喜欢'
-                }}
-              </button>
-              <button @click="shareCurrentSong"><i class="ri-share-line" />分享</button>
-            </div>
-          </div>
-          <div class="salt-info-group">
-            <p class="salt-eyebrow">音频文件</p>
-            <div class="salt-info-row">
-              <span>格式</span><b>{{ audioFormat || '—' }}</b>
-            </div>
-            <div class="salt-info-row">
-              <span>采样率</span><b>{{ sampleRate || '—' }}</b>
-            </div>
-            <div class="salt-info-row">
-              <span>码率</span><b>{{ bitrate || '—' }}</b>
-            </div>
-            <div class="salt-info-row">
-              <span>位深</span><b>{{ bitDepth || '—' }}</b>
-            </div>
-          </div>
-          <div class="salt-info-group salt-info-toggles">
-            <label><span>沉浸模式</span><input v-model="immersiveMode" type="checkbox" /></label>
-            <label
-              ><span>保持屏幕唤醒</span><input v-model="config.saltKeepAwake" type="checkbox"
-            /></label>
-          </div>
-        </section>
-        <section
-          v-if="!config.hideLyrics && saltFocus === 'lyrics'"
-          class="salt-lyric-stage"
-          ref="saltLyricsElement"
-          :style="{ width: `min(100%, ${config.contentWidth}%)` }"
-          aria-label="同步歌词"
-        >
-          <p class="salt-credit">
-            {{
-              playMusic?.ar?.map((artist: any) => artist.name).join(' / ') ||
-              artistList.map((artist: any) => artist.name).join(' / ')
-            }}
-          </p>
-          <div class="salt-lyrics" @scroll.passive="handleSaltLyricScroll">
-            <button
-              v-for="(line, index) in lrcArray"
-              :key="index"
-              class="salt-lyric-line"
-              :class="{
-                active: index === nowIndex,
-                previous: index < nowIndex,
-                duet: isDuetLine(line.text)
-              }"
-              :aria-current="index === nowIndex ? 'true' : undefined"
-              @click="line.startTime !== undefined && line.startTime >= 0 && setAudioTime(index)"
-              @contextmenu.prevent="showLyricMenu($event, line.text)"
-              @touchstart="startLyricPress($event, line.text)"
-              @touchend="cancelLyricPress"
-              @touchcancel="cancelLyricPress"
-            >
-              <span class="liquid-lyric-text" :style="saltLyricStyle(index, line.text)">
-                <template v-if="shouldShowKaraoke(line, index) && line.words?.length">
-                  <span
-                    v-for="(word, wordIndex) in line.words"
-                    :key="wordIndex"
-                    :style="karaokeWordStyle(word, index)"
-                    >{{ word.text }}<span v-if="word.space">&nbsp;</span></span
-                  >
-                </template>
-                <template v-else>{{ line.text }}</template>
-              </span>
-              <small v-if="line.trText && config.showTranslation">{{ line.trText }}</small>
-            </button>
-            <p v-if="!lrcArray.length" class="liquid-lyric-empty">{{ t('player.lrc.noLrc') }}</p>
-          </div>
-          <div
-            v-if="lyricMenu.show"
-            class="lyric-context"
-            :style="{ left: `${lyricMenu.x}px`, top: `${lyricMenu.y}px` }"
-            @click.stop
-          >
-            <button @click="copyLyric">复制歌词</button
-            ><button @click="shareLyric">分享歌词</button>
-          </div>
-        </section>
-        <nav v-if="!immersiveMode" class="salt-focus-nav" aria-label="播放内容" role="tablist">
-          <button :aria-selected="saltFocus === 'cover'" role="tab" @click="saltFocus = 'cover'">
-            封面
-          </button>
-          <button :aria-selected="saltFocus === 'lyrics'" role="tab" @click="saltFocus = 'lyrics'">
-            歌词
-          </button>
-          <button :aria-selected="saltFocus === 'info'" role="tab" @click="saltFocus = 'info'">
-            信息
-          </button>
-        </nav>
-        <div v-if="!immersiveMode" class="salt-gesture-hint" aria-label="播放页手势导航">
-          下滑关闭 <span>·</span> 上滑队列 <span>·</span> 左滑信息 <span>·</span> 右滑歌词
-          <span>·</span> 长按播放键沉浸
-        </div>
-        <div class="salt-transport">
-          <simple-play-bar v-if="!immersiveMode" :pure-mode-enabled="true" :isDark="saltDark" />
-          <div class="salt-main-controls" aria-label="播放控制">
-            <button
-              class="salt-mode-control"
-              :aria-label="'随机播放'"
-              :aria-pressed="playMode === 2"
-              @click="setSaltPlayMode(playMode === 2 ? 0 : 2)"
-            >
-              <i :class="playMode === 2 ? 'ri-shuffle-fill' : 'ri-shuffle-line'" />
-            </button>
-            <button class="salt-skip-control" aria-label="上一首" @click="handlePrev">
-              <i class="ri-skip-back-fill" />
-            </button>
-            <button
-              class="salt-primary-control"
-              :aria-label="playerStore.play ? '暂停' : '播放'"
-              @pointerdown="startPlayHold"
-              @pointerup="finishPlayHold"
-              @pointerleave="cancelPlayHold"
-              @pointercancel="cancelPlayHold"
-              @click="handleMainPlayClick"
-            >
-              <i :class="playerStore.play ? 'ri-pause-fill' : 'ri-play-fill'" />
-            </button>
-            <button class="salt-skip-control" aria-label="下一首" @click="handleNext">
-              <i class="ri-skip-forward-fill" />
-            </button>
-            <button
-              class="salt-mode-control"
-              :aria-label="'循环播放'"
-              :aria-pressed="playMode === 1"
-              @click="setSaltPlayMode(playMode === 1 ? 0 : 1)"
-            >
-              <i :class="playMode === 1 ? 'ri-repeat-one-fill' : 'ri-repeat-one-line'" />
-            </button>
-            <button
-              class="salt-mode-control"
-              aria-label="播放队列"
-              :aria-pressed="playerStore.playListDrawerVisible"
-              @click="playerStore.setPlayListDrawerVisible(true)"
-            >
-              <i
-                :class="
-                  playerStore.playListDrawerVisible ? 'ri-play-list-2-fill' : 'ri-play-list-2-line'
-                "
-              />
-            </button>
-          </div>
-        </div>
-      </div>
-      <div
-        v-else-if="liquid"
+        v-if="liquid"
         class="liquid-now-playing"
         :class="{
           'desktop-audio-visuals': isElectron,
@@ -393,6 +172,11 @@
               :class="{ active: index === displayLyricIndex }"
               :aria-current="index === displayLyricIndex ? 'true' : undefined"
               @click="line.startTime !== undefined && setAudioTime(index)"
+              @contextmenu.prevent="showLyricMenu($event, line.text)"
+              @touchstart.passive="startLyricPress($event, line.text)"
+              @touchmove.passive="cancelLyricPress"
+              @touchend="cancelLyricPress"
+              @touchcancel="cancelLyricPress"
             >
               <span class="liquid-lyric-text" :style="liquidLyricStyle(index, line.text)">{{
                 line.text
@@ -402,6 +186,15 @@
             <p v-if="!lrcArray.length" class="liquid-lyric-empty">{{ t('player.lrc.noLrc') }}</p>
           </div>
         </section>
+        <div
+          v-if="lyricMenu.show"
+          class="lyric-context"
+          :style="{ left: `${lyricMenu.x}px`, top: `${lyricMenu.y}px` }"
+          @click.stop
+        >
+          <button @click="copyLyric">复制歌词</button><button @click="shareLyric">分享歌词</button>
+          <button @click="lyricMenu.show = false">关闭</button>
+        </div>
         <div class="liquid-transport">
           <div class="liquid-track-meta"><strong v-html="playMusic?.name"></strong></div>
           <simple-play-bar
@@ -409,6 +202,9 @@
             :isDark="textColors.theme === 'dark'"
           />
           <div class="liquid-main-controls">
+            <button aria-label="喜欢" :aria-pressed="isFavorite" @click="toggleFavorite">
+              <i :class="isFavorite ? 'ri-heart-3-fill' : 'ri-heart-3-line'" />
+            </button>
             <button :aria-label="playModeText" @click="togglePlayMode">
               <i :class="playModeIcon" />
             </button>
@@ -751,73 +547,8 @@ const supportAutoScroll = computed(() => {
   return lrcArray.value.length > 0 && lrcArray.value[0].startTime !== -1;
 });
 
-const saltFocus = ref<'cover' | 'lyrics' | 'info'>('cover');
-const saltDark = computed(() =>
-  config.value.saltPlayerTheme === 'system'
-    ? settingsStore.theme === 'dark'
-    : config.value.saltPlayerTheme === 'dark'
-);
-const saltPlayerTokens = computed(() =>
-  config.value.saltSplitTheme ? { '--highlight': config.value.saltPlayerHighlight } : undefined
-);
-const immersiveMode = ref(false);
-const audioQuality = computed(() => {
-  const song = playMusic.value?.song;
-  return song?.hMusic || song?.mMusic || song?.bMusic || song?.lMusic || song || {};
-});
-const audioFormat = computed(() => String(audioQuality.value.extension || '').toUpperCase());
-const bitrate = computed(() => {
-  const value = Number(audioQuality.value.bitrate || audioQuality.value.br || 0);
-  return value > 0 ? `${Math.round(value / 1000)} kbps` : '';
-});
-const sampleRate = computed(() => {
-  const value = Number(audioQuality.value.sr || audioQuality.value.sampleRate || 0);
-  return value > 0 ? `${(value / 1000).toFixed(value % 1000 ? 1 : 0)} kHz` : '';
-});
-const bitDepth = computed(() => {
-  const value = Number(audioQuality.value.bitDepth || audioQuality.value.bitsPerSample || 0);
-  return value > 0 ? `${value} bit` : '';
-});
-const audioMeta = computed(() => [audioFormat.value, bitrate.value].filter(Boolean).join(' · '));
-const saltTouchStart = ref<{ x: number; y: number } | null>(null);
-const saltPointerStart = ref<{ x: number; y: number } | null>(null);
-const applySaltGesture = (dx: number, dy: number) => {
-  if (Math.max(Math.abs(dx), Math.abs(dy)) < 64) return;
-  if (Math.abs(dx) > Math.abs(dy)) {
-    saltFocus.value = dx < 0 ? 'info' : 'lyrics';
-  } else if (dy < 0) {
-    playerStore.setPlayListDrawerVisible(true);
-  } else {
-    closeMusicFull();
-  }
-};
-const startSaltGesture = (event: TouchEvent) => {
-  const touch = event.changedTouches[0];
-  if (touch) saltTouchStart.value = { x: touch.clientX, y: touch.clientY };
-};
-const finishSaltGesture = (event: TouchEvent) => {
-  const start = saltTouchStart.value;
-  const touch = event.changedTouches[0];
-  saltTouchStart.value = null;
-  if (!start || !touch) return;
-  const dx = touch.clientX - start.x;
-  const dy = touch.clientY - start.y;
-  applySaltGesture(dx, dy);
-};
-const startSaltPointerGesture = (event: PointerEvent) => {
-  if (event.pointerType !== 'mouse' || (event.target as HTMLElement).closest('button')) return;
-  saltPointerStart.value = { x: event.clientX, y: event.clientY };
-};
-const finishSaltPointerGesture = (event: PointerEvent) => {
-  const start = saltPointerStart.value;
-  saltPointerStart.value = null;
-  if (event.pointerType === 'mouse' && start)
-    applySaltGesture(event.clientX - start.x, event.clientY - start.y);
-};
-
 const props = defineProps({
   liquid: { type: Boolean, default: false },
-  salt: { type: Boolean, default: false },
   modelValue: {
     type: Boolean,
     default: false
@@ -1158,100 +889,6 @@ const auroraStyle = computed(() => {
   };
 });
 
-const saltAuroraStyle = computed(() => {
-  const sampledTint = config.value.saltSampleWallpaper
-    ? coverTint.value
-    : saltDark.value
-      ? '#171512'
-      : '#f5f1e9';
-  const base = tinycolor(sampledTint).toHsl();
-  const color = (rotation: number) =>
-    tinycolor({
-      h: (base.h + rotation + 360) % 360,
-      s: Math.max(0.22, base.s),
-      l: saltDark.value ? 0.3 : 0.82
-    }).toRgbString();
-  const time = config.value.saltDynamicFlow && Number.isFinite(nowTime.value) ? nowTime.value : 0;
-  return {
-    '--flow-backdrop': sampledTint,
-    '--flow-strength': config.value.saltDynamicFlow ? (saltDark.value ? 0.76 : 0.16) : 0,
-    '--flow-a': color(0),
-    '--flow-b': color(35),
-    '--flow-c': color(-35),
-    '--flow-x': `${Math.sin(time / 9) * 13}%`,
-    '--flow-y': `${Math.cos(time / 13) * 12}%`,
-    '--flow-angle': `${Math.sin(time / 17) * 24}deg`
-  };
-});
-
-let playHoldTimer: ReturnType<typeof setTimeout> | undefined;
-let suppressPlayClick = false;
-const startPlayHold = () => {
-  cancelPlayHold();
-  suppressPlayClick = false;
-  if (!config.value.saltImmersiveOnHold) return;
-  playHoldTimer = setTimeout(() => {
-    immersiveMode.value = !immersiveMode.value;
-    suppressPlayClick = true;
-    playHoldTimer = undefined;
-  }, 520);
-};
-const cancelPlayHold = () => {
-  if (playHoldTimer) clearTimeout(playHoldTimer);
-  playHoldTimer = undefined;
-};
-const finishPlayHold = () => cancelPlayHold();
-const handleMainPlayClick = () => {
-  if (suppressPlayClick) {
-    suppressPlayClick = false;
-    return;
-  }
-  playMusicEvent();
-};
-
-let wakeLock: { release: () => Promise<void> } | null = null;
-const updateWakeLock = async (enabled: boolean) => {
-  if (!enabled) {
-    await wakeLock?.release().catch(() => undefined);
-    wakeLock = null;
-    return;
-  }
-  const api = (
-    navigator as Navigator & {
-      wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> };
-    }
-  ).wakeLock;
-  if (!api || document.visibilityState !== 'visible') return;
-  try {
-    wakeLock = await api.request('screen');
-  } catch {
-    wakeLock = null;
-  }
-};
-watch(
-  () => config.value.saltKeepAwake,
-  (enabled) => {
-    void updateWakeLock(isVisible.value && enabled);
-  }
-);
-watch(immersiveMode, (enabled) => {
-  if (enabled && saltFocus.value === 'info') saltFocus.value = 'cover';
-});
-watch(
-  () => isVisible.value,
-  (visible) => {
-    if (visible) saltFocus.value = 'cover';
-    if (!visible) immersiveMode.value = false;
-    void updateWakeLock(visible && config.value.saltKeepAwake);
-  }
-);
-onBeforeUnmount(() => {
-  cancelPlayHold();
-  void updateWakeLock(false);
-  if (lyricResumeTimer) clearTimeout(lyricResumeTimer);
-});
-
-const saltLyricsElement = ref<HTMLElement | null>(null);
 const liquidLyricsElement = ref<HTMLElement | null>(null);
 const auroraField = ref<HTMLElement | null>(null);
 const recordCover = ref<HTMLImageElement | null>(null);
@@ -1344,7 +981,7 @@ const updateVisualLoop = () => {
     }
   });
 };
-watch([isVisible, () => playerStore.play, () => props.liquid, () => props.salt], updateVisualLoop, {
+watch([isVisible, () => playerStore.play, () => props.liquid], updateVisualLoop, {
   flush: 'post'
 });
 watch(nowTime, () => {
@@ -1356,55 +993,6 @@ onBeforeUnmount(() => {
   if (visualFrame) cancelAnimationFrame(visualFrame);
   document.removeEventListener('visibilitychange', updateVisualLoop);
 });
-let lyricResumeTimer: ReturnType<typeof setTimeout> | undefined;
-let manualLyricScrollUntil = 0;
-let saltAutoScrolling = false;
-const followSaltLyrics = () => {
-  const active = saltLyricsElement.value?.querySelector(
-    '.liquid-lyric-line.active'
-  ) as HTMLElement | null;
-  if (!active) return;
-  saltAutoScrolling = true;
-  active.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  setTimeout(() => (saltAutoScrolling = false), 450);
-};
-const handleSaltLyricScroll = () => {
-  if (saltAutoScrolling) return;
-  manualLyricScrollUntil = Date.now() + 3000;
-  if (lyricResumeTimer) clearTimeout(lyricResumeTimer);
-  lyricResumeTimer = setTimeout(followSaltLyrics, 3000);
-};
-watch(nowIndex, () => {
-  if (saltFocus.value !== 'lyrics' || Date.now() < manualLyricScrollUntil) return;
-  nextTick(followSaltLyrics);
-});
-const shouldShowKaraoke = (line: (typeof lrcArray.value)[number], index: number) => {
-  if (!line.words?.length) return false;
-  if (config.value.saltKaraokePolicy === 'always') return true;
-  if (config.value.saltKaraokePolicy === 'expanded') return Math.abs(index - nowIndex.value) <= 1;
-  return index === nowIndex.value;
-};
-const karaokeWordStyle = (word: { startTime: number; duration: number }, index: number) => {
-  const fps = Math.max(10, Math.min(60, config.value.saltKaraokeFps || 30));
-  const clock = (Math.floor(nowTime.value * fps) / fps) * 1000;
-  const progress = Math.max(0, Math.min(1, (clock - word.startTime) / Math.max(1, word.duration)));
-  const reveals =
-    config.value.saltKaraokePolicy === 'always' ||
-    index === nowIndex.value ||
-    (config.value.saltKaraokePolicy === 'expanded' && Math.abs(index - nowIndex.value) <= 1);
-  return {
-    color: reveals && progress > 0 ? 'var(--text-main)' : 'var(--text-sub)',
-    opacity: reveals
-      ? Math.max(
-          0.2,
-          config.value.saltKaraokeOpacity / 100 +
-            progress * (1 - config.value.saltKaraokeOpacity / 100)
-        )
-      : 1,
-    transition: `color ${Math.round(1000 / fps)}ms linear, opacity ${Math.round(1000 / fps)}ms linear`
-  };
-};
-
 const tiltRecord = (event: PointerEvent) => {
   if (
     event.pointerType === 'touch' ||
@@ -1429,14 +1017,7 @@ const resetRecordTilt = () => {
 };
 
 const { playMusicEvent, handlePrev, handleNext } = usePlaybackControl();
-const { playMode, playModeText, playModeIcon, togglePlayMode } = usePlayMode();
-const setSaltPlayMode = async (mode: 0 | 1 | 2) => {
-  let attempts = 0;
-  while (playerStore.playMode !== mode && attempts < 4) {
-    await playerStore.togglePlayMode();
-    attempts += 1;
-  }
-};
+const { playModeText, playModeIcon, togglePlayMode } = usePlayMode();
 const lyricMenu = ref({ show: false, x: 0, y: 0, text: '' });
 let lyricPressTimer: ReturnType<typeof setTimeout> | undefined;
 const showLyricMenu = (event: MouseEvent, text: string) => {
@@ -1469,12 +1050,6 @@ const shareLyric = async () => {
   else await navigator.clipboard?.writeText(text).catch(() => undefined);
   lyricMenu.value.show = false;
 };
-const shareCurrentSong = async () => {
-  const text = `${playMusic.value?.name || ''} — ${artistList.value.map((artist: any) => artist.name).join(' / ')}`;
-  if (navigator.share)
-    await navigator.share({ title: playMusic.value?.name || '', text }).catch(() => undefined);
-  else await navigator.clipboard?.writeText(text).catch(() => undefined);
-};
 const isDuetLine = (text: string) => /^(男|女|合|女声|男声|[♀♂])\s*[:：]/.test(text);
 const liquidLyricStyle = (_index: number, text: string) => {
   const duetSide = /^(女|♀)/.test(text) ? 'right' : 'left';
@@ -1497,22 +1072,6 @@ const liquidLyricStyle = (_index: number, text: string) => {
     marginLeft: isDuetLine(text) && duetSide === 'right' ? 'auto' : undefined
   };
 };
-const saltLyricStyle = (_index: number, text: string) => {
-  const duetSide = /^(女|♀)/.test(text) ? 'right' : 'left';
-  const active = _index === nowIndex.value;
-  return {
-    transform: `scale(${active ? 1 : 0.88})`,
-    opacity: active ? 1 : Math.max(0.3, 0.62 - Math.abs(_index - nowIndex.value) * 0.08),
-    textAlign: (isDuetLine(text) ? duetSide : config.value.centerLyrics ? 'center' : 'left') as
-      'left' | 'right' | 'center',
-    fontSize: `${active ? config.value.fontSize + 4 : Math.round(config.value.fontSize * 0.86)}px`,
-    fontWeight: config.value.fontWeight,
-    letterSpacing: `${config.value.letterSpacing}px`,
-    lineHeight: String(config.value.lineHeight),
-    marginLeft: isDuetLine(text) && duetSide === 'right' ? 'auto' : undefined
-  };
-};
-
 const closeMusicFull = () => {
   // 退出全屏模式
   if (isElectron) {
@@ -1710,12 +1269,6 @@ defineExpose({
 .aurora-field.desktop-audio-visuals .aurora-orb {
   transition: transform 720ms cubic-bezier(0.2, 0.72, 0.22, 1);
 }
-.salt-aurora-field {
-  background: var(--flow-backdrop, #171512);
-}
-.salt-aurora-field .aurora-orb {
-  opacity: var(--flow-strength, 0.6);
-}
 .aurora-a {
   left: -20%;
   top: -20%;
@@ -1752,367 +1305,6 @@ defineExpose({
 }
 :global(#drawer-target.liquid-full) {
   background: transparent;
-}
-.salt-full {
-  --highlight: #7a4b2a;
-  --on-highlight: #fffaf4;
-  --text: #26231f;
-  --sub-text: #706b64;
-  --background: #f5f1e9;
-  --sub-background: #e9e2d7;
-  --popup: #fbf8f2;
-  --stroke: #d7cec1;
-  --success: #39734d;
-  --warning: #946316;
-  --error: #b43a32;
-  --text-main: var(--text);
-  --text-sub: var(--sub-text);
-  --text-paragraph: var(--text);
-  --corner: 16px;
-}
-.salt-full.salt-dark {
-  --highlight: #d6a77d;
-  --on-highlight: #251a11;
-  --text: #f4eee5;
-  --sub-text: #b7aca0;
-  --background: #171512;
-  --sub-background: #27231e;
-  --popup: #302a24;
-  --stroke: #494139;
-  --success: #80c996;
-  --warning: #e7bd6b;
-  --error: #ff8b80;
-}
-.salt-now-playing {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: center;
-  justify-items: center;
-  padding: 92px 24px 148px;
-  color: var(--text);
-  background: color-mix(in srgb, var(--background) 24%, transparent);
-  touch-action: pan-y;
-}
-.salt-full .salt-now-playing {
-  --accent: var(--highlight);
-  color: var(--text);
-  background: color-mix(in srgb, var(--background) 24%, transparent);
-}
-.salt-full .salt-track-heading {
-  position: absolute;
-  top: 28px;
-  left: 88px;
-  z-index: 2;
-  display: grid;
-  max-width: min(40vw, 520px);
-  gap: 4px;
-  color: var(--text-main);
-}
-.salt-full .salt-track-heading strong {
-  overflow: hidden;
-  font-size: 19px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.salt-full .salt-track-heading span {
-  overflow: hidden;
-  color: var(--text-sub);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.salt-full .salt-record-stage {
-  width: min(46vh, 58vw);
-  max-height: calc(100vh - 300px);
-}
-.salt-full .salt-record {
-  overflow: visible;
-  border-radius: var(--corner);
-  background: transparent;
-  box-shadow: none;
-}
-.salt-full .salt-record img {
-  width: 100%;
-  border-radius: var(--corner);
-  box-shadow: 0 26px 70px #0002;
-}
-.salt-full.salt-dark .salt-record img {
-  box-shadow: 0 30px 90px #0007;
-}
-.salt-full .salt-record-sheen,
-.salt-full .salt-record-reflection {
-  display: none;
-}
-.salt-full .salt-record-meta {
-  position: absolute;
-  top: calc(100% + 12px);
-  color: var(--text-sub);
-  font-size: 11px;
-  letter-spacing: 0.03em;
-}
-.salt-full .salt-lyric-stage {
-  position: relative;
-  height: min(68vh, 660px);
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  overflow: hidden;
-}
-.salt-full .salt-credit {
-  margin: 0 0 18px;
-  font-size: 13px;
-  font-weight: 550;
-}
-.salt-full .salt-lyrics {
-  height: 100%;
-  overflow: auto;
-  scrollbar-width: none;
-  overscroll-behavior: contain;
-}
-.salt-full .salt-lyrics::-webkit-scrollbar {
-  display: none;
-}
-.salt-full .salt-lyric-line {
-  display: flex;
-  flex-direction: column;
-  width: min(100%, 720px);
-  min-height: 46px;
-  padding: 8px 2px;
-  text-align: left;
-  color: var(--text-sub);
-  background: transparent;
-  font-family: inherit;
-  cursor: pointer;
-  transform-origin: left center;
-  transition:
-    opacity 220ms ease,
-    transform 220ms ease;
-}
-.salt-full .salt-transport {
-  left: 50%;
-  bottom: max(18px, env(safe-area-inset-bottom));
-  width: min(720px, calc(100% - 48px));
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  color: var(--text);
-  background: transparent;
-  backdrop-filter: none;
-}
-.salt-full .salt-lyric-line.active {
-  color: var(--text-main) !important;
-  text-shadow: none;
-}
-.salt-full .salt-lyric-line small,
-.salt-full .salt-credit {
-  color: var(--text-sub);
-}
-.salt-full .salt-lyric-line small {
-  padding-top: 5px;
-  font-size: 0.78em;
-  font-weight: 400;
-}
-.salt-full .salt-main-controls {
-  color: var(--text);
-}
-.salt-full .salt-main-controls button.salt-primary-control {
-  width: 64px;
-  height: 64px;
-  border-radius: 0;
-  color: var(--text-main);
-  background: transparent;
-  font-size: 48px;
-}
-.salt-full .salt-main-controls {
-  position: static;
-  display: flex;
-  justify-content: center;
-  gap: clamp(18px, 4vw, 42px);
-  padding: 8px 0 0;
-}
-.salt-full .salt-main-controls button {
-  width: 42px;
-  height: 52px;
-  color: var(--text-sub);
-  border-radius: var(--corner);
-  font-size: 21px;
-}
-.salt-full .salt-main-controls button.salt-skip-control {
-  color: var(--text-main);
-  font-size: 26px;
-}
-.salt-full .salt-main-controls button.salt-primary-control {
-  color: var(--text-main);
-}
-.salt-full .salt-main-controls button.salt-mode-control[aria-pressed='true'] {
-  color: var(--highlight);
-}
-.salt-full .salt-main-controls button:hover {
-  color: var(--highlight);
-}
-.salt-full .salt-main-controls button:focus-visible {
-  outline-color: var(--highlight);
-}
-.salt-full .salt-transport :deep(.play-bar) {
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  --text-color: var(--text-main) !important;
-  --muted-color: var(--text-sub) !important;
-  --track-color: color-mix(in srgb, var(--text-sub) 24%, transparent) !important;
-  --fill-color: var(--highlight) !important;
-  --fill-color-alt: var(--highlight) !important;
-}
-.salt-full .salt-transport :deep(.play-bar .controls-section),
-.salt-full .salt-transport :deep(.play-bar .bottom-section) {
-  display: none;
-}
-.salt-full .salt-transport :deep(.play-bar .top-section) {
-  margin: 0;
-}
-.salt-full .salt-transport :deep(.play-bar .time-display) {
-  color: var(--text-sub);
-}
-.salt-full .salt-track-meta {
-  color: var(--text-main);
-}
-.salt-full .salt-gesture-hint {
-  position: absolute;
-  right: 28px;
-  bottom: 122px;
-  color: var(--text-sub);
-  font-size: 11px;
-  letter-spacing: 0.01em;
-  opacity: 0.78;
-}
-.salt-full .salt-gesture-hint span {
-  padding-inline: 4px;
-  color: var(--highlight);
-}
-.salt-full .salt-focus-nav {
-  position: absolute;
-  top: 24px;
-  left: 50%;
-  z-index: 2;
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--stroke);
-  border-radius: var(--corner);
-  background: var(--sub-background);
-  transform: translateX(-50%);
-}
-.salt-full .salt-focus-nav button {
-  min-width: 52px;
-  padding: 7px 10px;
-  border-radius: var(--corner);
-  color: var(--text-sub);
-  font-size: 12px;
-}
-.salt-full .salt-focus-nav button[aria-selected='true'] {
-  color: var(--on-highlight);
-  background: var(--highlight);
-}
-.salt-full .salt-info-panel {
-  grid-column: 1 / -1;
-  justify-self: center;
-  width: min(640px, 100%);
-  max-height: calc(100vh - 220px);
-  overflow-y: auto;
-  padding: 0 24px;
-  border: 0;
-  border-radius: var(--corner);
-  color: var(--text);
-  background: transparent;
-  text-align: center;
-}
-.salt-full .salt-info-group {
-  margin: 0 0 18px;
-  padding: 18px 22px;
-  border-radius: var(--corner);
-  background: var(--sub-background);
-  text-align: left;
-}
-.salt-full .salt-info-group .salt-eyebrow {
-  margin: 0 0 10px;
-}
-.salt-full .salt-info-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 6px 0;
-  color: var(--text-sub);
-  font-size: 13px;
-}
-.salt-full .salt-info-row b {
-  color: var(--text-main);
-  font-weight: 550;
-  text-align: right;
-}
-.salt-full .salt-info-link {
-  margin-right: 10px;
-  color: var(--text-sub);
-  font-size: 14px;
-}
-.salt-full .salt-info-actions {
-  display: flex;
-  gap: 18px;
-  margin-top: 16px;
-}
-.salt-full .salt-info-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-sub);
-  font-size: 13px;
-}
-.salt-full .salt-info-actions button[aria-pressed='true'],
-.salt-full .salt-info-actions button:hover {
-  color: var(--highlight);
-}
-.salt-full .salt-info-toggles label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  min-height: 40px;
-  color: var(--text-main);
-}
-.salt-info-panel h1 {
-  margin: 10px 0;
-  font-size: clamp(28px, 4vw, 44px);
-  font-weight: 700;
-}
-.salt-info-panel p {
-  margin: 4px 0;
-  color: var(--text-sub);
-}
-.salt-info-panel .salt-eyebrow {
-  color: var(--highlight);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-.salt-info-panel span {
-  display: block;
-  margin-top: 28px;
-  color: var(--text-sub);
-  font-size: 12px;
-}
-.salt-full .salt-now-playing.salt-lyrics-focus,
-.salt-full .salt-now-playing.salt-info-focus {
-  grid-template-columns: minmax(0, 1fr);
-}
-.salt-full .salt-now-playing.salt-lyrics-focus .salt-lyric-stage {
-  width: min(100%, 760px) !important;
-  margin-inline: auto;
-}
-.salt-full .salt-record-stage,
-.salt-full .salt-lyric-stage {
-  grid-column: 1;
 }
 .liquid-now-playing.cover-hidden,
 .liquid-now-playing.lyrics-hidden {
@@ -2468,48 +1660,6 @@ defineExpose({
   outline-offset: 2px;
 }
 @media (max-width: 850px) {
-  .salt-full .salt-now-playing {
-    padding: 82px 18px 146px;
-  }
-  .salt-full .salt-track-heading {
-    top: 22px;
-    left: 68px;
-    max-width: 45vw;
-  }
-  .salt-full .salt-track-heading strong {
-    font-size: 16px;
-  }
-  .salt-full .salt-record-stage {
-    width: min(48vh, 72vw);
-  }
-  .salt-full .salt-lyric-stage {
-    height: min(58vh, 560px);
-  }
-  .salt-full .salt-transport {
-    width: calc(100% - 20px);
-    bottom: max(10px, env(safe-area-inset-bottom));
-  }
-  .salt-full .salt-main-controls {
-    gap: clamp(8px, 2vw, 16px);
-  }
-  .salt-full .salt-main-controls button {
-    width: 36px;
-  }
-  .salt-full .salt-main-controls button.salt-primary-control {
-    width: 54px;
-    font-size: 42px;
-  }
-  .salt-full .salt-gesture-hint {
-    right: 0;
-    bottom: 124px;
-    width: 100%;
-    text-align: center;
-    font-size: 10px;
-  }
-  .salt-full .salt-info-panel {
-    width: min(100%, 620px);
-    padding-inline: 0;
-  }
   .liquid-now-playing {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(180px, 35vh) 1fr;
@@ -2731,8 +1881,8 @@ defineExpose({
       line-height: var(--lyric-line-height, 2) !important;
       opacity: 0.6;
       transform-origin: left center;
-      // 当前行会被 scale 放大（常规 1.05 / 聚焦 1.06），预留宽度避免长歌词右端被容器裁切；
-      // transform 不影响布局换行，各行换行宽度保持一致，行切换时不会重新折行
+      /* 当前行会被 scale 放大（常规 1.05 / 聚焦 1.06），预留宽度避免长歌词右端被容器裁切；*/
+      /* transform 不影响布局换行，各行换行宽度保持一致，行切换时不会重新折行*/
       max-width: 94.3%;
 
       &.now-text {
@@ -2766,7 +1916,7 @@ defineExpose({
         color: var(--text-color-primary);
       }
 
-      // 逐字歌词样式
+      /* 逐字歌词样式*/
       .word-by-word-lyric {
         @apply flex flex-wrap;
 
@@ -2790,7 +1940,7 @@ defineExpose({
     .hover-text {
       &:hover {
         @apply font-bold rounded-xl;
-        // 聚焦模式下模糊/变淡是内联样式，优先级高于类，需 !important 取消，便于阅读与点击定位
+        /* 聚焦模式下模糊/变淡是内联样式，优先级高于类，需 !important 取消，便于阅读与点击定位*/
         opacity: 1 !important;
         filter: none !important;
         background-color: var(--hover-bg-color);
@@ -2842,11 +1992,11 @@ defineExpose({
 }
 
 .music-drawer {
-  transition: none; // 移除之前的过渡效果，现在使用 JS 动画
+  transition: none; /* 移除之前的过渡效果，现在使用 JS 动画*/
 }
 
-// 添加全局字体样式
-// 字体设置已移至上方或不再需要单独的 drawer-target 块
+/* 添加全局字体样式*/
+/* 字体设置已移至上方或不再需要单独的 drawer-target 块*/
 :root {
   --current-font-family:
     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
@@ -2887,7 +2037,7 @@ defineExpose({
   @apply flex items-center gap-2;
 }
 
-// 纯净模式首次开启引导层：虚线高亮控件原位置 + 箭头气泡指向对应角落，不拦截任何点击
+/* 纯净模式首次开启引导层：虚线高亮控件原位置 + 箭头气泡指向对应角落，不拦截任何点击*/
 .pure-mode-tip-layer {
   @apply absolute inset-0 z-[9999] pointer-events-none;
 }
@@ -2897,7 +2047,7 @@ defineExpose({
   border: 1.5px dashed rgba(255, 255, 255, 0.75);
   animation: pure-tip-pulse 1.8s ease-out infinite;
 
-  // 第二步：左上角收起按钮（单个 36px 按钮位）
+  /* 第二步：左上角收起按钮（单个 36px 按钮位）*/
   &--left {
     @apply right-auto left-8 w-9;
   }
@@ -2911,7 +2061,7 @@ defineExpose({
   color: rgba(255, 255, 255, 0.92);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
 
-  // 第二步：气泡移到左上角下方
+  /* 第二步：气泡移到左上角下方*/
   &--left {
     @apply right-auto left-8;
   }
@@ -2958,7 +2108,7 @@ defineExpose({
   }
 }
 
-// 步骤指示圆点（当前步高亮）
+/* 步骤指示圆点（当前步高亮）*/
 .pure-mode-tip-dots {
   @apply ml-0.5 flex items-center gap-1 self-center;
 

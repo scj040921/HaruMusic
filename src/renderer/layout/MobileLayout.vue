@@ -9,10 +9,16 @@
     }"
   >
     <!-- 顶部头部 -->
-    <mobile-header v-if="!playerStore.musicFull" />
+    <mobile-header
+      v-if="!playerStore.musicFull"
+      :class="{ 'is-content-scrolled': headerHidden }"
+      :inert="headerHidden || undefined"
+      :aria-hidden="headerHidden ? 'true' : undefined"
+    />
 
     <!-- 主内容区域 -->
     <div
+      ref="contentRef"
       class="mobile-content"
       :class="{ 'has-bottom-menu': shouldShowBottomMenu, 'has-player': isPlay }"
     >
@@ -37,7 +43,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, provide, ref } from 'vue';
+import {
+  computed,
+  defineAsyncComponent,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  provide,
+  ref,
+  watch
+} from 'vue';
 import { useRoute } from 'vue-router';
 
 import homeRouter from '@/router/home';
@@ -61,6 +76,50 @@ const props = defineProps<{
 const route = useRoute();
 const playerStore = usePlayerStore();
 const menuStore = useMenuStore();
+const contentRef = ref<HTMLElement | null>(null);
+const headerHidden = ref(false);
+let pageObserver: MutationObserver | undefined;
+let scrollHost: HTMLElement | null = null;
+const handlePageScroll = () => {
+  if (scrollHost) headerHidden.value = scrollHost.scrollTop > 16;
+};
+// Keep the scroll viewport edge-to-edge. Insets belong to scrollable content,
+// never an opaque reserved band outside it. This also covers nested Naive scrollbars.
+const bindPageScroll = () => {
+  if (!isAndroidApp || !contentRef.value) return;
+  const content = contentRef.value;
+  const host =
+    content.querySelector<HTMLElement>(
+      '.mobile-page .n-scrollbar-container, .mobile-page.n-scrollbar .n-scrollbar-container'
+    ) || content;
+  if (host === scrollHost) return;
+  scrollHost?.removeEventListener('scroll', handlePageScroll);
+  scrollHost?.classList.remove('mobile-edge-scroll');
+  scrollHost?.firstElementChild?.classList.remove('mobile-edge-body');
+  scrollHost = host;
+  content.classList.toggle('owns-page-scroll', host === content);
+  host.classList.add('mobile-edge-scroll');
+  host.firstElementChild?.classList.add('mobile-edge-body');
+  host.addEventListener('scroll', handlePageScroll, { passive: true });
+  handlePageScroll();
+};
+watch(
+  () => route.path,
+  async () => {
+    headerHidden.value = false;
+    await nextTick();
+    bindPageScroll();
+  }
+);
+onMounted(() => {
+  bindPageScroll();
+  pageObserver = new MutationObserver(bindPageScroll);
+  if (contentRef.value) pageObserver.observe(contentRef.value, { childList: true, subtree: true });
+});
+onBeforeUnmount(() => {
+  pageObserver?.disconnect();
+  scrollHost?.removeEventListener('scroll', handlePageScroll);
+});
 
 // 提供是否有安全区域
 provide('hasSafeArea', props.isPhone);
@@ -149,21 +208,6 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
 
 .android-liquidglass .mobile-content.has-player:not(.has-bottom-menu) {
   scroll-padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + 80px);
-}
-
-.android-liquidglass .mobile-content::after {
-  content: '';
-  display: block;
-  height: calc(var(--safe-area-inset-bottom, 0px) + 88px);
-  pointer-events: none;
-}
-
-.android-liquidglass .mobile-content.has-bottom-menu.has-player::after {
-  height: calc(var(--safe-area-inset-bottom, 0px) + 156px);
-}
-
-.android-liquidglass .mobile-content:not(.has-bottom-menu):not(.has-player)::after {
-  display: none;
 }
 
 .android-liquidglass .mobile-menu :deep(.app-menu) {
