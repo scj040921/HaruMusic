@@ -4,7 +4,7 @@ import { createDiscreteApi } from 'naive-ui';
 import i18n from '@/../i18n/renderer';
 import { getMusicLrc } from '@/api/music';
 import { useMusicSourceRegistry } from '@/services/musicSource/registry';
-import { getMusicResolveFailure,resolveSong } from '@/services/musicSource/resolver';
+import { getMusicResolveFailure, resolveSong } from '@/services/musicSource/resolver';
 import { playbackRequestManager } from '@/services/playbackRequestManager';
 import { useSettingsStore } from '@/store';
 import type { ILyric, ILyricText, IWordData, SongResult } from '@/types/music';
@@ -310,6 +310,16 @@ export const useLyrics = () => {
  */
 export const useSongDetail = () => {
   const getSongDetail = async (playMusic: SongResult, requestId?: string) => {
+    if (playMusic.source === 'local' && String(playMusic.id).startsWith('android-download:')) {
+      const { downloadedFileUrl } = await import('@/services/androidDownloads');
+      return {
+        ...playMusic,
+        playMusicUrl: await downloadedFileUrl(
+          String(playMusic.id).slice('android-download:'.length)
+        ),
+        playLoading: false
+      } as SongResult;
+    }
     if (playMusic.source === 'local' && String(playMusic.id).startsWith('android-local:')) {
       const { getAndroidLocalUrl, getAndroidLocalMetadata } =
         await import('@/services/androidLocalMusic');

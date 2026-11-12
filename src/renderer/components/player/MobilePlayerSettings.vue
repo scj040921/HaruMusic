@@ -25,7 +25,8 @@
             </h2>
             <button
               @click="close"
-              class="w-8 h-8 rounded-full flex items-center justify-center text-white/60 hover:bg-white/10"
+              aria-label="关闭播放设置"
+              class="w-11 h-11 rounded-full flex items-center justify-center text-white/60 hover:bg-white/10"
             >
               <i class="ri-close-line text-xl"></i>
             </button>
@@ -36,6 +37,20 @@
             class="flex-1 overflow-y-auto px-5 pb-6"
             :style="{ paddingBottom: `calc(24px + var(--safe-area-inset-bottom, 0px))` }"
           >
+            <div v-if="isAndroidApp" class="mobile-download-options">
+              <button
+                :disabled="
+                  isDownloading ||
+                  !playerStore.playMusic.id ||
+                  playerStore.playMusic.source === 'local'
+                "
+                @click="downloadMusic(playerStore.playMusic)"
+              >
+                <i class="ri-download-line" />
+                {{ isDownloading ? '正在解析下载地址…' : '下载音乐' }}
+              </button>
+              <button @click="openDownloads"><i class="ri-folder-music-line" /> 下载管理</button>
+            </div>
             <!-- 播放速度 -->
             <div class="mb-6">
               <div class="flex items-center justify-between mb-3">
@@ -184,11 +199,21 @@
 import { storeToRefs } from 'pinia';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 
+import { useDownload } from '@/hooks/useDownload';
 import { usePlayerStore } from '@/store/modules/player';
+import { isAndroidApp } from '@/utils';
 
 const { t } = useI18n();
 const playerStore = usePlayerStore();
+const router = useRouter();
+const { downloadMusic, isDownloading } = useDownload();
+const openDownloads = () => {
+  playerStore.setMusicFull(false);
+  emit('update:visible', false);
+  router.push('/downloads');
+};
 const { sleepTimer, playbackRate } = storeToRefs(playerStore);
 
 // Props & Emits
@@ -359,5 +384,31 @@ onUnmounted(() => {
 .settings-drawer-enter-from > div:last-child,
 .settings-drawer-leave-to > div:last-child {
   transform: translateY(100%);
+}
+</style>
+
+<style scoped>
+:where(button) {
+  min-height: 44px;
+}
+.mobile-download-options {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.mobile-download-options button {
+  flex: 1;
+  min-height: 48px;
+  border: 1px solid #ffffff20;
+  border-radius: 24px;
+  padding: 12px;
+  background: #ffffff10;
+  color: #fff;
+}
+.mobile-download-options button:disabled {
+  opacity: 0.4;
+}
+.mobile-download-options button:active {
+  transform: scale(0.96);
 }
 </style>

@@ -13,6 +13,7 @@ export const DOWNLOAD_TASK_STATE = {
 export type DownloadTaskState = (typeof DOWNLOAD_TASK_STATE)[keyof typeof DOWNLOAD_TASK_STATE];
 
 export type DownloadSongInfo = {
+  source?: string;
   id: number;
   name: string;
   picUrl: string;

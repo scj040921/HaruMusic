@@ -23,6 +23,15 @@
       <button class="header-btn" type="button" aria-label="搜索" @click="openSearch">
         <i class="ri-search-line"></i>
       </button>
+      <button
+        v-if="isAndroidApp"
+        class="header-btn"
+        type="button"
+        aria-label="下载管理"
+        @click="router.push('/downloads')"
+      >
+        <i class="ri-download-line" />
+      </button>
       <button class="header-btn" type="button" aria-label="设置" @click="openSettings">
         <i class="ri-settings-3-line"></i>
       </button>

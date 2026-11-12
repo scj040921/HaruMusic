@@ -18,6 +18,7 @@ const ipcRenderer = isElectron ? window.electron.ipcRenderer : null;
 function toDownloadSongInfo(song: SongResult): DownloadSongInfo {
   return {
     id: song.id as number,
+    source: song.source,
     name: song.name,
     picUrl: song.picUrl ?? song.al?.picUrl ?? '',
     ar: (song.ar || song.song?.artists || []).map((a: { name: string }) => ({ name: a.name })),
@@ -70,9 +71,11 @@ export const useDownload = () => {
 
       await downloadStore.addDownload(songInfo, url, type);
       message.success(t('songItem.message.downloadQueued'));
+      return true;
     } catch (error: any) {
       console.error('Download error:', error);
       message.error(error.message || t('songItem.message.downloadFailed'));
+      return false;
     } finally {
       isDownloading.value = false;
     }

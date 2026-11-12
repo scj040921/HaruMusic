@@ -14,9 +14,10 @@ import { isAndroidApp, isElectron } from '@/utils';
 import { buildPluginMediaUrl, validatePluginMediaSource } from '../../../shared/musicSourcePlugin';
 import { inferPluginAudioFormat, qualityToBitrate } from '../musicSourcePluginProtocol';
 import { MusicResolveCache } from './cache';
+import { firstAvailable } from './hedgedResolve';
 import { useMusicSourceRegistry } from './registry';
 import { buildAndroidMediaProxyUrl, requestMusicSourceHttp } from './transport';
-import type { ResolveAttempt, ResolveSongResult } from './types';
+import type { MusicSourceProvider, ResolveAttempt, ResolveSongResult } from './types';
 import { SourceAccessRejected } from './types';
 
 const accessCooldowns = new Map<string, { until: number; code: number }>();
@@ -192,7 +193,10 @@ export const resolveSong = async (
   const chainStart = Date.now();
   const chainDeadline = chainStart + CHAIN_BUDGET_MS;
 
-  for (const provider of candidates) {
+  let selected = false;
+  const attemptProvider = async (
+    provider: MusicSourceProvider
+  ): Promise<ResolveSongResult | null> => {
     const stageStart = Date.now();
     if (stageStart >= chainDeadline) {
       attempts.push({
@@ -201,12 +205,12 @@ export const resolveSong = async (
         reason: 'timeout',
         detail: 'chain-budget'
       });
-      continue;
+      return null;
     }
 
     if (!options.isDownload && MusicResolveCache.isInFailedCache(songId, provider.key, quality)) {
       attempts.push({ providerKey: provider.key, ok: false, reason: 'skipped' });
-      continue;
+      return null;
     }
     const cooldown = accessCooldowns.get(provider.key);
     if (
@@ -222,7 +226,7 @@ export const resolveSong = async (
         reason: 'skipped',
         detail: `source-access-rejected:${cooldown.code}`
       });
-      continue;
+      return null;
     }
 
     try {
@@ -288,7 +292,7 @@ export const resolveSong = async (
           costMs: Date.now() - stageStart
         });
         if (!options.isDownload) MusicResolveCache.addFailedCache(songId, provider.key, quality);
-        continue;
+        return null;
       }
 
       // 验证也纳入单步预算：失效端点/HTML 页当场判失败降级，不进缓存
@@ -306,9 +310,11 @@ export const resolveSong = async (
           costMs: Date.now() - stageStart
         });
         if (!options.isDownload) MusicResolveCache.addFailedCache(songId, provider.key, quality);
-        continue;
+        return null;
       }
 
+      if (selected || Date.now() > chainDeadline) return null;
+      selected = true;
       attempts.push({ providerKey: provider.key, ok: true, costMs: Date.now() - stageStart });
       const result: ResolveSongResult = {
         media: {
@@ -324,19 +330,21 @@ export const resolveSong = async (
         attempts
       };
       if (!options.isDownload)
-        await MusicResolveCache.setCachedMusicUrl(
-          songId,
-          {
-            url: media.url,
-            format: result.media.format,
-            br: result.media.br,
-            headers: media.headers || {},
-            providerKey: provider.key,
-            providerName: provider.name
-          },
-          sourceKeys ?? globalKeys,
-          quality
-        );
+        void Promise.resolve(
+          MusicResolveCache.setCachedMusicUrl(
+            songId,
+            {
+              url: media.url,
+              format: result.media.format,
+              br: result.media.br,
+              headers: media.headers || {},
+              providerKey: provider.key,
+              providerName: provider.name
+            },
+            sourceKeys ?? globalKeys,
+            quality
+          )
+        ).catch(() => console.warn('[resolver] URL cache write failed'));
       return result;
     } catch (error) {
       if (error instanceof SourceAccessRejected)
@@ -351,7 +359,12 @@ export const resolveSong = async (
       });
       if (!options.isDownload) MusicResolveCache.addFailedCache(songId, provider.key, quality);
     }
-  }
+    return null;
+  };
+  const resolved = await firstAvailable(
+    candidates.map((provider) => () => attemptProvider(provider))
+  );
+  if (resolved) return { ...resolved, attempts: [...attempts] };
 
   if (attempts.length) {
     console.warn(

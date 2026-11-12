@@ -54,6 +54,7 @@
     <!-- More Button -->
     <button
       class="more-btn flex h-8 w-8 items-center justify-center rounded-full opacity-0 transition-all duration-300 group-hover:bg-white dark:group-hover:bg-neutral-800 group-hover:opacity-100 hover:scale-110 active:scale-95"
+      :class="{ '!opacity-100 !w-12 !h-12': isAndroidApp }"
       :aria-label="item.name + ' · …'"
       @click.stop="onMenuClick"
     >
@@ -62,7 +63,7 @@
 
     <!-- Dropdown Menu -->
     <song-item-dropdown
-      v-if="isElectron"
+      v-if="isElectron || isAndroidApp"
       :item="item"
       :show="showDropdown"
       :x="dropdownX"
@@ -87,7 +88,7 @@ import { NEllipsis, NImage } from 'naive-ui';
 
 import { useSongItem } from '@/hooks/useSongItem';
 import type { SongResult } from '@/types/music';
-import { getImgUrl, isElectron } from '@/utils';
+import { getImgUrl, isAndroidApp, isElectron } from '@/utils';
 
 import SongItemDropdown from './SongItemDropdown.vue';
 

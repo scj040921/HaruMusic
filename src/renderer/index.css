@@ -675,3 +675,39 @@ html.dark .android-native .android-native-player .mobile-mini-controls {
     scroll-behavior: auto !important;
   }
 }
+
+/* Common mobile control access, including teleported settings and popovers. */
+.mobile :where(button, [role='button']),
+.android-native :where(button, [role='button']) {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+.mobile :where(button, [role='button']):focus-visible,
+.android-native :where(button, [role='button']):focus-visible {
+  outline: 2px solid var(--accent, #fa2d48);
+  outline-offset: 4px;
+}
+.mobile .header-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (prefers-contrast: more) {
+  .mobile {
+    --text-secondary: #59595e;
+    --divider: #88888e;
+  }
+  html.dark .mobile {
+    --text-secondary: #bcbcc2;
+    --divider: #77777c;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .mobile .header-btn,
+  .mobile .mobile-bottom-menu,
+  .mobile .mobile-mini-controls {
+    backdrop-filter: none !important;
+    background: var(--canvas, #fff) !important;
+  }
+}

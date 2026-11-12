@@ -1,3 +1,4 @@
+import { isAndroidApp } from '@/utils';
 const otherRouter = [
   {
     path: '/device-music',
@@ -37,7 +38,10 @@ const otherRouter = [
       back: true,
       icon: 'ri-download-cloud-2-line'
     },
-    component: () => import('@/views/download/DownloadPage.vue')
+    component: () =>
+      isAndroidApp
+        ? import('@/views/download/AndroidDownloadPage.vue')
+        : import('@/views/download/DownloadPage.vue')
   },
   {
     path: '/user/detail/:uid',

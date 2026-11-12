@@ -1,6 +1,6 @@
 <template>
   <n-dropdown
-    v-if="isElectron"
+    v-if="isElectron || isAndroidApp"
     :show="show"
     :x="x"
     :y="y"
@@ -21,7 +21,7 @@ import { useI18n } from 'vue-i18n';
 
 import { useUserStore } from '@/store';
 import type { SongResult } from '@/types/music';
-import { getImgUrl, isElectron } from '@/utils';
+import { getImgUrl, isAndroidApp, isElectron } from '@/utils';
 
 const { message } = createDiscreteApi(['message']);
 
@@ -208,7 +208,13 @@ const dropdownOptions = computed<MenuOption[]>(() => {
     );
   }
 
-  return options;
+  return isAndroidApp
+    ? options.filter((option) =>
+        ['header', 'divider1', 'play', 'playNext', 'download', 'favorite'].includes(
+          String(option.key)
+        )
+      )
+    : options;
 });
 
 // 处理选择

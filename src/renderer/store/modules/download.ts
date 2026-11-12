@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
-import { isElectron } from '@/utils';
+import { isAndroidApp, isElectron } from '@/utils';
 
 import {
   createDefaultDownloadSettings,
@@ -65,7 +65,20 @@ export const useDownloadStore = defineStore(
 
     // ── Actions ────────────────────────────────────────────────────────────
     const addDownload = async (songInfo: DownloadTask['songInfo'], url: string, type: string) => {
-      if (!isElectron) return;
+      if (isAndroidApp) {
+        const { androidDownloads, unwrapDownloadSource } =
+          await import('@/services/androidDownloads');
+        const source = unwrapDownloadSource(url);
+        await androidDownloads.enqueue({
+          ...source,
+          songInfo,
+          filename: `${songInfo.name} - ${songInfo.ar?.map((a) => a.name).join(',') || ''}`,
+          type
+        });
+        window.dispatchEvent(new Event('haru-download-added'));
+        return;
+      }
+      if (!isElectron) throw new Error('当前环境不支持音乐下载');
       const validatedInfo = {
         ...songInfo,
         picUrl: validatePicUrl(songInfo.picUrl)
@@ -78,6 +91,10 @@ export const useDownloadStore = defineStore(
     const batchDownload = async (
       items: Array<{ songInfo: DownloadTask['songInfo']; url: string; type: string }>
     ) => {
+      if (isAndroidApp) {
+        for (const item of items) await addDownload(item.songInfo, item.url, item.type);
+        return;
+      }
       if (!isElectron) return;
       const validatedItems = items.map((item) => {
         const validatedInfo = {

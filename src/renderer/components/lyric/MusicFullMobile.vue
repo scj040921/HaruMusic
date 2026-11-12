@@ -28,6 +28,11 @@
       </div>
       <div
         class="control-btn absolute left-5"
+        role="button"
+        tabindex="0"
+        aria-label="收起播放页面"
+        @keydown.enter="closeMusicFull"
+        @keydown.space.prevent="closeMusicFull"
         :class="{ 'pure-mode': config.pureModeEnabled }"
         @click="closeMusicFull"
       >
@@ -51,9 +56,9 @@
           <i class="ri-timer-line text-green-400"></i>
           <span class="font-medium tabular-nums">{{ sleepTimerDisplayText }}</span>
         </div>
-        <div @click="showPlayerSettings = true">
+        <button type="button" aria-label="播放设置" @click="showPlayerSettings = true">
           <i class="ri-more-2-fill"></i>
-        </div>
+        </button>
       </div>
 
       <!-- 播放设置弹窗 -->
@@ -364,15 +369,21 @@
 
           <!-- 右下角控制按钮 -->
           <div class="landscape-main-controls">
-            <div class="main-button prev" @click="prevSong">
+            <button type="button" class="main-button prev" aria-label="上一首" @click="prevSong">
               <i class="ri-skip-back-fill"></i>
-            </div>
-            <div class="main-button play-pause" @click="togglePlay">
+            </button>
+            <button
+              type="button"
+              class="main-button play-pause"
+              :aria-label="play ? '暂停' : '播放'"
+              :aria-pressed="play"
+              @click="togglePlay"
+            >
               <i :class="playIcon"></i>
-            </div>
-            <div class="main-button next" @click="nextSong">
+            </button>
+            <button type="button" class="main-button next" aria-label="下一首" @click="nextSong">
               <i class="ri-skip-forward-fill"></i>
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -421,24 +432,44 @@
         <!-- 控制按钮 -->
         <div class="control-buttons">
           <!-- 返回按钮，仅在全屏歌词模式下显示 -->
-          <div v-if="showFullLyrics" class="back-button" @click.stop="closeFullLyrics">
+          <div
+            v-if="showFullLyrics"
+            class="back-button"
+            role="button"
+            tabindex="0"
+            aria-label="退出纯歌词"
+            @keydown.enter="closeFullLyrics"
+            @keydown.space.prevent="closeFullLyrics"
+            @click.stop="closeFullLyrics"
+          >
             <i class="ri-arrow-down-s-line"></i>
           </div>
-          <div class="side-button" @click="togglePlayMode">
+          <button
+            type="button"
+            class="side-button"
+            aria-label="切换播放顺序"
+            @click="togglePlayMode"
+          >
             <i :class="[playModeIcon, { 'intelligence-active': playMode === 3 }]"></i>
-          </div>
-          <div class="main-button prev" @click="prevSong">
+          </button>
+          <button type="button" class="main-button prev" aria-label="上一首" @click="prevSong">
             <i class="ri-skip-back-fill"></i>
-          </div>
-          <div class="main-button play-pause" @click="togglePlay">
+          </button>
+          <button
+            type="button"
+            class="main-button play-pause"
+            :aria-label="play ? '暂停' : '播放'"
+            :aria-pressed="play"
+            @click="togglePlay"
+          >
             <i :class="playIcon"></i>
-          </div>
-          <div class="main-button next" @click="nextSong">
+          </button>
+          <button type="button" class="main-button next" aria-label="下一首" @click="nextSong">
             <i class="ri-skip-forward-fill"></i>
-          </div>
-          <div class="side-button" @click="showPlaylist">
+          </button>
+          <button type="button" class="side-button" aria-label="播放队列" @click="showPlaylist">
             <i class="iconfont icon-list"></i>
-          </div>
+          </button>
         </div>
       </div>
     </div>
@@ -1571,7 +1602,7 @@ watch([lrcArray, showFullLyrics, isVisible], () =>
     // 统一控制区域
     .unified-controls {
       @apply fixed bottom-0 left-0 right-0 px-6 pt-6 pb-6;
-      background: linear-gradient(to top, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0) 100%);
+      background: transparent;
       height: 230px;
       pointer-events: auto;
       z-index: 10000 !important;
@@ -1969,7 +2000,7 @@ watch([lrcArray, showFullLyrics, isVisible], () =>
 
   .unified-controls {
     &.fullscreen-mode {
-      background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0) 100%);
+      background: transparent;
     }
 
     .back-button {
@@ -2297,5 +2328,22 @@ watch([lrcArray, showFullLyrics, isVisible], () =>
     transition: none;
     transform: none;
   }
+}
+#mobile-drawer-target .control-btn,
+#mobile-drawer-target .side-button,
+#mobile-drawer-target .back-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+#mobile-drawer-target button:focus-visible,
+#mobile-drawer-target [role='button']:focus-visible {
+  outline: 2px solid var(--text-color-active);
+  outline-offset: 4px;
+}
+#mobile-drawer-target .apple-style-progress {
+  min-height: 44px;
+}
+#mobile-drawer-target .lyrics-expand {
+  font-size: 13px;
 }
 </style>

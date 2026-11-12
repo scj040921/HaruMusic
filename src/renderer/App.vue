@@ -9,6 +9,7 @@
           <router-view></router-view>
           <disclaimer-modal></disclaimer-modal>
           <mobile-update-modal v-if="isAndroidApp"></mobile-update-modal>
+          <startup-intro v-if="isAndroidApp" />
         </n-message-provider>
       </n-dialog-provider>
     </n-config-provider>
@@ -24,6 +25,7 @@ import { useRouter } from 'vue-router';
 
 import DisclaimerModal from '@/components/common/DisclaimerModal.vue';
 import MobileUpdateModal from '@/components/common/MobileUpdateModal.vue';
+import StartupIntro from '@/components/common/StartupIntro.vue';
 import { usePlayerStore } from '@/store/modules/player';
 import { usePlayerCoreStore } from '@/store/modules/playerCore';
 import { useSettingsStore } from '@/store/modules/settings';
@@ -155,6 +157,11 @@ onMounted(async () => {
       stopNativeStatusBarWatch = watch([theme, () => playerStore.musicFull], syncStatusBar);
 
       nativeBackButtonListener = await NativeApp.addListener('backButton', () => {
+        const intro = document.querySelector<HTMLButtonElement>('.intro-skip');
+        if (intro) {
+          intro.click();
+          return;
+        }
         if (playerStore.musicFull) {
           playerStore.setMusicFull(false);
           return;
