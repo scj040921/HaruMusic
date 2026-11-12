@@ -14,5 +14,10 @@ ManifestSupportedOS all
 # Close only the executable at the destination installation path, including helpers.
 !macro customCheckAppRunning
   System::Call 'kernel32::SetEnvironmentVariable(t "HARUMUSIC_UPDATE_TARGET", t "$INSTDIR\${APP_EXECUTABLE_FILENAME}")'
-  nsExec::ExecToLog `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -WindowStyle Hidden -Command "$$target = [IO.Path]::GetFullPath($$env:HARUMUSIC_UPDATE_TARGET); $$apps = @(Get-Process | Where-Object { $$_.Path -eq $$target }); foreach ($$item in $$apps) { [void]$$item.CloseMainWindow() }; Start-Sleep -Milliseconds 1000; foreach ($$item in $$apps) { if (-not $$item.HasExited) { & '$SYSDIR\taskkill.exe' /PID $$item.Id /T /F | Out-Null } }; if (@(Get-Process | Where-Object { $$_.Path -eq $$target }).Count) { exit 1 }"
+  nsExec::ExecToLog `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -WindowStyle Hidden -Command "$$target = [IO.Path]::GetFullPath($$env:HARUMUSIC_UPDATE_TARGET); $$apps = @(Get-Process | Where-Object { $$_.Path -eq $$target }); foreach ($$item in $$apps) { [void]$$item.CloseMainWindow() }; Start-Sleep -Milliseconds 1000; foreach ($$item in $$apps) { if (-not $$item.HasExited) { & '$SYSDIR\taskkill.exe' /PID $$item.Id /T /F | Out-Null } }; if (@(Get-Process | Where-Object { $$_.Path -eq $$target }).Count) { exit 1 }"`
+  Pop $0
+  ${If} $0 != 0
+    MessageBox MB_OK|MB_ICONSTOP "无法结束此安装目录的 HaruMusic。请退出该程序，或使用与原安装相同的权限重试。"
+    Abort
+  ${EndIf}
 !macroend
