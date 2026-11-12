@@ -57,4 +57,18 @@ describe('bounded source fallback', () => {
       ])
     ).toBeNull();
   });
+  it('stops scheduling sources when the foreground track is cancelled', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const other = vi.fn(async () => 'late');
+    const pending = firstAvailable(
+      [() => new Promise<string | null>(() => {}), other],
+      350,
+      controller.signal
+    );
+    controller.abort();
+    expect(await pending).toBeNull();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(other).not.toHaveBeenCalled();
+  });
 });

@@ -289,7 +289,14 @@ export class PluginSandboxRunner {
     const requestId = `plugin_sandbox_${this.plugin.id}_${Date.now()}_${Math.random()
       .toString(36)
       .slice(2, 8)}`;
-    const request = requestMusicSourceHttp(message.url, { ...message.options }, requestId);
+    const request = requestMusicSourceHttp(
+      message.url,
+      {
+        ...message.options,
+        timeout: Math.max(1, Math.min(Number(message.options?.timeout) || 6000, 6000))
+      },
+      requestId
+    );
     request
       .then((response: unknown) => {
         this.pendingHttpCancels.delete(message.requestId);
@@ -434,7 +441,13 @@ export class PluginSandboxRunner {
       // 条目形状与 native 一致；worker 内的 LX 适配器负责转成 musicInfo 协议
       const item = toPluginItem(song, songPlatform);
       try {
-        return adaptRawMediaSource(await this.invoke('getMediaSource', [item, quality]));
+        return adaptRawMediaSource(
+          await this.invoke(
+            'getMediaSource',
+            [item, quality],
+            Math.max(1, Math.min(4000, deadline - Date.now()))
+          )
+        );
       } catch (error) {
         console.warn(`[MusicSource:${this.plugin.name}] getMediaSource failed`, error);
         return null;

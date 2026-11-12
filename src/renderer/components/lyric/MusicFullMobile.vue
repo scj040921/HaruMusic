@@ -2346,4 +2346,60 @@ watch([lrcArray, showFullLyrics, isVisible], () =>
 #mobile-drawer-target .lyrics-expand {
   font-size: 13px;
 }
+/* Symmetric title gutters keep the heading centered independently of Like. */
+#mobile-drawer-target:not(.is-landscape) .ios-layout-container .song-info {
+  position: relative;
+  align-items: center;
+  padding-inline: 0;
+  text-align: center;
+  gap: 8px;
+}
+#mobile-drawer-target:not(.is-landscape) .ios-layout-container .song-title-container {
+  width: 100%;
+  padding-inline: 48px;
+  box-sizing: border-box;
+  justify-content: center;
+  text-align: center;
+}
+#mobile-drawer-target:not(.is-landscape)
+  .ios-layout-container
+  .song-info
+  .song-title-container
+  .song-title {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Display', Roboto, 'Noto Sans CJK SC',
+    'Microsoft YaHei', sans-serif;
+  font-size: clamp(28px, 8vw, 36px);
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.035em;
+  text-align: center;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-wrap: balance;
+}
+#mobile-drawer-target:not(.is-landscape) .ios-layout-container .song-artist {
+  width: 100%;
+  padding-inline: 48px;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+  margin: 0;
+}
+#mobile-drawer-target:not(.is-landscape) .ios-layout-container .song-info .favorite-icon {
+  position: absolute;
+  right: 0;
+  top: 0;
+  min-width: 44px;
+  min-height: 44px;
+}
 </style>

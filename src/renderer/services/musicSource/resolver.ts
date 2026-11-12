@@ -5,6 +5,7 @@
  * 失败缓存跳过，统一校验与 API 端点二次解析，返回 attempts 归因。
  * 取代旧的「getSongUrl 内联降级链 + MusicParser 策略工厂」双轨编排。
  */
+import { reportSources } from '@/services/playbackDiagnostics';
 import { SongSourceConfigManager } from '@/services/SongSourceConfigManager';
 import { isUnplayableMedia } from '@/services/unplayableMedia';
 import { useSettingsStore } from '@/store';
@@ -37,6 +38,8 @@ export type ResolveSongOptions = {
   isDownload?: boolean;
   /** 命中 URL 缓存时仍强制重新解析 */
   force?: boolean;
+  signal?: AbortSignal;
+  diagnosticId?: string;
 };
 
 // ─── 命中 URL 轻量验证（生态实测：LX 源近半返回端点/外链/失效链） ─────────
@@ -68,7 +71,7 @@ const verifyMediaUrl = async (
     const options = {
       method: 'GET',
       headers: { ...(headers || {}), Range: 'bytes=0-8191' },
-      timeout: 10000,
+      timeout: 4000,
       responseType: 'media-probe' as const
     };
     const response = isElectron
@@ -119,17 +122,28 @@ const effectiveSourceKeys = (songId: number): string[] | undefined => {
   return undefined;
 };
 
-const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  ms: number,
+  signal?: AbortSignal
+): Promise<T> => {
+  if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+  let abort: () => void = () => {};
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       promise,
+      new Promise<T>((_, reject) => {
+        abort = () => reject(new DOMException('Cancelled', 'AbortError'));
+        signal?.addEventListener('abort', abort, { once: true });
+      }),
       new Promise<T>((_, reject) => {
         timer = setTimeout(() => reject(new Error('timeout')), ms);
       })
     ]);
   } finally {
     if (timer) clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
   }
 };
 
@@ -161,6 +175,11 @@ export const resolveSong = async (
       // Older builds cached only the URL and dropped provider request headers.
       await MusicResolveCache.clearMusicCache(songId);
     } else if (cached && !isUnplayableMedia(cached.url)) {
+      reportSources(
+        options.diagnosticId,
+        [{ providerKey: cached.providerKey, ok: true, costMs: 0 }],
+        new Map([[cached.providerKey, cached.providerName]])
+      );
       return {
         media: validatePluginMediaSource({
           url: isAndroidApp
@@ -197,6 +216,7 @@ export const resolveSong = async (
   const attemptProvider = async (
     provider: MusicSourceProvider
   ): Promise<ResolveSongResult | null> => {
+    if (options.signal?.aborted || selected) return null;
     const stageStart = Date.now();
     if (stageStart >= chainDeadline) {
       attempts.push({
@@ -240,7 +260,7 @@ export const resolveSong = async (
               : [quality];
           const seen = new Set<string>();
           for (const level of levels) {
-            if (Date.now() >= stageDeadline) break;
+            if (selected || options.signal?.aborted || Date.now() >= stageDeadline) break;
             try {
               const candidate = await provider.resolve(song, level, {
                 isDownload: options.isDownload,
@@ -282,7 +302,8 @@ export const resolveSong = async (
           }
           return null;
         })(),
-        Math.max(1, stageDeadline - Date.now())
+        Math.max(1, stageDeadline - Date.now()),
+        options.signal
       );
       if (!raw) {
         attempts.push({
@@ -313,7 +334,7 @@ export const resolveSong = async (
         return null;
       }
 
-      if (selected || Date.now() > chainDeadline) return null;
+      if (selected || options.signal?.aborted || Date.now() > chainDeadline) return null;
       selected = true;
       attempts.push({ providerKey: provider.key, ok: true, costMs: Date.now() - stageStart });
       const result: ResolveSongResult = {
@@ -347,6 +368,7 @@ export const resolveSong = async (
         ).catch(() => console.warn('[resolver] URL cache write failed'));
       return result;
     } catch (error) {
+      if (options.signal?.aborted) return null;
       if (error instanceof SourceAccessRejected)
         accessCooldowns.set(provider.key, { until: Date.now() + 30_000, code: error.code });
       const isTimeout = (error as Error).message === 'timeout';
@@ -362,8 +384,12 @@ export const resolveSong = async (
     return null;
   };
   const resolved = await firstAvailable(
-    candidates.map((provider) => () => attemptProvider(provider))
+    candidates.map((provider) => () => attemptProvider(provider)),
+    350,
+    options.signal
   );
+  if (options.signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+  reportSources(options.diagnosticId, attempts, new Map(candidates.map((p) => [p.key, p.name])));
   if (resolved) return { ...resolved, attempts: [...attempts] };
 
   if (attempts.length) {

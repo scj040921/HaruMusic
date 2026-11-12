@@ -8,6 +8,7 @@ await context.addInitScript(()=>{
  window.__downloads=[{taskId:'1',songInfo:{id:1,name:'Midnight — 离线音乐',ar:[{name:'HaruMusic'}],picUrl:'/icon.png'},filename:'Midnight.flac',state:'completed',total:24500000,loaded:24500000,progress:100,createdAt:3},{taskId:'2',songInfo:{id:2,name:'正在下载的音乐',ar:[{name:'Artist'}],picUrl:'/icon.png'},state:'downloading',total:20000000,loaded:8000000,progress:40,createdAt:2},{taskId:'3',songInfo:{id:3,name:'可以重试的任务',ar:[],picUrl:'/icon.png'},state:'error',error:'网络连接中断，请重试',progress:0,createdAt:1}];
  window.Capacitor={nativeCallback:()=> 'stub-listener',PluginHeaders:[{name:'HaruMedia',methods:[{name:'update',rtype:'promise'},{name:'addListener',rtype:'callback'},{name:'removeListener',rtype:'promise'}]},{name:'HaruDownloads',methods:['list','remove','openFolder','enqueue','playbackFile'].map(name=>({name,rtype:'promise'}))}],nativePromise:async(plugin,method,options)=>{if(plugin==='HaruDownloads'){if(method==='list')return {tasks:window.__downloads};if(method==='remove'){window.__downloads=window.__downloads.filter(t=>t.taskId!==options.taskId);return {};}return {};}return {};}};
 });
+await context.route('http://127.0.0.1:30488/**',route=>{const url=route.request().url();const artists=Array.from({length:24},(_,i)=>({id:i+1,name:'艺人 '+(i+1),picUrl:'http://127.0.0.1:5176/icon.png',albumSize:12}));return route.fulfill({json:url.includes('__health')?{service:'harumusic'}:url.includes('/artist/list')?{code:200,artists,more:false}:{code:200,data:[],albums:[],artists:[],result:{songs:[]}}});});
 const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
 await page.goto(process.env.LYRIC_TEST_URL||'http://127.0.0.1:5176/',{waitUntil:'domcontentloaded'});
 await page.locator('.startup-intro').waitFor({timeout:20000});
@@ -23,5 +24,14 @@ await page.getByRole('tab',{name:'已完成'}).click();assert.equal(await page.l
 await page.getByRole('button',{name:'删除下载文件'}).click();await page.getByText('保留',{exact:true}).click();await page.getByText('删除下载文件？',{exact:true}).waitFor({state:'detached'});assert.equal(await page.locator('.download-list li').count(),1);
 await page.setViewportSize({width:320,height:740});await page.evaluate(async()=>{const url=performance.getEntriesByType('resource').map(e=>e.name).find(n=>new URL(n).pathname==='/store/modules/settings.ts');const {useSettingsStore}=await import(url||'/store/modules/settings.ts');useSettingsStore().theme='dark';document.documentElement.classList.add('dark');});await page.waitForTimeout(300);await page.screenshot({path:'artifacts/ui-0.1.10/downloads-small-dark.png'});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
 await page.emulateMedia({reducedMotion:'reduce'});await page.evaluate(()=>sessionStorage.removeItem('haru-intro-seen'));await page.reload();await page.waitForSelector('.android-downloads');assert.equal(await page.locator('.startup-intro').count(),0);assert.equal(await page.evaluate(()=>document.getElementById('app').inert),false);
+await page.setViewportSize({width:412,height:915});
+await page.evaluate(()=>document.documentElement.style.setProperty('--safe-area-inset-top','24px'));
+for(const path of ['/artists','/mobile-search','/set','/history','/downloads']) {
+ await page.goto('http://127.0.0.1:5176/#'+path);await page.waitForTimeout(450);
+ const geometry=await page.evaluate(()=>{const h=document.querySelector('.mobile-header').getBoundingClientRect();const c=document.querySelector('.mobile-content').getBoundingClientRect();return {headerBottom:h.bottom,contentTop:c.top,contentBottom:c.bottom};});
+ assert.ok(geometry.contentTop>=geometry.headerBottom+8, path+' must keep the scroller below the toolbar');
+ assert.ok(geometry.contentBottom<=916,path+' scroll viewport must stay inside the window');
+ if(path==='/artists') {await page.locator('.artists-page .n-scrollbar-container').evaluate(e=>e.scrollTop=300);await page.screenshot({path:'artifacts/ui-0.1.10/header-artists-scrolled.png'});}
+}
 assert.deepEqual(errors,[]);console.log('Android UI bridge fixture: download states, filters, delete confirmation, 44px touch targets, 320px dark layout and reduced-motion intro passed.');
 await browser.close();

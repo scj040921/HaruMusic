@@ -579,7 +579,8 @@ class AudioService {
     track: SongResult,
     isPlay: boolean = true,
     seekTime?: number,
-    _existingSound?: HTMLAudioElement
+    _existingSound?: HTMLAudioElement,
+    options: { deadline?: number; signal?: AbortSignal } = {}
   ): Promise<HTMLAudioElement> {
     if (!url || !track) {
       return Promise.reject(new Error('缺少必要参数: url和track'));
@@ -628,6 +629,7 @@ class AudioService {
     this.setOperationLock();
 
     return new Promise<HTMLAudioElement>((resolve, reject) => {
+      const loadDeadline = Math.min(Date.now() + 8000, options.deadline ?? Infinity);
       let retryCount = 0;
       const maxRetries = 1;
       let settled = false;
@@ -676,6 +678,7 @@ class AudioService {
           loadTimer = null;
         }
         removeListeners();
+        options.signal?.removeEventListener('abort', cancelLoad);
         if (this.pendingLoadCleanup === cancelLoad) {
           this.pendingLoadCleanup = null;
         }
@@ -693,6 +696,11 @@ class AudioService {
 
       const cancelLoad = () => failLoad(new DOMException('Playback cancelled', 'AbortError'));
       this.pendingLoadCleanup = cancelLoad;
+      if (options.signal?.aborted) {
+        cancelLoad();
+        return;
+      }
+      options.signal?.addEventListener('abort', cancelLoad, { once: true });
 
       const startAudio = async () => {
         if (settled) return;
@@ -741,7 +749,20 @@ class AudioService {
       const tryPlay = () => {
         if (settled) return;
         this._isLoading = true;
-        loadTimer = setTimeout(() => failLoad(new Error('Audio loading timed out')), 8000);
+        const remaining = loadDeadline - Date.now();
+        if (remaining <= 0) {
+          failLoad(
+            Object.assign(new Error('Audio loading timed out'), { name: 'AudioLoadTimeout' })
+          );
+          return;
+        }
+        loadTimer = setTimeout(
+          () =>
+            failLoad(
+              Object.assign(new Error('Audio loading timed out'), { name: 'AudioLoadTimeout' })
+            ),
+          remaining
+        );
         const onError = () => {
           if (settled) return;
           removeListeners();

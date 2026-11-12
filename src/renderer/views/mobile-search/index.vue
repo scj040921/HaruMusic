@@ -266,7 +266,7 @@ onMounted(() => {
   @apply border-b border-gray-100 dark:border-gray-800;
 
   &.safe-area-top {
-    padding-top: calc(var(--safe-area-inset-top, 0px) + 12px);
+    padding-top: 12px;
   }
 }
 

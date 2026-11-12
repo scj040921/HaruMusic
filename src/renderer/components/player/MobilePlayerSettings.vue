@@ -51,6 +51,12 @@
               </button>
               <button @click="openDownloads"><i class="ri-folder-music-line" /> 下载管理</button>
             </div>
+            <details class="playback-diagnostics">
+              <summary>播放诊断</summary>
+              <p>记录最近五次点播的取源、缓冲时间，不含音频地址或账号凭据。</p>
+              <button type="button" @click="copyDiagnostics">{{ copyLabel }}</button>
+              <textarea aria-label="播放诊断内容" readonly :value="diagnosticText" />
+            </details>
             <!-- 播放速度 -->
             <div class="mb-6">
               <div class="flex items-center justify-between mb-3">
@@ -202,10 +208,30 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { useDownload } from '@/hooks/useDownload';
+import { playbackReports, playbackReportText } from '@/services/playbackDiagnostics';
 import { usePlayerStore } from '@/store/modules/player';
 import { isAndroidApp } from '@/utils';
 
 const { t } = useI18n();
+const diagnosticText = computed(() => {
+  void playbackReports.value;
+  return playbackReportText();
+});
+const copyLabel = ref('复制诊断');
+const copyDiagnostics = async () => {
+  const text = playbackReportText();
+  try {
+    await navigator.clipboard.writeText(text);
+    copyLabel.value = '已复制';
+  } catch {
+    const element = document.querySelector<HTMLTextAreaElement>('.playback-diagnostics textarea');
+    if (element) {
+      element.value = text;
+      element.select();
+    }
+    copyLabel.value = '已选中，可长按复制';
+  }
+};
 const playerStore = usePlayerStore();
 const router = useRouter();
 const { downloadMusic, isDownloading } = useDownload();
@@ -388,6 +414,35 @@ onUnmounted(() => {
 </style>
 
 <style scoped>
+.playback-diagnostics {
+  margin: 0 0 24px;
+  color: white;
+}
+.playback-diagnostics summary {
+  min-height: 44px;
+  padding: 12px;
+  cursor: pointer;
+}
+.playback-diagnostics p {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.playback-diagnostics button {
+  padding: 8px 16px;
+  margin: 12px 0;
+  background: #ffffff15;
+  border-radius: 24px;
+}
+.playback-diagnostics textarea {
+  width: 100%;
+  height: 160px;
+  padding: 12px;
+  background: #0003;
+  border-radius: 16px;
+  color: white;
+  font: 12px monospace;
+  resize: vertical;
+}
 :where(button) {
   min-height: 44px;
 }

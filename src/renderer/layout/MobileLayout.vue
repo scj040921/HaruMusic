@@ -2,7 +2,11 @@
   <div
     id="layout-main"
     class="mobile-layout mobile"
-    :class="{ 'has-safe-area': isPhone, 'android-liquidglass': isAndroidApp }"
+    :class="{
+      'has-safe-area': isPhone,
+      'android-liquidglass': isAndroidApp,
+      'player-expanded': playerStore.musicFull
+    }"
   >
     <!-- 顶部头部 -->
     <mobile-header v-if="!playerStore.musicFull" />

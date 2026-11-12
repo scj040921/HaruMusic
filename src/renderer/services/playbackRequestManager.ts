@@ -9,15 +9,22 @@ import type { SongResult } from '@/types/music';
 class PlaybackRequestManager {
   private currentRequestId: string | null = null;
   private counter = 0;
+  private controller = new AbortController();
 
   /**
    * 创建新请求，使之前的请求失效
    */
   createRequest(song: SongResult): string {
+    this.controller.abort();
+    this.controller = new AbortController();
     const requestId = `req_${Date.now()}_${++this.counter}`;
     this.currentRequestId = requestId;
     console.log(`[RequestManager] 新请求: ${requestId}, 歌曲: ${song.name}`);
     return requestId;
+  }
+
+  getSignal(): AbortSignal {
+    return this.controller.signal;
   }
 
   getGeneration(): number {
@@ -25,6 +32,7 @@ class PlaybackRequestManager {
   }
 
   cancelCurrentRequest(): void {
+    this.controller.abort();
     this.counter++;
     this.currentRequestId = null;
   }
@@ -54,6 +62,7 @@ class PlaybackRequestManager {
    * 标记请求失败
    */
   failRequest(requestId: string): void {
+    if (this.currentRequestId === requestId) this.controller.abort();
     console.log(`[RequestManager] 失败: ${requestId}`);
   }
 

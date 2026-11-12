@@ -14,6 +14,7 @@ import i18n from '@/../i18n/renderer';
 import { getParsingMusicUrl } from '@/api/music';
 import { loadLrc, useSongDetail } from '@/hooks/usePlayerHooks';
 import { audioService } from '@/services/audioService';
+import { beginPlaybackReport, updatePlaybackReport } from '@/services/playbackDiagnostics';
 import { playbackRequestManager } from '@/services/playbackRequestManager';
 import { preloadService } from '@/services/preloadService';
 import { setSongQuality, type SongQuality } from '@/services/songQuality';
@@ -133,7 +134,9 @@ const loadMetadata = async (
 const loadAndPlayAudio = async (
   song: SongResult,
   shouldPlay: boolean,
-  startTime: number
+  startTime: number,
+  deadline?: number,
+  signal?: AbortSignal
 ): Promise<void> => {
   if (!song.playMusicUrl) {
     throw new Error('歌曲没有播放URL');
@@ -151,7 +154,10 @@ const loadAndPlayAudio = async (
     }
     throw new DOMException('Playback cancelled', 'AbortError');
   }
-  await audioService.play(song.playMusicUrl, song, shouldPlay, startTime, preloadedSound);
+  await audioService.play(song.playMusicUrl, song, shouldPlay, startTime, preloadedSound, {
+    deadline,
+    signal
+  });
 };
 
 /**
@@ -212,8 +218,10 @@ export const playTrack = async (
 ): Promise<boolean> => {
   if (!music?.id) return false;
   const playbackStartedAt = Date.now();
+  const playbackDeadline = playbackStartedAt + (music.source === 'local' ? 30000 : 15000);
   const requestId = playbackRequestManager.createRequest(music);
   const gen = getCurrentGeneration();
+  beginPlaybackReport(requestId, music.name);
   const playerCore = await getPlayerCoreStore();
   if (gen !== getCurrentGeneration()) return false;
   const audioTrackBeforeSwitch = audioService.getCurrentTrack();
@@ -259,9 +267,13 @@ export const playTrack = async (
   const startTime =
     Number.isFinite(options.startTime) && options.startTime! >= 0 ? options.startTime! : 0;
   let candidate = originalMusic;
+  let resolveMs = 0,
+    bufferMs = 0;
   for (let attempt = 0; attempt < 2; attempt++) {
     const attemptStartedAt = Date.now();
     let audioUrl: string | undefined;
+    let audioStartedAt = 0;
+    updatePlaybackReport(requestId, { status: 'preparing', attempts: attempt + 1 });
     try {
       let detailTimeout: ReturnType<typeof setTimeout> | undefined;
       let song: SongResult;
@@ -271,7 +283,7 @@ export const playTrack = async (
           new Promise<never>((_, reject) => {
             detailTimeout = setTimeout(
               () => reject(new Error('获取歌曲信息超时，请检查网络或本地文件访问权限。')),
-              SONG_DETAIL_TIMEOUT_MS
+              Math.max(1, Math.min(SONG_DETAIL_TIMEOUT_MS, playbackDeadline - Date.now() - 1500))
             );
           })
         ]);
@@ -280,6 +292,8 @@ export const playTrack = async (
       }
       if (gen !== getCurrentGeneration()) return false;
       if (!song.playMusicUrl) throw new Error('歌曲没有播放URL');
+      resolveMs += Date.now() - attemptStartedAt;
+      updatePlaybackReport(requestId, { status: 'buffering', resolveMs, attempts: attempt + 1 });
       audioUrl = song.playMusicUrl;
       // Resolve the next source while the current track continues. Only switch
       // the visible song/audio element once the new URL is ready.
@@ -290,9 +304,17 @@ export const playTrack = async (
       applyLoadedMetadata();
       audioService.setVolume(playerCore.isMuted ? 0 : playerCore.volume);
       audioService.setPlaybackRate(playerCore.playbackRate);
-      const audioStartedAt = Date.now();
-      await loadAndPlayAudio(playerCore.playMusic, shouldPlay, startTime);
+      audioStartedAt = Date.now();
+      await loadAndPlayAudio(
+        playerCore.playMusic,
+        shouldPlay,
+        startTime,
+        playbackDeadline,
+        playbackRequestManager.getSignal()
+      );
       if (gen !== getCurrentGeneration()) return false;
+      bufferMs += Date.now() - audioStartedAt;
+      updatePlaybackReport(requestId, { status: 'playing', resolveMs, bufferMs });
       console.info('[playback-timing]', {
         songId: music.id,
         source: music.source,
@@ -329,6 +351,22 @@ export const playTrack = async (
     } catch (error) {
       if (gen !== getCurrentGeneration()) return false;
       const name = (error as Error)?.name;
+      if (audioStartedAt) bufferMs += Date.now() - audioStartedAt;
+      else resolveMs += Date.now() - attemptStartedAt;
+      updatePlaybackReport(requestId, {
+        status: 'failed',
+        error: name || 'Error',
+        attempts: attempt + 1,
+        resolveMs,
+        bufferMs
+      });
+      if (
+        audioUrl &&
+        music.source !== 'local' &&
+        (name === 'AudioLoadTimeout' ||
+          [2, 3, 4].includes((error as Error & { mediaCode?: number }).mediaCode || 0))
+      )
+        markUnplayableMedia(audioUrl);
       if (
         attempt === 0 &&
         !options.recovery &&
@@ -336,11 +374,9 @@ export const playTrack = async (
         audioUrl &&
         /^(https?:\/\/|pluginmedia:)/i.test(audioUrl) &&
         name !== 'AbortError' &&
-        name !== 'NotAllowedError'
+        name !== 'NotAllowedError' &&
+        playbackDeadline - Date.now() > 1500
       ) {
-        if ((error as Error & { mediaCode?: number }).mediaCode === 4) {
-          markUnplayableMedia(audioUrl);
-        }
         await clearParsedUrlCache(music.id);
         if (gen !== getCurrentGeneration()) return false;
         candidate = { ...originalMusic, playMusicUrl: undefined, expiredAt: undefined };

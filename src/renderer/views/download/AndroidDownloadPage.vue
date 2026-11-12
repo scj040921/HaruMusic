@@ -199,8 +199,7 @@ onBeforeUnmount(() => {
 </script>
 <style scoped>
 .android-downloads {
-  padding: calc(var(--safe-area-inset-top, 0px) + 80px) 24px
-    calc(var(--safe-area-inset-bottom, 0px) + 200px);
+  padding: 24px 24px calc(var(--safe-area-inset-bottom, 0px) + 200px);
   color: var(--text-primary, #111);
   min-height: 100%;
   background: var(--canvas, #fff);

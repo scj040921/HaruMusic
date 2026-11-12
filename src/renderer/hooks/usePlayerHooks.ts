@@ -115,7 +115,11 @@ export const getSongUrl = async (
       return await resolveCachedPlaybackUrl(songData.playMusicUrl, songData);
     }
 
-    const result = await resolveSong(cloneDeep(songData), { isDownload: isDownloaded });
+    const result = await resolveSong(cloneDeep(songData), {
+      isDownload: isDownloaded,
+      signal: requestId ? playbackRequestManager.getSignal() : undefined,
+      diagnosticId: requestId
+    });
     ensureRequestValid();
 
     if (!result) {
@@ -135,7 +139,7 @@ export const getSongUrl = async (
     }
     return await resolveCachedPlaybackUrl(result.media.url, songData);
   } catch (error) {
-    if ((error as Error).name === 'MusicSourceError') throw error;
+    if (['MusicSourceError', 'AbortError'].includes((error as Error).name)) throw error;
     if ((error as Error).message === 'Request cancelled') {
       throw error;
     }

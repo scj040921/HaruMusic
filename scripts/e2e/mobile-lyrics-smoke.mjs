@@ -31,6 +31,9 @@ console.log(await page.evaluate(()=>({ids:[...document.querySelectorAll('[id=lyr
 await page.screenshot({path:'artifacts/ui-0.1.10/normal.png'});
 console.log(await page.locator('.lyrics-wrapper .now-text').evaluate(e=>({text:e.innerText,opacity:getComputedStyle(e).opacity,transform:getComputedStyle(e).transform,rect:e.getBoundingClientRect().toJSON(),parent:e.parentElement.getBoundingClientRect().toJSON()})));
 assert.equal(await page.locator('.unified-controls').evaluate(e=>getComputedStyle(e).backgroundImage),'none','controller background must not introduce a gradient band');
+const titleStyle=await page.locator('.ios-layout-container .song-info .song-title').evaluate(e=>{const r=e.getBoundingClientRect(),p=e.closest('.song-info').getBoundingClientRect(),s=getComputedStyle(e);return {center:Math.abs(r.left+r.width/2-p.left-p.width/2),weight:Number(s.fontWeight),size:parseFloat(s.fontSize),align:s.textAlign};});
+console.log('title',titleStyle);
+assert.ok(titleStyle.center<2 && titleStyle.weight>=700 && titleStyle.size>=28 && titleStyle.align==='center','Player title must be centered, bold and prominent');
 const focus = await page.locator('.lyrics-wrapper .now-text').evaluate(e=>{const a=e.getBoundingClientRect(),b=e.parentElement.getBoundingClientRect();return {delta:Math.abs(a.top+a.height/2-b.top-b.height/2),text:e.innerText};});
 assert.ok(focus.delta < 8, 'normal lyric must remain centered');
 assert.ok(focus.text.includes('without clipping'));
@@ -45,7 +48,12 @@ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
 await page.waitForTimeout(250);
 assert.ok(Math.abs(await scroller.evaluate(e=>e.scrollTop)-before)>40, 'lyrics must respond to touch dragging');
 assert.deepEqual(errors,[]);
-console.log('Mobile lyric focus, wrapping, pure mode and touch scrolling passed.');
+await page.getByRole('button',{name:'播放设置',exact:true}).click();
+await page.getByText('播放诊断',{exact:true}).click();
+assert.ok(await page.getByRole('textbox',{name:'播放诊断内容'}).isVisible());
+await page.getByRole('button',{name:'复制诊断',exact:true}).click();
+assert.ok(await page.getByRole('button',{name:/已复制|已选中/}).isVisible());
+console.log('Mobile lyric focus, wrapping, pure mode, touch scrolling and diagnostics UI passed.');
 await browser.close();
 
 

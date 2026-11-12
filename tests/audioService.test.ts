@@ -345,4 +345,30 @@ describe('audio loading ownership (#769)', () => {
     service.seek(-10);
     expect(audio.currentTime).toBe(0);
   });
+  it('shares one load deadline across an internal network retry', async () => {
+    const song = makeSong(1, 'https://example.com/slow.mp3');
+    const result = service
+      .play(song.playMusicUrl!, song, true, undefined, undefined, { deadline: Date.now() + 1000 })
+      .catch((e) => e);
+    await vi.advanceTimersByTimeAsync(500);
+    audio.fail(2);
+    await vi.advanceTimersByTimeAsync(501);
+    expect((await result).name).toBe('AudioLoadTimeout');
+    expect(service.isLoading()).toBe(false);
+  });
+  it('cancels a pending next-track load immediately when its request is aborted', async () => {
+    const first = makeSong(1, 'https://example.com/first.mp3');
+    const initial = service.play(first.playMusicUrl!, first);
+    audio.ready();
+    await initial;
+    const next = makeSong(2, 'https://example.com/next.mp3');
+    const controller = new AbortController();
+    const pending = service
+      .play(next.playMusicUrl!, next, true, undefined, undefined, { signal: controller.signal })
+      .catch((e) => e);
+    controller.abort();
+    expect((await pending).name).toBe('AbortError');
+    expect(service.getCurrentTrack()?.id).toBe(first.id);
+    expect(service.isLoading()).toBe(false);
+  });
 });

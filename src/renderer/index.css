@@ -303,13 +303,13 @@ html.dark .android-native {
 
 .android-native .mobile-content {
   position: absolute;
-  inset: 0;
+  inset: calc(var(--safe-area-inset-top, 0px) + 72px) 0 0;
   width: 100%;
-  height: 100%;
+  height: auto !important;
   min-height: 0;
   flex: none;
-  /* Let each page paint behind the overlay while keeping its first control row
-     below the floating toolbar and the system status icons. */
+  /* Reserve the toolbar once at layout level. Nested scrollbars are clipped
+     below it, so scrolled covers and headings cannot pass behind the controls. */
   padding-top: 0;
   padding-bottom: 0 !important;
 }
@@ -322,7 +322,7 @@ html.dark .android-native {
 }
 
 .android-native .mobile-content > .mobile-page {
-  padding-top: calc(var(--safe-area-inset-top, 0px) + 64px);
+  padding-top: 0;
   box-sizing: border-box;
 }
 
@@ -710,4 +710,8 @@ html.dark .android-native .android-native-player .mobile-mini-controls {
     backdrop-filter: none !important;
     background: var(--canvas, #fff) !important;
   }
+}
+
+.android-native .mobile-layout.player-expanded .mobile-content {
+  inset: 0;
 }

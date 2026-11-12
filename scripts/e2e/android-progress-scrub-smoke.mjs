@@ -131,7 +131,7 @@ try {
   })()`);
   assert.equal(headerMetrics.padding, '0px', 'Floating header must not apply the safe inset twice');
   assert.equal(headerMetrics.height, 52);
-  assert.equal(headerMetrics.contentTop, 0, 'Content background must extend behind the header');
+  assert.ok(headerMetrics.contentTop >= 60, 'Content must have its own viewport below the floating header');
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.header-btn')).borderRadius"), '50%', 'Icon controls must use circular corners');
   mkdirSync('artifacts/screenshots', { recursive: true });
   const homeShot = await send('Page.captureScreenshot', { format: 'png' });

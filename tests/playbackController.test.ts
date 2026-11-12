@@ -148,7 +148,8 @@ describe('playback recovery ownership (#769)', () => {
       expect.anything(),
       false,
       42,
-      undefined
+      undefined,
+      expect.objectContaining({ deadline: expect.any(Number), signal: expect.any(AbortSignal) })
     );
     expect(mocks.setQuality).toHaveBeenCalledWith(1, 'lossless');
   });
@@ -265,7 +266,8 @@ describe('playback recovery ownership (#769)', () => {
       expect.anything(),
       true,
       0,
-      undefined
+      undefined,
+      expect.objectContaining({ deadline: expect.any(Number), signal: expect.any(AbortSignal) })
     );
     expect(abandoned.pause).toHaveBeenCalledOnce();
     expect(mocks.core.playMusic.id).toBe(2);
@@ -407,5 +409,38 @@ describe('playback recovery ownership (#769)', () => {
     expect(mocks.core.userPlayIntent).toBe(true);
     expect(mocks.core.playMusic).toBe(previousTrack);
     expect(mocks.audio.pause).not.toHaveBeenCalled();
+  });
+  it('does not restart a full resolution budget after a slow first audio failure', async () => {
+    vi.useFakeTimers();
+    const started = Date.now();
+    mocks.getSongDetail
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(
+              () => resolve({ ...makeSong(1), playMusicUrl: 'https://example.com/slow.mp3' }),
+              5000
+            )
+          )
+      )
+      .mockImplementationOnce(() => new Promise(() => {}));
+    mocks.audio.play.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(Object.assign(new Error('slow'), { name: 'AudioLoadTimeout' })),
+            7000
+          )
+        )
+    );
+    const pending = controller.playTrack(makeSong(1));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(7000);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(await pending).toBe(false);
+    expect(Date.now() - started).toBeLessThanOrEqual(15000);
+    expect(mocks.audio.play).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });

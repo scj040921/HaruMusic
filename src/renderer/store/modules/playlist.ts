@@ -81,12 +81,15 @@ export const usePlaylistStore = defineStore(
             }
           })
         );
-        if (playList.value !== targetList) return;
+        if (playList.value !== targetList || preloadRevision !== preloadService.getRevision())
+          return;
 
         const nextSong = detailedSongs[0];
         // Start warming the next audio URL as soon as parsing returns it. Lyrics
         // and cover color are independent work and must not delay the handoff.
         if (nextSong?.playMusicUrl) {
+          targetList[firstIndex] = nextSong;
+          triggerRef(playList);
           preloadService.load(nextSong, preloadRevision).catch((err) => {
             console.warn('预加载下一首失败:', err);
           });
@@ -118,7 +121,8 @@ export const usePlaylistStore = defineStore(
         }
 
         // 等待详情/歌词期间可能已换了队列，旧结果不能按下标覆盖新队列。
-        if (playList.value !== targetList) return;
+        if (playList.value !== targetList || preloadRevision !== preloadService.getRevision())
+          return;
         detailedSongs.forEach((song, index) => {
           if (song && targetList[firstIndex + index] === songs[index]) {
             targetList[firstIndex + index] = song;
@@ -170,21 +174,11 @@ export const usePlaylistStore = defineStore(
       }
 
       // 预加载下一首和下下首（最多2首）
-      const endIndex = Math.min(nextIndex + 2, playList.value.length);
+      const endIndex = Math.min(nextIndex + 1, playList.value.length);
 
       if (nextIndex < playList.value.length) {
         // 立即执行预加载
         fetchSongs(nextIndex, endIndex);
-
-        // 循环模式且接近列表末尾，预加载列表开头
-        if (
-          (playMode.value === 1 || playMode.value === 2) &&
-          nextIndex + 1 >= playList.value.length &&
-          playList.value.length > 2
-        ) {
-          // 立即预加载，不等待
-          fetchSongs(0, 1);
-        }
       }
     };
 
