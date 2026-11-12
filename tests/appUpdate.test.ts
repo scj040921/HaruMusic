@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (...args: any[]) => any>(),
   listeners: new Map<string, (...args: any[]) => any>(),
   credential: vi.fn(),
+  quitting: vi.fn(),
+  cleanup: vi.fn(),
+  windows: [] as any[],
   updater: {
     setFeedURL: vi.fn(),
     checkForUpdates: vi.fn(),
@@ -22,10 +25,12 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('electron', () => ({
   app: { isPackaged: true, getVersion: () => '0.1.3' },
-  BrowserWindow: { getAllWindows: () => [] },
+  BrowserWindow: { getAllWindows: () => mocks.windows },
   ipcMain: { handle: (key: string, cb: (...args: any[]) => any) => mocks.handlers.set(key, cb) },
   shell: { openExternal: vi.fn() }
 }));
+vi.mock('../src/main/modules/window', () => ({ setAppQuitting: mocks.quitting }));
+vi.mock('../src/main/modules/lxMusicHttp', () => ({ cleanupLxMusicHttp: mocks.cleanup }));
 vi.mock('electron-updater', () => ({ default: { autoUpdater: mocks.updater } }));
 vi.mock('../src/main/modules/githubUpdateAuth', () => ({
   getGithubUpdateCredential: mocks.credential
@@ -35,6 +40,7 @@ describe('private update lifecycle', () => {
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
+    mocks.windows.length = 0;
     mocks.handlers.clear();
     mocks.listeners.clear();
     mocks.updater.on.mockImplementation((name, cb) => {
@@ -80,7 +86,12 @@ describe('private update lifecycle', () => {
     const state = await mocks.handlers.get('app-update:download')!();
     expect(state.status).toBe('downloaded');
     expect(state.downloadProgress).toBe(100);
+    const window = { removeAllListeners: vi.fn(), close: vi.fn(), webContents: { on: vi.fn() } };
+    mocks.windows.push(window);
     expect(await mocks.handlers.get('app-update:quit-and-install')!()).toBe(true);
+    expect(mocks.quitting).toHaveBeenCalledWith(true);
+    expect(mocks.cleanup).toHaveBeenCalledOnce();
+    expect(window.close).toHaveBeenCalledOnce();
     expect(mocks.updater.quitAndInstall).toHaveBeenCalledOnce();
   });
   it('can retry after a temporary failure', async () => {

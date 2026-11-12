@@ -3,6 +3,29 @@ import { describe, expect, it, vi } from 'vitest';
 import { MediaRangeCache } from '../src/shared/mediaRangeCache';
 
 describe('foreground-first media range transport', () => {
+  it('forwards the first playable bytes before the remainder arrives in streaming mode', async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(value) {
+        controller = value;
+      }
+    });
+    const upstream = vi.fn(
+      async (_url: string, _options: RequestInit) => new Response(body, { status: 206 })
+    );
+    const cache = new MediaRangeCache(upstream as typeof fetch, undefined, undefined, true);
+    const signal = new AbortController().signal;
+    const response = await cache.fetch('https://cdn.test/slow.flac', {
+      headers: { Range: 'bytes=0-' },
+      signal
+    });
+    const reader = response.body!.getReader();
+    controller.enqueue(new Uint8Array([1, 2]));
+    expect([...(await reader.read()).value!]).toEqual([1, 2]);
+    expect(new Headers(upstream.mock.calls[0][1].headers).get('range')).toBe('bytes=0-');
+    expect(upstream.mock.calls[0][1].signal).toBe(signal);
+    await reader.cancel();
+  });
   it('uses a smaller initial range when configured for mobile playback', async () => {
     const mobileBlock = 128 * 1024;
     const ranges: string[] = [];

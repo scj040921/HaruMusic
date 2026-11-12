@@ -214,7 +214,7 @@ try {
   assert.equal(firstMobileBlock.status, 206);
   assert.equal(firstMobileBlock.headers.get('content-range'), `bytes 0-8191/${largeAudio.length}`);
   assert.equal((await firstMobileBlock.arrayBuffer()).byteLength, 8192);
-  assert.equal(firstLargeRange, 'bytes=0-131071', 'Android should prefetch a 128 KiB first block');
+  assert.equal(firstLargeRange, 'bytes=0-8191', 'Android must forward Range without waiting for a larger block');
 
   const streamingDescriptor = encodeURIComponent(
     JSON.stringify({ url: `http://127.0.0.1:${mockPort}/slow-audio` })
@@ -237,7 +237,7 @@ try {
   });
   assert.equal(invalidUnblock.status, 400);
 
-  console.log('Android embedded API, plugin HTTP, 128 KiB mobile range prefetch, and cancellation smoke checks passed.');
+  console.log('Android embedded API, plugin HTTP, streaming mobile range forwarding, and cancellation smoke checks passed.');
   assert.equal(
     await import('node:fs/promises').then(({ access }) =>
       access(join(temporaryDir, 'app-private', 'tmp', 'anonymous_token')).then(() => true)

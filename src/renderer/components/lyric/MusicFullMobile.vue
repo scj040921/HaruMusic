@@ -103,7 +103,7 @@
                 <template v-for="(word, wordIndex) in item.words" :key="wordIndex">
                   <span class="lyric-word" :style="getWordStyle(index, wordIndex, word)">
                     {{ word.text }} </span
-                  ><span class="lyric-word" v-if="word.space">&nbsp;</span></template
+                  ><span class="lyric-space" v-if="word.space">&nbsp;</span></template
                 >
               </div>
               <!-- 普通歌词显示 -->
@@ -197,7 +197,7 @@
                   :id="`lyric-line-${idx}`"
                   class="lyric-line"
                   :class="{ 'now-text': idx === nowIndex }"
-                  @click="!isTouchScrolling && setAudioTime(idx)"
+                  @click="!touchMoved && setAudioTime(idx)"
                 >
                   <!-- 逐字歌词显示 -->
                   <div
@@ -214,7 +214,10 @@
                     >
                   </div>
                   <!-- 普通歌词显示 -->
-                  <span v-else>{{ line.text }}</span>
+                  <span v-else :style="getLrcStyle(idx)">{{ line.text }}</span>
+                  <div v-if="config.showTranslation && line.trText" class="translation">
+                    {{ line.trText }}
+                  </div>
                 </div>
               </div>
               <div v-else class="no-lyrics">
@@ -347,7 +350,7 @@
                 <template v-for="(word, wordIndex) in item.words" :key="wordIndex">
                   <span class="lyric-word" :style="getWordStyle(index, wordIndex, word)">
                     {{ word.text }} </span
-                  ><span class="lyric-word" v-if="word.space">&nbsp;</span></template
+                  ><span class="lyric-space" v-if="word.space">&nbsp;</span></template
                 >
               </div>
               <!-- 普通歌词显示 -->
@@ -451,12 +454,13 @@ import MobilePlayerSettings from '@/components/player/MobilePlayerSettings.vue';
 import {
   allTime,
   correctionTime,
+  getLrcIndex,
   lrcArray,
+  lrcTimeArray,
   nowIndex,
   nowTime,
   setAudioTime,
-  textColors,
-  useLyricProgress
+  textColors
 } from '@/hooks/MusicHook';
 import { useArtist } from '@/hooks/useArtist';
 import { useLyricBackground } from '@/hooks/useLyricBackground';
@@ -562,6 +566,9 @@ const isAutoScrollEnabled = ref(true);
 const lyricsScrollerRef = ref<HTMLElement | null>(null);
 const isTouchScrolling = ref(false);
 const touchStartY = ref(0);
+let touchMoved = false;
+let scrollFrame = 0;
+let lyricFrame = 0;
 const lastScrollTop = ref(0);
 const autoScrollTimer = ref<number | null>(null);
 const isSongChanging = ref(false);
@@ -641,6 +648,8 @@ const scrollToCurrentLyric = (immediate = false, customScrollerRef?: HTMLElement
       return;
     }
 
+    // Keep enough leading/trailing room to center even the first/last lyric.
+    scrollerRef.style.paddingBlock = `${scrollerRef.clientHeight / 2}px`;
     const containerRect = scrollerRef.getBoundingClientRect();
     const lineRect = activeEl.getBoundingClientRect();
 
@@ -651,12 +660,29 @@ const scrollToCurrentLyric = (immediate = false, customScrollerRef?: HTMLElement
       containerRect.height / 2 +
       lineRect.height / 2;
 
-    console.log(`滚动到歌词 #${nowIndex.value}, 位置: ${scrollTop}px`);
-
-    scrollerRef.scrollTo({
-      top: scrollTop,
-      behavior: immediate ? 'auto' : 'smooth'
-    });
+    cancelAnimationFrame(scrollFrame);
+    const target = Math.max(
+      0,
+      Math.min(scrollTop, scrollerRef.scrollHeight - scrollerRef.clientHeight)
+    );
+    if (immediate || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      scrollerRef.scrollTo({ top: target, behavior: 'instant' });
+      return;
+    }
+    let position = scrollerRef.scrollTop;
+    let velocity = 0;
+    let last = performance.now();
+    const follow = (stamp: number) => {
+      const dt = Math.min((stamp - last) / 1000, 0.032);
+      last = stamp;
+      velocity += ((target - position) * 180 - velocity * 26) * dt;
+      position += velocity * dt;
+      scrollerRef.scrollTop = position;
+      if (Math.abs(target - position) > 0.3 || Math.abs(velocity) > 1) {
+        scrollFrame = requestAnimationFrame(follow);
+      } else scrollerRef.scrollTop = target;
+    };
+    scrollFrame = requestAnimationFrame(follow);
   } catch (err) {
     console.error('滚动歌词出错:', err);
   }
@@ -726,6 +752,8 @@ const handleScroll = () => {
 
 // 触摸相关事件
 const handleTouchStart = (e: TouchEvent) => {
+  cancelAnimationFrame(scrollFrame);
+  touchMoved = false;
   touchStartY.value = e.touches[0].clientY;
 
   // 根据当前模式获取正确的滚动容器
@@ -748,7 +776,8 @@ const handleTouchStart = (e: TouchEvent) => {
   }
 };
 
-const handleTouchMove = () => {
+const handleTouchMove = (event: TouchEvent) => {
+  if (Math.abs(event.touches[0].clientY - touchStartY.value) > 8) touchMoved = true;
   if (!isTouchScrolling.value) return;
   // 实际的滚动处理由浏览器默认行为完成
 };
@@ -765,9 +794,9 @@ const handleTouchEnd = () => {
 
     // 恢复自动滚动到当前歌词
     if (!isLandscape.value) {
-      scrollToCurrentLyric(true);
+      scrollToCurrentLyric(false);
     } else if (isLandscape.value) {
-      scrollToCurrentLyric(true, landscapeLyricsRef.value);
+      scrollToCurrentLyric(false, landscapeLyricsRef.value);
     }
   }, 3000);
 };
@@ -970,6 +999,8 @@ watch(
 
 // 组件卸载清理
 onBeforeUnmount(() => {
+  cancelAnimationFrame(scrollFrame);
+  cancelAnimationFrame(lyricFrame);
   window.removeEventListener(LYRIC_CONFIG_CHANGE_EVENT, handleLyricConfigChange);
 
   if (autoScrollTimer.value) {
@@ -1046,6 +1077,9 @@ watch(
         // 延迟恢复自动滚动，等待歌词数据更新
         setTimeout(() => {
           isSongChanging.value = false;
+          nextTick(() =>
+            scrollToCurrentLyric(true, isLandscape.value ? landscapeLyricsRef.value : undefined)
+          );
         }, 300);
       }, 100);
     }
@@ -1099,91 +1133,72 @@ watch(isVisible, (newVal) => {
   }
 });
 
-// 添加getLrcStyle函数
-const { getLrcStyle: originalLrcStyle } = useLyricProgress();
-
-// 修改 getLrcStyle 函数
+// Only active lyric paint is sampled each frame; no list-wide reactive clock.
 const getLrcStyle = (index: number) => {
+  if (index !== nowIndex.value) return {};
   const colors = textColors.value || getTextColors();
-  const originalStyle = originalLrcStyle(index);
-
-  if (index === nowIndex.value) {
-    // 当前播放的歌词，使用渐变效果
-    // 只有原始样式包含 backgroundImage 时才设置 color: transparent
-    // 否则前奏阶段文字会因 transparent 而不可见
-    if (originalStyle.backgroundImage) {
-      return {
-        ...originalStyle,
-        backgroundImage: originalStyle.backgroundImage
-          .replace(/#ffffff/g, colors.active)
-          .replace(/#ffffff8a/g, `${colors.primary}`),
-        backgroundClip: 'text',
-        WebkitBackgroundClip: 'text',
-        color: 'transparent'
-      };
-    }
-    // 当前行但播放时间未到（前奏/间奏），用高亮色显示
-    return {
-      color: colors.active
-    };
-  }
-
-  // 非当前播放的歌词，使用普通颜色
   return {
-    color: colors.primary
+    backgroundImage: `linear-gradient(to right, ${colors.active} var(--line-progress, 0%), ${colors.primary} var(--line-progress, 0%))`,
+    backgroundClip: 'text',
+    WebkitBackgroundClip: 'text',
+    color: 'transparent'
   };
 };
-
-// 逐字歌词样式函数
-const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
+const getWordStyle = (index: number, _wordIndex: number, _word: any) => {
+  if (index !== nowIndex.value) return {};
   const colors = textColors.value || getTextColors();
-  // 如果不是当前行，返回普通样式
-  if (lineIndex !== nowIndex.value) {
-    return {
-      color: colors.primary,
-      transition: 'color 0.3s ease',
-      // 重置背景相关属性
-      backgroundImage: 'none',
-      WebkitTextFillColor: 'initial'
-    };
-  }
-
-  // 当前行的逐字效果，应用歌词矫正时间
-  const currentTime = (nowTime.value + correctionTime.value) * 1000; // 转换为毫秒，确保与word时间单位一致
-
-  // 直接使用绝对时间比较
-  const wordStartTime = word.startTime; // 单词开始的绝对时间（毫秒）
-  const wordEndTime = word.startTime + word.duration;
-
-  if (currentTime >= wordStartTime && currentTime < wordEndTime) {
-    // 当前正在播放的单词 - 使用渐变进度效果
-    const progress = Math.min((currentTime - wordStartTime) / word.duration, 1);
-    const progressPercent = Math.round(progress * 100);
-
-    return {
-      backgroundImage: `linear-gradient(to right, ${colors.active} 0%, ${colors.active} ${progressPercent}%, ${colors.primary} ${progressPercent}%, ${colors.primary} 100%)`,
-      backgroundClip: 'text',
-      WebkitBackgroundClip: 'text',
-      WebkitTextFillColor: 'transparent',
-      textShadow: `0 0 8px ${colors.active}40`,
-      transition: 'all 0.1s ease'
-    };
-  } else if (currentTime >= wordEndTime) {
-    // 已经播放过的单词 - 纯色显示
-    return {
-      color: colors.active,
-      WebkitTextFillColor: 'initial',
-      transition: 'none'
-    };
-  } else {
-    // 还未播放的单词 - 普通状态
-    return {
-      color: colors.primary,
-      WebkitTextFillColor: 'initial',
-      transition: 'none'
-    };
+  return {
+    backgroundImage: `linear-gradient(to right, ${colors.active} var(--word-progress, 0%), ${colors.primary} var(--word-progress, 0%))`,
+    backgroundClip: 'text',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent'
+  };
+};
+const paintLyrics = () => {
+  if (!isVisible.value || document.hidden) return;
+  const audio = audioService.getCurrentSound();
+  if (!audio || !Number.isFinite(audio.currentTime)) return;
+  const time = audio.currentTime;
+  const index = getLrcIndex(time);
+  if (nowIndex.value !== index) nowIndex.value = index;
+  const scroller = isLandscape.value ? landscapeLyricsRef.value : lyricsScrollerRef.value;
+  const line = scroller?.querySelector<HTMLElement>('.now-text');
+  const start = lrcTimeArray.value[index];
+  const end = lrcTimeArray.value[index + 1] ?? start + 1;
+  const corrected = time + correctionTime.value;
+  if (line && end > start) {
+    const percent = Math.max(0, Math.min(100, ((corrected - start) / (end - start)) * 100));
+    line.style.setProperty('--line-progress', `${percent}%`);
+    const words = lrcArray.value[index]?.words || [];
+    line.querySelectorAll<HTMLElement>('.lyric-word').forEach((element, wordIndex) => {
+      const word = words[wordIndex];
+      if (!word) return;
+      const progress = Math.max(
+        0,
+        Math.min(100, ((corrected * 1000 - word.startTime) / Math.max(1, word.duration)) * 100)
+      );
+      element.style.setProperty('--word-progress', `${progress}%`);
+    });
   }
 };
+watch(
+  [isVisible, play],
+  ([visible, playing]) => {
+    cancelAnimationFrame(lyricFrame);
+    const tick = () => {
+      paintLyrics();
+      if (visible && playing) lyricFrame = requestAnimationFrame(tick);
+    };
+    tick();
+  },
+  { immediate: true }
+);
+watch([lrcArray, showFullLyrics, isVisible], () =>
+  nextTick(() => {
+    scrollToCurrentLyric(true, isLandscape.value ? landscapeLyricsRef.value : undefined);
+    paintLyrics();
+  })
+);
 </script>
 
 <style scoped lang="scss">
@@ -1786,7 +1801,7 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
   }
 
   &.now-text {
-    @apply font-medium py-4;
+    @apply font-medium;
     color: var(--text-color-active);
     opacity: 1;
   }
@@ -1977,11 +1992,6 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
         .lyric-line {
           @apply text-center py-1 transition-all duration-300 opacity-70;
 
-          &:nth-child(2) {
-            @apply text-lg font-medium opacity-100;
-            color: var(--text-color-active);
-          }
-
           .translation {
             @apply text-sm opacity-60 mt-1;
           }
@@ -2085,7 +2095,7 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
   flex: 1;
   margin: 0;
 }
-#mobile-drawer-target .ios-layout-container .lyrics-wrapper {
+#mobile-drawer-target .ios-layout-container .lyrics-container .lyrics-wrapper {
   height: 100%;
   overflow-y: auto;
   display: block;
@@ -2109,7 +2119,7 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
   opacity: 1;
   color: var(--text-color-active);
   transform: scale(1);
-  font-weight: 700;
+  font-weight: 600;
 }
 #mobile-drawer-target:not(.is-landscape) .unified-controls {
   bottom: calc(48px + var(--safe-area-inset-bottom, 0px));
@@ -2233,5 +2243,59 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
 }
 #mobile-drawer-target .fullscreen-lyrics .lyrics-scroller .lyric-line {
   font-size: clamp(24px, var(--lyric-font-size, 7vw), 48px);
+}
+/* Focus never changes line height, wrapping or padding. */
+#mobile-drawer-target .lyric-line {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+  transform-origin: center;
+  transition:
+    transform 420ms cubic-bezier(0.2, 1.35, 0.3, 1),
+    opacity 300ms,
+    filter 300ms,
+    text-shadow 300ms;
+}
+#mobile-drawer-target .lyrics-scroller {
+  scroll-behavior: auto;
+}
+#mobile-drawer-target .lyric-line:not(.now-text) {
+  opacity: 0.42;
+  filter: blur(0.6px);
+  transform: scale(0.96);
+}
+#mobile-drawer-target .lyric-line.now-text {
+  opacity: 1;
+  filter: none;
+  transform: scale(1.035);
+  text-shadow: 0 0 16px color-mix(in srgb, var(--text-color-active) 24%, transparent);
+}
+#mobile-drawer-target .ios-layout-container .lyrics-wrapper .lyric-line,
+#mobile-drawer-target .ios-layout-container .lyrics-wrapper .lyric-line.now-text {
+  font-size: clamp(22px, var(--lyric-font-size, 5.5vw), 36px);
+  padding: 16px 8px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+#mobile-drawer-target .ios-layout-container .lyrics-wrapper .lyric-line.now-text {
+  transform: scale(1.035);
+}
+#mobile-drawer-target .fullscreen-lyrics .lyrics-scroller .lyric-line,
+#mobile-drawer-target .fullscreen-lyrics .lyrics-scroller .lyric-line.now-text {
+  font-size: clamp(26px, var(--lyric-font-size, 7vw), 48px);
+  padding: 16px;
+  line-height: 1.5;
+}
+#mobile-drawer-target .lyric-line .translation {
+  font-size: 0.6em;
+  line-height: 1.5;
+}
+#mobile-drawer-target .lyric-line .lyric-word {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #mobile-drawer-target .lyric-line {
+    transition: none;
+    transform: none;
+  }
 }
 </style>

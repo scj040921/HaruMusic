@@ -323,6 +323,15 @@ describe('audio loading ownership (#769)', () => {
     expect(service.getCurrentTrack()?.id).toBe(nextSong.id);
   });
 
+  it('starts on the first decoded frame without waiting for canplay', async () => {
+    const song = makeSong(1, 'https://example.com/song.mp3');
+    const playback = service.play(song.playMusicUrl!, song);
+    audio.readyState = 2;
+    audio.dispatchEvent(new Event('loadeddata'));
+    await playback;
+    expect(audio.play).toHaveBeenCalledOnce();
+  });
+
   it('clamps seek targets and ignores non-finite values', async () => {
     const song = makeSong(1, 'https://example.com/song.mp3');
     const playback = service.play(song.playMusicUrl!, song);

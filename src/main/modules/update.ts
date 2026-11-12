@@ -12,6 +12,8 @@ import {
   createDefaultAppUpdateState
 } from '../../shared/appUpdate';
 import { getGithubUpdateCredential } from './githubUpdateAuth';
+import { cleanupLxMusicHttp } from './lxMusicHttp';
+import { setAppQuitting } from './window';
 
 const { autoUpdater } = electronUpdater;
 
@@ -283,6 +285,14 @@ export function setupUpdateHandlers(mainWindow: BrowserWindow) {
 
   ipcMain.handle('app-update:quit-and-install', async () => {
     if (updateState.status !== APP_UPDATE_STATUS.downloaded) return false;
+    setAppQuitting(true);
+    cleanupLxMusicHttp();
+    // Permit every auxiliary window to close while NSIS waits for Electron.
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.removeAllListeners('close');
+      window.webContents.on('will-prevent-unload', (event) => event.preventDefault());
+      window.close();
+    }
     autoUpdater.quitAndInstall(false, true);
     return true;
   });

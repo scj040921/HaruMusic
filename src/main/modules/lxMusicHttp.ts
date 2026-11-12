@@ -17,6 +17,7 @@ interface LxHttpRequest {
     form?: Record<string, string>;
     formData?: Record<string, string>;
     timeout?: number;
+    responseType?: 'media-probe';
   };
   requestId: string;
 }
@@ -120,11 +121,22 @@ export const initLxMusicHttp = () => {
         }, timeout);
 
         const response = await fetch(url, fetchOptions);
-        clearTimeout(timeoutId);
-        timeoutId = null;
 
         console.log(`[LxMusicHttp] 响应: ${response.status} ${url}`);
 
+        // Audio verification needs only response headers. Never read an entire
+        // FLAC into text when a CDN ignores the small Range probe.
+        if (
+          options.responseType === 'media-probe' &&
+          /audio\/|octet-stream|video\/|mpeg/i.test(response.headers.get('content-type') || '')
+        ) {
+          controller.abort();
+          return {
+            statusCode: response.status,
+            headers: Object.fromEntries(response.headers.entries()),
+            body: ''
+          };
+        }
         // 读取响应体
         const rawBody = await response.text();
 

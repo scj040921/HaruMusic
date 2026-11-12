@@ -12,7 +12,7 @@ const { MediaRangeCache } = require(
 );
 // Android playback should start from a small verified segment on mobile links.
 // Desktop keeps the shared cache's default 512 KiB blocks.
-const mediaCache = new MediaRangeCache(fetch, 24 * 1024 * 1024, 128 * 1024);
+const mediaCache = new MediaRangeCache(fetch, 24 * 1024 * 1024, 128 * 1024, true);
 
 const GATEWAY_PORT = Number(process.env.HARUMUSIC_GATEWAY_PORT || '30488');
 const API_BASE_PORT = Number(process.env.HARUMUSIC_API_BASE_PORT || String(GATEWAY_PORT + 1));

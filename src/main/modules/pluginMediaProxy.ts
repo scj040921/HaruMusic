@@ -11,7 +11,12 @@ import { parsePluginMediaUrl, PLUGIN_MEDIA_SCHEME } from '../../shared/musicSour
  * 条件请求头原样转发，响应流式透传，保证拖动进度条可用。
  */
 export const initPluginMediaProxy = (): void => {
-  const cache = new MediaRangeCache((url, options) => net.fetch(url, options));
+  const cache = new MediaRangeCache(
+    (url, options) => net.fetch(url, options),
+    undefined,
+    undefined,
+    true
+  );
   protocol.handle(PLUGIN_MEDIA_SCHEME, async (request) => {
     const target = parsePluginMediaUrl(request.url);
     if (!target) {

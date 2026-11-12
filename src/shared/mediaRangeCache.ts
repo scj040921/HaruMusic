@@ -22,7 +22,8 @@ export class MediaRangeCache {
   constructor(
     private fetcher: typeof fetch = fetch,
     private limit = 24 * 1024 * 1024,
-    private blockSize = BLOCK
+    private blockSize = BLOCK,
+    private streamPlayback = false
   ) {}
 
   clear(): void {
@@ -207,6 +208,12 @@ export class MediaRangeCache {
   async fetch(url: string, options: RequestInit = {}): Promise<Response> {
     const headers = new Headers(options.headers);
     const raw = headers.get('range');
+    // Continuous playback must not wait for a whole cache block before first byte.
+    // Preserve Range, redirects, backpressure and the caller's cancellation signal.
+    if (this.streamPlayback) {
+      this.cancelSpeculation();
+      return this.fetcher(url, options);
+    }
     const range = raw && /^bytes=(\d+)-(\d*)$/.exec(raw);
     if (!range || options.method === 'HEAD' || headers.has('if-range'))
       return this.fetcher(url, options);

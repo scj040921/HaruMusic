@@ -1,0 +1,50 @@
+// Run against a fresh Vite dev server; PLAYWRIGHT_MODULE may point to a local Playwright module.
+import assert from 'node:assert/strict';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+import { mkdirSync } from 'node:fs';
+const browser = await chromium.launch({headless:true, channel:'msedge', args:['--autoplay-policy=no-user-gesture-required']});
+const page = await browser.newPage({viewport:{width:412,height:915},isMobile:true,hasTouch:true});
+const errors=[];page.on('pageerror', e=>errors.push(e.message));
+await page.goto(process.env.LYRIC_TEST_URL || 'http://127.0.0.1:5175/',{waitUntil:'domcontentloaded'});
+await page.waitForSelector('#app > *');
+await page.getByText('我已阅读并同意',{exact:true}).click();
+await page.evaluate(()=>{window.__loadTestModule=path=>import(performance.getEntriesByType('resource').filter(e=>new URL(e.name).pathname===path).at(-1)?.name||path);});
+await page.evaluate(async()=>{
+ const {usePlayerStore}=await window.__loadTestModule('/store/modules/player.ts');
+ const {usePlayerCoreStore}=await window.__loadTestModule('/store/modules/playerCore.ts');
+ const hook=await window.__loadTestModule('/hooks/MusicHook.ts');
+ const core=usePlayerCoreStore(); const player=usePlayerStore();
+ const cover='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500"><rect width="500" height="500" fill="#36685d"/><circle cx="180" cy="220" r="170" fill="#b9b989"/><path d="M0 500 500 220 500 500" fill="#202e40"/></svg>');
+ const lines=Array.from({length:15},(_,i)=>({text:i===3?'This is a longer lyric line that should wrap completely without clipping':'第 '+(i+1)+' 行 · 随音乐慢慢流动',trText:'这是完整显示的翻译歌词',startTime:i*3000,duration:3000}));
+ core.playMusic={id:'fixture',source:'local',name:'沉浸歌词测试',picUrl:cover,ar:[{id:1,name:'HaruMusic'}],lyric:{lrcArray:lines,lrcTimeArray:lines.map((_,i)=>i*3),hasWordByWord:false}};
+ player.setMusicFull(true);
+ await new Promise(r=>setTimeout(r,300));
+ hook.lrcArray.value=lines;hook.lrcTimeArray.value=lines.map((_,i)=>i*3);hook.nowIndex.value=3;hook.nowTime.value=9.5;
+});
+await page.waitForSelector('#mobile-drawer-target .lyrics-wrapper');
+await page.waitForTimeout(800);
+await page.evaluate(async()=>{const h=await window.__loadTestModule('/hooks/MusicHook.ts');const {audioService}=await window.__loadTestModule('/services/audioService.ts');const bytes=new Uint8Array(44+16000*30);const v=new DataView(bytes.buffer);const txt=(o,t)=>[...t].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));txt(0,'RIFF');v.setUint32(4,bytes.length-8,true);txt(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);txt(36,'data');v.setUint32(40,bytes.length-44,true);const url=URL.createObjectURL(new Blob([bytes],{type:'audio/wav'}));const {usePlayerCoreStore}=await window.__loadTestModule('/store/modules/playerCore.ts');await audioService.play(url,usePlayerCoreStore().playMusic,false,9.5);h.nowIndex.value=2;await new Promise(r=>setTimeout(r,100));h.nowIndex.value=3;});
+await page.waitForTimeout(1000);
+console.log('clock',await page.evaluate(async()=>{const h=await window.__loadTestModule('/hooks/MusicHook.ts');const a=(await window.__loadTestModule('/services/audioService.ts')).audioService;return {time:a.getCurrentSound()?.currentTime,index:h.nowIndex.value,times:h.lrcTimeArray.value};}));
+mkdirSync('artifacts/ui-0.1.9',{recursive:true});
+console.log(await page.evaluate(()=>({ids:[...document.querySelectorAll('[id=lyric-line-3]')].map(e=>({parent:e.parentElement.className,rect:e.getBoundingClientRect().toJSON()})),scroll:document.querySelector('.lyrics-wrapper').scrollTop,behavior:getComputedStyle(document.querySelector('.lyrics-wrapper')).scrollBehavior})));
+await page.screenshot({path:'artifacts/ui-0.1.9/normal.png'});
+console.log(await page.locator('.lyrics-wrapper .now-text').evaluate(e=>({text:e.innerText,opacity:getComputedStyle(e).opacity,transform:getComputedStyle(e).transform,rect:e.getBoundingClientRect().toJSON(),parent:e.parentElement.getBoundingClientRect().toJSON()})));
+const focus = await page.locator('.lyrics-wrapper .now-text').evaluate(e=>{const a=e.getBoundingClientRect(),b=e.parentElement.getBoundingClientRect();return {delta:Math.abs(a.top+a.height/2-b.top-b.height/2),text:e.innerText};});
+assert.ok(focus.delta < 8, 'normal lyric must remain centered');
+assert.ok(focus.text.includes('without clipping'));
+await page.locator('.lyrics-expand').click();await page.waitForTimeout(600);
+await page.screenshot({path:'artifacts/ui-0.1.9/pure.png'});
+const scroller=page.locator('.lyrics-scroller');
+const before=await scroller.evaluate(e=>e.scrollTop);
+const cdp=await page.context().newCDPSession(page);
+await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:210,y:620}]});
+await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:210,y:390}]});
+await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+await page.waitForTimeout(250);
+assert.ok(Math.abs(await scroller.evaluate(e=>e.scrollTop)-before)>40, 'lyrics must respond to touch dragging');
+assert.deepEqual(errors,[]);
+console.log('Mobile lyric focus, wrapping, pure mode and touch scrolling passed.');
+await browser.close();
+
+

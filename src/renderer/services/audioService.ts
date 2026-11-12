@@ -775,6 +775,7 @@ class AudioService {
         };
 
         removeListeners = () => {
+          candidate.removeEventListener('loadeddata', startAudio);
           candidate.removeEventListener('canplay', startAudio);
           candidate.removeEventListener('error', onError);
         };
@@ -784,6 +785,7 @@ class AudioService {
           return;
         }
 
+        candidate.addEventListener('loadeddata', startAudio, { once: true });
         candidate.addEventListener('canplay', startAudio, { once: true });
         candidate.addEventListener('error', onError, { once: true });
 

@@ -68,7 +68,7 @@ const verifyMediaUrl = async (
       method: 'GET',
       headers: { ...(headers || {}), Range: 'bytes=0-8191' },
       timeout: 10000,
-      ...(isAndroidApp ? { responseType: 'media-probe' as const } : {})
+      responseType: 'media-probe' as const
     };
     const response = isElectron
       ? await window.api.lxMusicHttpRequest({ url, options, requestId })
