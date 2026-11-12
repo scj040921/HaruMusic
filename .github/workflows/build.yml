@@ -33,6 +33,7 @@ jobs:
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           if ($version -ne $env:REQUESTED_VERSION) { throw "Requested version does not match package.json" }
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Expected a three-part version" }
+          if (!(Test-Path -LiteralPath ".github/release-notes/v$version.md")) { throw "Release notes are required before packaging version $version" }
       - run: npm ci
       # Vite generates the auto-import and component declaration files used by vue-tsc.
       - run: npm run build
