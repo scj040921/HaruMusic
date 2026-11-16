@@ -3,7 +3,12 @@ vi.mock('@capacitor/core', () => ({
   Capacitor: { convertFileSrc: (s: string) => s },
   registerPlugin: () => ({})
 }));
-import { unwrapDownloadSource } from '../src/renderer/services/androidDownloads';
+import {
+  type AndroidDownload,
+  filterDownloads,
+  toOfflineSong,
+  unwrapDownloadSource
+} from '../src/renderer/services/androidDownloads';
 describe('native Android download transport', () => {
   it('unwraps the on-device media bridge and preserves required source headers', () => {
     const data = {
@@ -29,5 +34,35 @@ describe('native Android download transport', () => {
           'http://127.0.0.1:30488/__media?d=' + encodeURIComponent(JSON.stringify({ url }))
         )
       ).toThrow();
+  });
+  it('combines state and artist search without mutating download order', () => {
+    const task = (taskId: string, state: AndroidDownload['state'], createdAt: number) =>
+      ({
+        taskId,
+        state,
+        createdAt,
+        songInfo: { id: 1, name: 'JANE DOE', ar: [{ name: '米津玄师' }] }
+      }) as AndroidDownload;
+    const tasks = [
+      task('old', 'completed', 1),
+      task('failed', 'error', 3),
+      task('new', 'completed', 2)
+    ];
+    expect(filterDownloads(tasks, '已完成', 'ｊａｎｅ 米津').map((t) => t.taskId)).toEqual([
+      'new',
+      'old'
+    ]);
+    expect(filterDownloads(tasks, '失败').map((t) => t.taskId)).toEqual(['failed']);
+    expect(tasks[0].taskId).toBe('old');
+  });
+  it('builds independent lazy offline entries for two downloads of the same catalog song', () => {
+    const make = (taskId: string) =>
+      toOfflineSong({
+        taskId,
+        songInfo: { id: 1, name: 'Offline', source: 'netease' }
+      } as AndroidDownload);
+    expect(make('a')).toMatchObject({ id: 'android-download:a', source: 'local', name: 'Offline' });
+    expect(make('a').id).not.toBe(make('b').id);
+    expect(make('a').playMusicUrl).toBeUndefined();
   });
 });

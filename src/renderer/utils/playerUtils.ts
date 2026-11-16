@@ -1,4 +1,5 @@
 import type { SongResult } from '@/types/music';
+import { sameSong } from '@/utils/songIdentity';
 
 /**
  * 从 localStorage 获取项目，带类型安全和错误处理
@@ -97,7 +98,7 @@ export const performShuffle = (list: SongResult[], currentSong?: SongResult): So
 
   // 如果指定了当前歌曲，先把它放在第一位
   if (currentSong && currentSong.id) {
-    const currentSongIndex = remainingSongs.findIndex((song) => song.id === currentSong.id);
+    const currentSongIndex = remainingSongs.findIndex((song) => sameSong(song, currentSong));
     if (currentSongIndex !== -1) {
       // 把当前歌曲放在第一位
       result.push(remainingSongs.splice(currentSongIndex, 1)[0]);

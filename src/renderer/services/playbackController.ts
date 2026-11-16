@@ -24,6 +24,7 @@ import type { Platform, SongResult } from '@/types/music';
 import { getImgUrl } from '@/utils';
 import { getImageLinearBackground } from '@/utils/linearColor';
 import { readPlaybackProgress } from '@/utils/playerUtils';
+import { sameSong } from '@/utils/songIdentity';
 
 const { message } = createDiscreteApi(['message']);
 const SONG_DETAIL_TIMEOUT_MS = 15_000;
@@ -169,10 +170,11 @@ const triggerPreload = async (song: SongResult, gen: number): Promise<void> => {
     if (gen !== getCurrentGeneration()) return;
     const list = playlistStore.playList;
     if (Array.isArray(list) && list.length > 0) {
-      const idx = list.findIndex(
-        (item: SongResult) => item.id === song.id && item.source === song.source
-      );
+      const idx = list.findIndex((item: SongResult) => sameSong(item, song));
       if (idx !== -1) {
+        // Queue edits can move the active item while its URL is resolving.
+        // Reconcile on commit so the following next/previous uses the live order.
+        playlistStore.playListIndex = idx;
         // 立即触发预加载，不等待
         playlistStore.preloadNextSongs(idx);
       }

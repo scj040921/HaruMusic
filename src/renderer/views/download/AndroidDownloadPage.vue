@@ -6,14 +6,37 @@
       <p>保存音乐，离线也能随时收听。</p>
     </header>
     <div class="download-actions">
-      <button class="glass-control" @click="refresh">刷新</button
-      ><button class="glass-control" @click="openFolder">系统下载</button>
+      <button
+        class="glass-control primary"
+        :disabled="preparing || !completed.length"
+        @click="playCollection()"
+      >
+        播放已下载 · {{ completed.length }}
+      </button>
+      <button class="glass-control icon-only" aria-label="刷新下载" title="刷新" @click="refresh">
+        <i class="ri-refresh-line" />
+      </button>
+      <button
+        class="glass-control icon-only"
+        aria-label="系统下载"
+        title="系统下载"
+        @click="openFolder"
+      >
+        <i class="ri-folder-music-line" />
+      </button>
     </div>
     <p class="download-location">音乐保存在 Music / HaruMusic，后台下载由 Android 系统管理。</p>
+    <label class="download-search"
+      ><i class="ri-search-line" /><input
+        v-model="query"
+        type="search"
+        placeholder="搜索歌曲或艺人"
+        aria-label="搜索下载音乐"
+    /></label>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <div class="download-tabs" role="tablist" aria-label="下载状态">
       <button
-        v-for="tab in ['全部', '下载中', '已完成']"
+        v-for="tab in ['全部', '下载中', '已完成', '失败']"
         :key="tab"
         role="tab"
         :aria-selected="selected === tab"
@@ -23,8 +46,17 @@
       </button>
     </div>
     <p v-if="!filtered.length" class="empty">
-      {{ busy ? '正在读取下载…' : '暂无下载。在歌曲菜单或播放设置中选择「下载音乐」。' }}
+      {{
+        busy
+          ? '正在读取下载…'
+          : query
+            ? '没有匹配的下载音乐。'
+            : '暂无下载。在歌曲菜单或播放设置中选择「下载音乐」。'
+      }}
     </p>
+    <button v-if="selected === '失败' && filtered.length" class="clear-failed" @click="clearFailed">
+      清理失败任务
+    </button>
     <ul class="download-list">
       <li v-for="task in filtered" :key="task.taskId">
         <img :src="task.songInfo.picUrl || '/icon.png'" alt="" loading="lazy" />
@@ -50,7 +82,8 @@
           v-if="task.state === 'completed'"
           class="icon-control"
           aria-label="离线播放"
-          @click="playTask(task)"
+          :disabled="preparing"
+          @click="playCollection(task)"
         >
           <i class="ri-play-fill" />
         </button>
@@ -58,6 +91,8 @@
           v-if="task.state === 'error'"
           class="icon-control"
           aria-label="重新解析并下载"
+          :disabled="!!retrying"
+          :aria-busy="retrying === task.taskId"
           @click="retry(task)"
         >
           <i class="ri-restart-line" />
@@ -74,56 +109,60 @@
   </main>
 </template>
 <script setup lang="ts">
-import { useDialog, useMessage } from 'naive-ui';
+import { useMessage } from 'naive-ui';
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue';
 
 import { useDownload } from '@/hooks/useDownload';
+import { useManagedDialog } from '@/hooks/useManagedDialog';
 import {
   type AndroidDownload,
   androidDownloads,
-  downloadedFileUrl
+  filterDownloads,
+  toOfflineSong
 } from '@/services/androidDownloads';
 import { usePlayerStore } from '@/store/modules/player';
 import type { SongResult } from '@/types/music';
 const tasks = ref<AndroidDownload[]>([]),
   error = ref(''),
   busy = ref(false),
-  selected = ref('全部');
+  selected = ref('全部'),
+  query = ref('');
 const { downloadMusic } = useDownload();
 const player = usePlayerStore();
 const message = useMessage();
-const dialog = useDialog();
+const dialog = useManagedDialog();
 let timer: ReturnType<typeof setTimeout> | undefined;
 let active = false;
-const filtered = computed(() =>
-  tasks.value
-    .filter(
-      (t) =>
-        selected.value === '全部' ||
-        (selected.value === '已完成'
-          ? t.state === 'completed'
-          : ['queued', 'downloading'].includes(t.state))
-    )
-    .sort((a, b) => b.createdAt - a.createdAt)
-);
+let refreshQueued = false;
+const filtered = computed(() => filterDownloads(tasks.value, selected.value, query.value));
+const completed = computed(() => filterDownloads(tasks.value, '已完成', query.value));
 const size = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 async function refresh() {
   clearTimeout(timer);
-  if (busy.value) return;
+  if (busy.value) {
+    refreshQueued = true;
+    return;
+  }
   busy.value = true;
   try {
-    tasks.value = (await androidDownloads.list()).tasks;
+    tasks.value = [...(await androidDownloads.list()).tasks];
     error.value = '';
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
     busy.value = false;
-    if (
-      active &&
-      !document.hidden &&
-      tasks.value.some((t) => ['queued', 'downloading'].includes(t.state))
-    )
-      timer = setTimeout(refresh, 1500);
+    if (refreshQueued && active && !document.hidden) {
+      refreshQueued = false;
+      void refresh();
+    } else {
+      refreshQueued = false;
+      if (
+        active &&
+        !document.hidden &&
+        tasks.value.some((t) => ['queued', 'downloading'].includes(t.state))
+      )
+        timer = setTimeout(refresh, 1500);
+    }
   }
 }
 async function openFolder() {
@@ -134,18 +173,17 @@ async function openFolder() {
   }
 }
 const preparing = ref(false);
-async function playTask(task: AndroidDownload) {
+async function playCollection(task?: AndroidDownload) {
   if (preparing.value) return;
+  const list = completed.value.map(toOfflineSong);
+  const index = task ? list.findIndex((song) => song.id === `android-download:${task.taskId}`) : 0;
+  if (!list.length || index < 0) return;
   preparing.value = true;
   const notice = message.loading('正在准备离线播放…', { duration: 0 });
   try {
-    const url = await downloadedFileUrl(task.taskId);
-    await player.setPlay({
-      ...task.songInfo,
-      id: `android-download:${task.taskId}`,
-      source: 'local',
-      playMusicUrl: url
-    } as SongResult);
+    player.setPlayList(list, false, false, true);
+    player.playListIndex = index;
+    await player.setPlayMusic(list[index]);
   } catch (e) {
     message.error((e as Error).message);
   } finally {
@@ -153,10 +191,37 @@ async function playTask(task: AndroidDownload) {
     notice.destroy();
   }
 }
+const retrying = ref<string | null>(null);
 async function retry(task: AndroidDownload) {
-  if (await downloadMusic(task.songInfo as SongResult))
-    await androidDownloads.remove({ taskId: task.taskId });
-  await refresh();
+  if (retrying.value) return;
+  retrying.value = task.taskId;
+  try {
+    if (await downloadMusic(task.songInfo as SongResult))
+      await androidDownloads.remove({ taskId: task.taskId });
+    await refresh();
+  } catch (e) {
+    message.error((e as Error).message);
+  } finally {
+    retrying.value = null;
+  }
+}
+function clearFailed() {
+  const ids = filtered.value.filter((task) => task.state === 'error').map((task) => task.taskId);
+  dialog.warning({
+    title: `清理 ${ids.length} 个失败任务？`,
+    content: '移除这些任务及未完成文件，保留所有已下载音乐。',
+    positiveText: '清理',
+    negativeText: '保留',
+    onPositiveClick: async () => {
+      try {
+        for (const taskId of ids) await androidDownloads.remove({ taskId });
+      } catch (e) {
+        message.error((e as Error).message);
+      } finally {
+        await refresh();
+      }
+    }
+  });
 }
 function remove(task: AndroidDownload) {
   dialog.warning({
@@ -183,6 +248,7 @@ const start = () => {
   active = true;
   void refresh();
   document.addEventListener('visibilitychange', visibility);
+  window.addEventListener('haru-download-added', refresh);
 };
 onMounted(start);
 onActivated(start);
@@ -190,11 +256,13 @@ onDeactivated(() => {
   active = false;
   clearTimeout(timer);
   document.removeEventListener('visibilitychange', visibility);
+  window.removeEventListener('haru-download-added', refresh);
 });
 onBeforeUnmount(() => {
   active = false;
   clearTimeout(timer);
   document.removeEventListener('visibilitychange', visibility);
+  window.removeEventListener('haru-download-added', refresh);
 });
 </script>
 <style scoped>
@@ -221,8 +289,45 @@ header p,
 }
 .download-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin: 24px 0;
+}
+.glass-control.primary {
+  color: var(--accent, #fa2d48);
+  flex: 1;
+  min-width: 0;
+  padding-inline: 12px;
+  font-size: 13px;
+}
+.glass-control.icon-only {
+  width: 48px;
+  flex: 0 0 48px;
+  padding: 0;
+  font-size: 20px;
+}
+.download-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-secondary, #f2f2f7);
+  border-radius: 24px;
+  padding: 0 12px;
+}
+.download-search input {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  background: transparent;
+  outline: none;
+}
+.clear-failed {
+  min-height: 44px;
+  color: var(--accent, #fa2d48);
+  margin-bottom: 12px;
+}
+button:disabled {
+  opacity: 0.4;
 }
 .glass-control {
   min-height: 48px;

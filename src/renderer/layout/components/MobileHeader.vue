@@ -4,7 +4,7 @@
     :class="{ 'safe-area-top': hasSafeArea, 'android-hig-header': isAndroidApp }"
   >
     <!-- 左侧区域 -->
-    <div class="header-left">
+    <div class="header-left" :class="{ 'has-back': showBack }">
       <button v-if="showBack" class="header-btn" type="button" aria-label="返回" @click="goBack">
         <i class="ri-arrow-left-s-line"></i>
       </button>

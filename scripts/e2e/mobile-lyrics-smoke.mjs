@@ -26,9 +26,9 @@ await page.waitForTimeout(800);
 await page.evaluate(async()=>{const h=await window.__loadTestModule('/hooks/MusicHook.ts');const {audioService}=await window.__loadTestModule('/services/audioService.ts');const bytes=new Uint8Array(44+16000*30);const v=new DataView(bytes.buffer);const txt=(o,t)=>[...t].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));txt(0,'RIFF');v.setUint32(4,bytes.length-8,true);txt(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);txt(36,'data');v.setUint32(40,bytes.length-44,true);const url=URL.createObjectURL(new Blob([bytes],{type:'audio/wav'}));const {usePlayerCoreStore}=await window.__loadTestModule('/store/modules/playerCore.ts');await audioService.play(url,usePlayerCoreStore().playMusic,false,9.5);h.nowIndex.value=2;await new Promise(r=>setTimeout(r,100));h.nowIndex.value=3;});
 await page.waitForTimeout(1000);
 console.log('clock',await page.evaluate(async()=>{const h=await window.__loadTestModule('/hooks/MusicHook.ts');const a=(await window.__loadTestModule('/services/audioService.ts')).audioService;return {time:a.getCurrentSound()?.currentTime,index:h.nowIndex.value,times:h.lrcTimeArray.value};}));
-mkdirSync('artifacts/ui-0.1.13',{recursive:true});
+mkdirSync('artifacts/ui-0.1.14',{recursive:true});
 console.log(await page.evaluate(()=>({ids:[...document.querySelectorAll('[id=lyric-line-3]')].map(e=>({parent:e.parentElement.className,rect:e.getBoundingClientRect().toJSON()})),scroll:document.querySelector('.lyrics-wrapper').scrollTop,behavior:getComputedStyle(document.querySelector('.lyrics-wrapper')).scrollBehavior})));
-await page.screenshot({path:'artifacts/ui-0.1.13/normal.png'});
+await page.screenshot({path:'artifacts/ui-0.1.14/normal.png'});
 console.log(await page.locator('.lyrics-wrapper .now-text').evaluate(e=>({text:e.innerText,opacity:getComputedStyle(e).opacity,transform:getComputedStyle(e).transform,rect:e.getBoundingClientRect().toJSON(),parent:e.parentElement.getBoundingClientRect().toJSON()})));
 assert.equal(await page.locator('.unified-controls').evaluate(e=>getComputedStyle(e).backgroundImage),'none','controller background must not introduce a gradient band');
 const titleStyle=await page.locator('.ios-layout-container .song-info .song-title').evaluate(e=>{const r=e.getBoundingClientRect(),p=e.closest('.song-info').getBoundingClientRect(),s=getComputedStyle(e);return {center:Math.abs(r.left+r.width/2-p.left-p.width/2),weight:Number(s.fontWeight),size:parseFloat(s.fontSize),align:s.textAlign};});
@@ -38,7 +38,7 @@ const focus = await page.locator('.lyrics-wrapper .now-text').evaluate(e=>{const
 assert.ok(focus.delta < 8, 'normal lyric must remain centered');
 assert.ok(focus.text.includes('without clipping'));
 await page.locator('.lyrics-expand').click();await page.waitForTimeout(600);
-await page.screenshot({path:'artifacts/ui-0.1.13/pure.png'});
+await page.screenshot({path:'artifacts/ui-0.1.14/pure.png'});
 const scroller=page.locator('.lyrics-scroller');
 for(const time of [12.2,15.2,18.2]) {
  await page.evaluate(async(time)=>{const h=await window.__loadTestModule('/hooks/MusicHook.ts');const {audioService}=await window.__loadTestModule('/services/audioService.ts');audioService.seek(time);h.nowTime.value=audioService.getCurrentSound().currentTime;h.nowIndex.value=Math.floor(h.nowTime.value/3);},time);
@@ -71,7 +71,7 @@ await page.getByRole('button',{name:'播放设置',exact:true}).click();await di
 await page.setViewportSize({width:320,height:740});await page.waitForTimeout(450);
 const sheet=await dialog.evaluate(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return {left:r.left,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight,radius:parseFloat(s.borderTopLeftRadius)};});
 assert.ok(sheet.left>=12&&sheet.right<=sheet.width-12&&sheet.bottom<=sheet.height-12&&sheet.radius>=24,'sheet floats within the narrow screen');
-await page.screenshot({path:'artifacts/ui-0.1.13/settings-small.png'});
+await page.screenshot({path:'artifacts/ui-0.1.14/settings-small.png'});
 await page.getByText('播放诊断',{exact:true}).click();
 assert.ok(await page.getByRole('textbox',{name:'播放诊断内容'}).isVisible());
 await page.getByRole('button',{name:'复制诊断',exact:true}).click();

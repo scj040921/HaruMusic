@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   clearMusicCache: vi.fn(),
   setConfig: vi.fn(),
   updateSong: vi.fn(),
+  queue: [] as SongResult[],
+  queueIndex: 0,
   dispatchEvent: vi.fn()
 }));
 
@@ -52,7 +54,17 @@ vi.mock('@/services/SongSourceConfigManager', () => ({
   SongSourceConfigManager: { setConfig: mocks.setConfig, clearTriedSources: vi.fn() }
 }));
 vi.mock('@/store/modules/playlist', () => ({
-  usePlaylistStore: () => ({ playList: [], updateSong: mocks.updateSong })
+  usePlaylistStore: () => ({
+    playList: mocks.queue,
+    updateSong: mocks.updateSong,
+    preloadNextSongs: vi.fn(),
+    get playListIndex() {
+      return mocks.queueIndex;
+    },
+    set playListIndex(value: number) {
+      mocks.queueIndex = value;
+    }
+  })
 }));
 vi.mock('@/store/modules/playHistory', () => ({
   usePlayHistoryStore: () => ({ addMusic: vi.fn() })
@@ -84,6 +96,8 @@ describe('playback recovery ownership (#769)', () => {
   beforeEach(async () => {
     vi.resetModules();
     mocks.handlers.clear();
+    mocks.queue = [];
+    mocks.queueIndex = 0;
     mocks.audio.on.mockImplementation((event, handler) => mocks.handlers.set(event, handler));
     mocks.audio.getCurrentSound.mockReturnValue(mocks.sound);
     mocks.audio.play.mockResolvedValue(mocks.sound);
@@ -160,6 +174,19 @@ describe('playback recovery ownership (#769)', () => {
     expect(await controller.switchCurrentSongQuality('lossless')).toBe(false);
     expect(mocks.audio.stop).not.toHaveBeenCalled();
     expect(mocks.setQuality).not.toHaveBeenCalled();
+  });
+
+  it('reconciles the committed track index after the queue changes during resolution', async () => {
+    const target = makeSong(2),
+      pending = deferred<SongResult>();
+    mocks.getSongDetail.mockReturnValueOnce(pending.promise);
+    const playing = controller.playTrack(target);
+    await vi.waitFor(() => expect(mocks.getSongDetail).toHaveBeenCalled());
+    mocks.queue = [makeSong(1), makeSong(3), target];
+    mocks.queueIndex = 0;
+    pending.resolve(target);
+    expect(await playing).toBe(true);
+    await vi.waitFor(() => expect(mocks.queueIndex).toBe(2));
   });
 
   it('restores the original stream when the new quality cannot be played', async () => {

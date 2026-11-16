@@ -319,6 +319,9 @@ html.dark .android-native {
   font-weight: 650;
   letter-spacing: -0.025em;
 }
+.android-native .mobile-header .header-left.has-back {
+  min-width: 44px;
+}
 
 .android-native .mobile-content > .mobile-page {
   padding-top: 0;

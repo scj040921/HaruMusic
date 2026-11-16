@@ -252,10 +252,8 @@ const scrollToPlayList = () => {
 };
 
 const handleDeleteSong = (song: SongResult) => {
-  if (song.id === playMusic.value.id) {
-    playerStore.nextPlay();
-  }
-  playerStore.removeFromPlayList(song.id as number);
+  // The queue store owns advancing after removal; a second nextPlay races it.
+  playerStore.removeFromPlayList(song.id, song.source || 'netease');
 };
 
 // 艺术家点击

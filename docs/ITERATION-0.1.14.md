@@ -1,0 +1,13 @@
+# 0.1.14 queue and offline library iteration
+
+The queue is the sole main content of its modal: virtualized media rows, search and three constrained supporting actions. List content remains opaque; glass is restricted to the toolbar. Dragging uses a persistent pointer-capture host so rows can virtualize out of view during edge scrolling. Reordering commits on release; cancellation, resize and blur preserve the original order. Search mode disables dragging to avoid ambiguous filtered-position edits; action menus still use live original indices.
+
+Track identity now includes source and typed ID. Queue edits, current-item lookup, shuffle history and next-play use this identity. Legacy ID-only deletion calls remain compatible, while both queue interfaces pass the source explicitly. The mini-window no longer requests a separate next-track operation before removal; the queue store owns advancing. A playback commit reconciles the index after edits made during URL resolution.
+
+Android downloads can be filtered by name/artist and state, and completed results become a lazy local-file queue. No remote audio URLs are retained in those entries. Failed-task cleanup is explicit and confirmed. Repeated retry clicks are disabled while resolution is pending. Download-added events coalesce with ongoing native list reads rather than disappearing; list snapshots are copied to trigger updates even if a bridge reuses its array.
+
+Confirmation dialogs register with the overlay Back stack and receive a z-index above the queue. The modal root uses the DIV shape expected by the installed VueUC focus-trap implementation, preserving focus and Escape behavior. Existing floating-player, lyric-clock and glass material behavior is retained.
+
+Validation covers 179 unit tests, TypeScript, production builds and embedded API smoke checks. Renderer automation exercises queue search, next-play, keep-current, touch and keyboard reorder, long-list edge scrolling, cancellation, confirmation layering and Back dismissal, 320px layout, download search/state filters, event refresh, cleanup and two local WAV tracks played through actual HTMLAudioElement instances. Actual Electron acceptance also opens and searches the queue above its immersive player using an isolated profile and an occupied API-port fixture.
+
+Limitations: native file access in renderer tests is a bridge fixture. Physical Android storage behavior, hardware Back, system bar composition, third-party source availability and all codecs still require device acceptance. Published asset hashes are checked against GitHub asset digests and the signed Android update manifest; that is distinct from downloading and hashing a complete APK locally.

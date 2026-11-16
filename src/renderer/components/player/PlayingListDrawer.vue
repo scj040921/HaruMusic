@@ -1,447 +1,531 @@
 <template>
-  <!-- 透明遮罩层，点击任意位置关闭 -->
-  <div v-if="internalVisible" class="fixed-overlay" @click="closePanel"></div>
-
-  <!-- 使用animate.css进行动画效果 -->
-  <div
-    v-if="internalVisible"
-    class="playlist-panel"
-    role="dialog"
-    aria-modal="true"
-    aria-label="播放队列"
-    :class="[
-      'animate__animated',
-      closing
-        ? isMobile
-          ? 'animate__slideOutDown'
-          : 'animate__slideOutRight'
-        : isMobile
-          ? 'animate__slideInUp'
-          : 'animate__slideInRight'
-    ]"
-    @animationend="onAnimationEnd"
+  <n-modal
+    v-model:show="show"
+    :z-index="10000000"
+    @after-enter="locateCurrent"
+    @after-leave="cancelDrag"
   >
-    <div class="playlist-panel-header">
-      <div class="title">{{ t('player.playBar.playList') }}</div>
-      <div class="header-actions">
-        <n-tooltip trigger="hover">
-          <template #trigger>
-            <div class="action-btn" @click="handleClearPlaylist">
-              <i class="iconfont ri-delete-bin-line"></i>
-            </div>
-          </template>
-          {{ t('player.playList.clearAll') }}
-        </n-tooltip>
-        <button type="button" aria-label="关闭播放队列" class="close-btn" @click="closePanel">
-          <i class="iconfont ri-close-line"></i>
+    <div class="playlist-panel" role="dialog" aria-modal="true" aria-label="播放队列">
+      <header class="queue-header">
+        <div>
+          <h2>播放队列</h2>
+          <p>
+            {{ playList.length }} 首歌曲<span v-if="query"> · 找到 {{ entries.length }} 首</span>
+          </p>
+        </div>
+        <button type="button" class="queue-icon" aria-label="关闭播放队列" @click="show = false">
+          <i class="ri-close-line" />
         </button>
-      </div>
-    </div>
-    <div class="playlist-panel-content">
-      <div v-if="playList.length === 0" class="empty-playlist">
-        <i class="iconfont ri-music-2-line"></i>
-        <p>{{ t('player.playList.empty') }}</p>
-      </div>
-      <n-virtual-list v-else ref="playListRef" :item-size="62" item-resizable :items="playList">
-        <template #default="{ item }">
-          <div
-            class="music-play-list-content"
-            :class="{ 'queue-dragging': draggedId === item.id }"
-            draggable="true"
-            @dragstart="dragStart($event, item)"
-            @dragover.prevent
-            @drop="dropSong($event, item)"
-            @dragend="draggedId = null"
+      </header>
+      <div class="queue-tools">
+        <label class="queue-search"
+          ><i class="ri-search-line" /><input
+            v-model="query"
+            type="search"
+            placeholder="搜索歌曲或艺人"
+            aria-label="搜索播放队列"
+        /></label>
+        <div class="queue-actions">
+          <button type="button" :disabled="!currentSong?.id" @click="locateCurrent">
+            定位当前
+          </button>
+          <button
+            type="button"
+            :disabled="!currentSong?.id || playList.length <= 1"
+            @click="retainCurrent"
           >
-            <div class="flex items-center justify-between">
+            仅保留当前
+          </button>
+          <button type="button" :disabled="!playList.length" @click="clearQueue">清空队列</button>
+        </div>
+      </div>
+      <div
+        ref="listHost"
+        class="playlist-panel-content"
+        @pointermove="moveDrag"
+        @pointerup="finishDrag"
+        @pointercancel="cancelDrag"
+        @lostpointercapture="lostCapture"
+      >
+        <p v-if="!entries.length" class="queue-empty">
+          {{ query ? '没有找到匹配的歌曲' : '队列为空，选一首音乐开始聆听。' }}
+        </p>
+        <n-virtual-list v-else ref="virtualList" :item-size="72" :items="entries" key-field="key">
+          <template #default="{ item }">
+            <div
+              class="queue-row"
+              :data-queue-key="item.key"
+              :class="{
+                'queue-dragging': drag?.key === item.key && drag?.moved,
+                'queue-drop-before': dropKey === item.key && drag && drag.index > item.index,
+                'queue-drop-after': dropKey === item.key && drag && drag.index < item.index
+              }"
+            >
               <button
                 type="button"
                 class="queue-song"
-                aria-label="播放这首歌曲"
-                @click="playerStore.setPlay(item)"
+                :aria-label="'播放 ' + item.song.name"
+                :aria-current="sameSong(item.song, currentSong) ? 'true' : undefined"
+                @click="player.setPlay(item.song)"
               >
-                <img :src="getImgUrl(item.picUrl, '100y100')" :alt="item.name" />
-                <div class="queue-song-copy">
-                  <strong :class="{ 'queue-current': item.id === playMusic?.id }">{{
-                    item.name
+                <img
+                  v-if="item.song.picUrl"
+                  :src="getImgUrl(item.song.picUrl, '100y100')"
+                  alt=""
+                  loading="lazy"
+                  draggable="false"
+                />
+                <span v-else class="queue-cover-placeholder"><i class="ri-music-2-line" /></span>
+                <span class="queue-copy"
+                  ><strong :class="{ 'queue-current': sameSong(item.song, currentSong) }">{{
+                    item.song.name
                   }}</strong
-                  ><span>{{
-                    item.ar?.map((artist) => artist.name).join(' / ') || item.artist || ''
-                  }}</span>
-                </div>
+                  ><span>{{ artists(item.song) }}</span></span
+                >
                 <i
-                  v-if="item.id === playMusic?.id"
-                  class="ri-bar-chart-fill queue-playing"
-                  aria-label="正在播放"
+                  v-if="sameSong(item.song, currentSong)"
+                  class="ri-volume-up-line queue-current"
+                  aria-label="当前歌曲"
                 />
               </button>
-              <div class="queue-order" aria-label="调整队列顺序">
+              <n-dropdown
+                trigger="click"
+                :options="songActions(item)"
+                :z-index="10000002"
+                @select="(key) => applyAction(key, item)"
+              >
                 <button
-                  :disabled="playList.indexOf(item) === 0"
-                  aria-label="上移"
-                  @click.stop="moveSong(item, -1)"
+                  type="button"
+                  class="queue-icon"
+                  :aria-label="item.song.name + ' 的队列操作'"
                 >
-                  ↑</button
-                ><button
-                  :disabled="playList.indexOf(item) === playList.length - 1"
-                  aria-label="下移"
-                  @click.stop="moveSong(item, 1)"
-                >
-                  ↓
+                  <i class="ri-more-2-fill" />
                 </button>
-              </div>
-              <div class="delete-btn" @click.stop="handleDeleteSong(item)">
-                <i
-                  class="iconfont ri-delete-bin-line text-gray-400 hover:text-red-500 transition-colors"
-                ></i>
-              </div>
+              </n-dropdown>
+              <button
+                type="button"
+                class="queue-icon queue-grip"
+                :disabled="!!query.trim()"
+                :aria-label="'拖动调整 ' + item.song.name + ' 的顺序'"
+                title="拖动排序，也可用上下方向键"
+                @pointerdown="startDrag($event, item)"
+                @keydown.up.stop.prevent="moveOne(item, -1)"
+                @keydown.down.stop.prevent="moveOne(item, 1)"
+              >
+                <i class="ri-draggable" />
+              </button>
             </div>
-          </div>
-        </template>
-      </n-virtual-list>
+          </template>
+        </n-virtual-list>
+      </div>
+      <p class="queue-hint" aria-live="polite">
+        {{
+          drag?.moved
+            ? '松手调整顺序'
+            : announcement || '拖动右侧手柄排序，更多操作中可设为下一首。'
+        }}
+      </p>
     </div>
-  </div>
+  </n-modal>
 </template>
 
 <script setup lang="ts">
-import { useDialog, useMessage } from 'naive-ui';
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-import { playMusic } from '@/hooks/MusicHook';
+import { useManagedDialog } from '@/hooks/useManagedDialog';
+import { registerOverlay } from '@/services/overlayStack';
 import { usePlayerStore } from '@/store/modules/player';
 import type { SongResult } from '@/types/music';
-import { getImgUrl, isMobile } from '@/utils';
+import { getImgUrl } from '@/utils';
+import { matchesMusicQuery, sameSong, songKey } from '@/utils/songIdentity';
 
-const { t } = useI18n();
-const message = useMessage();
-const dialog = useDialog();
-const playerStore = usePlayerStore();
-
-// 内部状态控制组件的可见性
-const internalVisible = ref(false);
-const closing = ref(false);
-
-// 当前是否显示播放列表面板
+const player = usePlayerStore(),
+  dialog = useManagedDialog();
+const announcement = ref('');
 const show = computed({
-  get: () => playerStore.playListDrawerVisible,
-  set: (value) => {
-    playerStore.setPlayListDrawerVisible(value);
-  }
+  get: () => player.playListDrawerVisible,
+  set: (value) => player.setPlayListDrawerVisible(value)
 });
+const playList = computed(() => player.playList as SongResult[]);
+const currentSong = computed(() => player.playMusic as SongResult);
+const query = ref('');
+const virtualList = ref<any>(null),
+  listHost = ref<HTMLElement | null>(null);
+const entries = computed(() =>
+  playList.value
+    .map((song, index) => ({ song, index, key: songKey(song) }))
+    .filter((item) => matchesMusicQuery(item.song, query.value))
+);
+type QueueEntry = (typeof entries.value)[number];
+const entryMap = computed(() => new Map(entries.value.map((item) => [item.key, item])));
+const artists = (song: SongResult) =>
+  song.ar?.map((a) => a.name).join(' / ') ||
+  song.artists?.map((a) => a.name).join(' / ') ||
+  song.song?.artists?.map((a) => a.name).join(' / ') ||
+  '未知艺人';
+const songActions = (item: QueueEntry) => [
+  { label: '下一首播放', key: 'next', disabled: sameSong(item.song, currentSong.value) },
+  { label: '上移', key: 'up', disabled: item.index === 0 },
+  { label: '下移', key: 'down', disabled: item.index === playList.value.length - 1 },
+  { label: '移出队列', key: 'remove' }
+];
+function applyAction(key: string | number, item: QueueEntry) {
+  if (key === 'next') {
+    player.addToNextPlay(item.song);
+    announcement.value = '已设为下一首';
+  } else if (key === 'remove') {
+    player.removeFromPlayList(item.song.id, item.song.source || 'netease');
+    announcement.value = '已移出队列';
+  } else moveOne(item, key === 'up' ? -1 : 1);
+}
+function moveOne(item: QueueEntry, delta: number) {
+  const index = playList.value.findIndex((song) => sameSong(song, item.song));
+  const target = playList.value[index + delta];
+  if (target) {
+    player.moveQueueSong(item.song, target);
+    announcement.value = '已调整队列顺序';
+  }
+}
+async function locateCurrent() {
+  query.value = '';
+  await nextTick();
+  const index = playList.value.findIndex((song) => sameSong(song, currentSong.value));
+  if (index >= 0) virtualList.value?.scrollTo({ top: index * 72 });
+}
+function retainCurrent() {
+  player.retainCurrentSong();
+  query.value = '';
+  announcement.value = '已保留当前歌曲';
+}
+function clearQueue() {
+  dialog.warning({
+    title: '清空播放队列？',
+    content: '当前播放也会停止。若想继续聆听，可选择「仅保留当前」。',
+    positiveText: '清空',
+    negativeText: '保留',
+    onPositiveClick: () => {
+      player.clearPlayAll();
+      show.value = false;
+    }
+  });
+}
+let overlay: ReturnType<typeof registerOverlay> | undefined;
 
-// 监听外部可见性变化
+const drag = ref<{
+  id: number;
+  key: string;
+  index: number;
+  y: number;
+  startY: number;
+  moved: boolean;
+} | null>(null);
+const dropKey = ref<string | null>(null);
+let scrollFrame = 0;
+let scrollElement: HTMLElement | null = null;
+let dragBounds: DOMRect | undefined;
+function startDrag(event: PointerEvent, item: QueueEntry) {
+  if (!event.isPrimary || event.button !== 0 || query.value.trim() || !listHost.value) return;
+  cancelDrag();
+  drag.value = {
+    id: event.pointerId,
+    key: item.key,
+    index: item.index,
+    y: event.clientY,
+    startY: event.clientY,
+    moved: false
+  };
+  dragBounds = listHost.value.getBoundingClientRect();
+  scrollElement = listHost.value.querySelector('.v-vl');
+  listHost.value.setPointerCapture(event.pointerId);
+}
+function hitTarget(x: number, y: number) {
+  const row = document
+    .elementsFromPoint(x, y)
+    .map((el) => el.closest<HTMLElement>('[data-queue-key]'))
+    .find((el) => el && listHost.value?.contains(el));
+  const key = row?.dataset.queueKey;
+  if (key && key !== drag.value?.key) dropKey.value = key;
+}
+let pointerX = 0;
+function moveDrag(event: PointerEvent) {
+  if (!drag.value || drag.value.id !== event.pointerId) return;
+  drag.value.y = event.clientY;
+  pointerX = event.clientX;
+  if (!drag.value.moved && Math.abs(event.clientY - drag.value.startY) < 6) return;
+  drag.value.moved = true;
+  event.preventDefault();
+  hitTarget(event.clientX, event.clientY);
+  if (!scrollFrame) scrollFrame = requestAnimationFrame(autoScroll);
+}
+function autoScroll() {
+  scrollFrame = 0;
+  if (!drag.value?.moved || !dragBounds || !scrollElement) return;
+  const delta =
+    drag.value.y < dragBounds.top + 32 ? -8 : drag.value.y > dragBounds.bottom - 32 ? 8 : 0;
+  if (!delta) return;
+  const before = scrollElement.scrollTop;
+  scrollElement.scrollTop += delta;
+  hitTarget(pointerX, Math.max(dragBounds.top + 8, Math.min(dragBounds.bottom - 8, drag.value.y)));
+  if (scrollElement.scrollTop !== before) scrollFrame = requestAnimationFrame(autoScroll);
+}
+function finishDrag(event: PointerEvent) {
+  if (!drag.value || drag.value.id !== event.pointerId) return;
+  const from = entryMap.value.get(drag.value.key),
+    target = dropKey.value ? entryMap.value.get(dropKey.value) : undefined;
+  if (drag.value.moved && from && target) {
+    player.moveQueueSong(from.song, target.song);
+    announcement.value = '已调整队列顺序';
+  }
+  cancelDrag();
+}
+function cancelDrag() {
+  const id = drag.value?.id;
+  drag.value = null;
+  dropKey.value = null;
+  cancelAnimationFrame(scrollFrame);
+  scrollFrame = 0;
+  scrollElement = null;
+  if (id !== undefined && listHost.value?.hasPointerCapture(id))
+    listHost.value.releasePointerCapture(id);
+}
+function lostCapture(event: PointerEvent) {
+  if (event.target === listHost.value && drag.value?.id === event.pointerId) cancelDrag();
+}
 watch(
   show,
-  (newValue) => {
-    if (newValue) {
-      // 打开面板
-      internalVisible.value = true;
-      closing.value = false;
-      // 在下一个渲染周期后滚动到当前歌曲
-      nextTick(() => {
-        scrollToCurrentSong();
+  (value) => {
+    cancelDrag();
+    overlay?.remove();
+    overlay = undefined;
+    if (value) {
+      query.value = '';
+      announcement.value = '';
+      overlay = registerOverlay(() => {
+        show.value = false;
       });
-    } else {
-      // 如果已经是关闭状态，不需要处理
-      if (!internalVisible.value) return;
-
-      // 开始关闭动画，等 animationend 后再隐藏
-      closing.value = false;
-      internalVisible.value = false;
     }
   },
   { immediate: true }
 );
-
-// 播放列表
-const playList = computed(() => playerStore.playList as SongResult[]);
-
-// 播放列表引用
-const playListRef = ref<any>(null);
-const draggedId = ref<SongResult['id'] | null>(null);
-const reorderSong = (from: number, to: number) => {
-  if (
-    from < 0 ||
-    to < 0 ||
-    from >= playList.value.length ||
-    to >= playList.value.length ||
-    from === to
-  )
-    return;
-  const reordered = [...playList.value];
-  const [song] = reordered.splice(from, 1);
-  reordered.splice(to, 0, song);
-  playerStore.setPlayList(reordered, true, false, true);
-};
-const moveSong = (song: SongResult, delta: number) =>
-  reorderSong(
-    playList.value.findIndex((item) => item.id === song.id),
-    playList.value.findIndex((item) => item.id === song.id) + delta
-  );
-const dragStart = (event: DragEvent, song: SongResult) => {
-  draggedId.value = song.id;
-  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
-};
-const dropSong = (_event: DragEvent, song: SongResult) => {
-  if (draggedId.value !== null)
-    reorderSong(
-      playList.value.findIndex((item) => item.id === draggedId.value),
-      playList.value.findIndex((item) => item.id === song.id)
-    );
-};
-
-// 关闭面板
-const closePanel = () => {
-  show.value = false;
-};
-
-// 动画结束后隐藏组件
-const onAnimationEnd = () => {
-  if (closing.value) {
-    internalVisible.value = false;
-  }
-};
-
-// 清空播放列表
-const handleClearPlaylist = () => {
-  if (playList.value.length === 0) {
-    message.info(t('player.playList.alreadyEmpty'));
-    return;
-  }
-
-  if (isMobile.value) {
-    closePanel();
-  }
-
-  dialog.warning({
-    title: t('player.playList.clearConfirmTitle'),
-    content: t('player.playList.clearConfirmContent'),
-    positiveText: t('common.confirm'),
-    negativeText: t('common.cancel'),
-    style: { zIndex: 999999999 }, // 确保对话框显示在遮罩之上
-    onPositiveClick: () => {
-      // 清空播放列表
-      playerStore.clearPlayAll();
-      message.success(t('player.playList.cleared'));
-    }
-  });
-};
-
-// 处理键盘事件
-const handleKeyDown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape' && internalVisible.value) {
-    closePanel();
-  }
-};
-
-// 添加和移除键盘事件监听
+onBeforeUnmount(() => {
+  cancelDrag();
+  overlay?.remove();
+  window.removeEventListener('resize', cancelDrag);
+  window.removeEventListener('blur', cancelDrag);
+});
 onMounted(() => {
-  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('resize', cancelDrag);
+  window.addEventListener('blur', cancelDrag);
 });
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeyDown);
-});
-
-// 滚动到当前播放歌曲
-const scrollToCurrentSong = () => {
-  // 延长等待时间，确保列表已渲染完成
-  setTimeout(() => {
-    if (playListRef.value && playList.value.length > 0) {
-      const index = playerStore.playListIndex;
-      console.log('滚动到歌曲索引:', index);
-      playListRef.value.scrollTo({
-        top: (index > 3 ? index - 3 : 0) * 62
-      });
-    }
-  }, 100);
-};
-
-// 删除歌曲
-const handleDeleteSong = (song: SongResult) => {
-  playerStore.removeFromPlayList(song.id as number);
-};
 </script>
 
-<style lang="scss" scoped>
-.fixed-overlay {
-  @apply fixed inset-0 z-[999999];
-  pointer-events: auto; /* 允许点击关闭*/
-  cursor: default;
-}
-
+<style scoped>
 .playlist-panel {
-  @apply fixed right-0 z-[9999999] rounded-l-xl overflow-hidden;
-  width: 350px;
-  height: 70vh;
-  top: 15vh; /* 距离顶部15%*/
-  animation-duration: 0.4s !important; /* 动画持续时间*/
-
-  @apply bg-light dark:bg-dark shadow-2xl dark:border dark:border-gray-700;
-
-  &-header {
-    @apply flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-gray-900;
-    backdrop-filter: blur(10px);
-    background-color: var(--surface-glass);
-
-    .dark & {
-      background-color: var(--surface-glass);
-    }
-
-    .title {
-      @apply text-base font-medium text-gray-800 dark:text-gray-200;
-    }
-
-    .header-actions {
-      @apply flex items-center;
-    }
-
-    .action-btn,
-    .close-btn {
-      @apply w-8 h-8 flex items-center justify-center rounded-full cursor-pointer mx-1 text-gray-800 dark:text-gray-200;
-      @apply hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors;
-
-      .iconfont {
-        @apply text-xl;
-      }
-    }
-
-    .action-btn {
-      @apply text-gray-500 dark:text-gray-400;
-      &:hover {
-        @apply text-red-500 dark:text-red-400;
-      }
-    }
-  }
-
-  &-content {
-    @apply h-[calc(70vh-60px)] overflow-hidden;
-  }
+  width: min(560px, calc(100vw - 24px));
+  height: min(
+    720px,
+    calc(100dvh - var(--safe-area-inset-top, 0px) - var(--safe-area-inset-bottom, 0px) - 48px)
+  );
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-container, 32px);
+  corner-shape: superellipse(2);
+  background: var(--canvas, #fff);
+  color: var(--text-primary, #111);
+  box-shadow: 0 16px 48px #0002;
 }
-
-.empty-playlist {
-  @apply flex flex-col items-center justify-center h-full text-gray-400 dark:text-gray-500;
-
-  .iconfont {
-    @apply text-5xl mb-4;
-  }
-
-  p {
-    @apply text-sm;
-  }
-}
-
-.music-play-list-content {
-  @apply pr-2;
-  border-bottom: 1px solid var(--divider, #d9d9de);
+.playlist-panel.fade-in-scale-up-transition-enter-active,
+.playlist-panel.fade-in-scale-up-transition-leave-active {
   transition:
-    transform 180ms cubic-bezier(0.2, 1.3, 0.35, 1),
-    opacity 180ms;
-  &:active {
-    transform: scale(0.985);
-  }
-  &:hover {
-    .delete-btn {
-      @apply visible;
-    }
-  }
-  .delete-btn {
-    @apply pr-2 cursor-pointer invisible;
-    .iconfont {
-      @apply text-lg;
-    }
-  }
+    opacity 180ms ease,
+    transform 420ms linear(0, 0.4, 0.8, 1.03, 1.01, 1) !important;
+}
+button {
+  transition:
+    transform 240ms linear(0, 0.4, 0.8, 1.03, 1.01, 1),
+    color 140ms ease;
+}
+:global(.dark) .playlist-panel {
+  background: var(--canvas, #111);
+  color: var(--text-primary, #fff);
+}
+.queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--surface-glass, #ffffff40);
+  border-bottom: 1px solid var(--divider, #d9d9de);
+  backdrop-filter: blur(24px) saturate(1.5);
+}
+h2 {
+  font-size: 22px;
+  font-weight: 700;
+}
+.queue-header p,
+.queue-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #77777c);
+}
+.queue-tools {
+  padding: 12px 16px 0;
+}
+.queue-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 24px;
+  background: var(--surface-secondary, #f2f2f7);
+}
+.queue-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  background: transparent;
+  outline: none;
+  font-size: 15px;
+}
+.queue-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.queue-actions button {
+  min-height: 44px;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--accent, #fa2d48);
+}
+button:disabled {
+  opacity: 0.35;
+}
+button:not(:disabled):active {
+  transform: scale(0.97);
+}
+.playlist-panel-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 16px;
+}
+.queue-row {
+  height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-bottom: 1px solid var(--divider, #d9d9de);
+  position: relative;
+  transition: transform 260ms linear(0, 0.4, 0.8, 1.03, 1.01, 1);
 }
 .queue-song {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-width: 0;
+  gap: 8px;
   flex: 1;
-  padding: 8px 0;
+  min-width: 0;
+  text-align: left;
+  min-height: 56px;
 }
-.queue-song img {
+.queue-song img,
+.queue-cover-placeholder {
   width: 44px;
   height: 44px;
-  border-radius: 6px;
+  flex-shrink: 0;
+  border-radius: 12px;
   object-fit: cover;
 }
-.queue-song-copy {
+.queue-cover-placeholder {
+  display: grid;
+  place-items: center;
+  background: var(--surface-secondary, #f2f2f7);
+  color: var(--text-secondary, #77777c);
+}
+.queue-copy {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 0;
 }
-.queue-song-copy strong,
-.queue-song-copy span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.queue-copy strong,
+.queue-copy > span {
   white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
-.queue-song-copy strong {
-  font-size: 14px;
+.queue-copy strong {
+  font-size: 15px;
   font-weight: 600;
-  color: var(--text-primary, #111);
 }
-.queue-song-copy span {
+.queue-copy > span {
   font-size: 12px;
   color: var(--text-secondary, #77777c);
 }
-.queue-song-copy .queue-current,
-.queue-playing {
+.queue-current {
   color: var(--accent, #fa2d48);
 }
-.queue-order {
-  display: flex;
-}
-.queue-order button {
-  min-width: 36px;
-  min-height: 40px;
+.queue-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  font-size: 20px;
   color: var(--text-secondary, #77777c);
 }
-.queue-order button:disabled {
-  opacity: 0.25;
+.queue-icon:active {
+  transform: scale(0.94);
 }
-.queue-order button:focus-visible {
+.queue-grip {
+  touch-action: none;
+  cursor: grab;
+}
+.queue-dragging {
+  transform: scale(1.02);
+  opacity: 0.65;
+}
+.queue-drop-before::before,
+.queue-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent, #fa2d48);
+  pointer-events: none;
+}
+.queue-drop-before::before {
+  top: 0;
+}
+.queue-drop-after::after {
+  bottom: 0;
+}
+.queue-hint {
+  margin: 0;
+  padding: 12px 16px 16px;
+}
+.queue-empty {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 15px;
+  color: var(--text-secondary, #77777c);
+}
+button:focus-visible,
+input:focus-visible {
   outline: 2px solid var(--accent, #fa2d48);
+  outline-offset: 2px;
 }
-
-/* 移动端适配*/
-@media (max-width: 768px) {
-  .playlist-panel {
-    position: fixed;
-    width: 100%;
-    height: 80vh;
-    top: auto;
-    bottom: 0; /* 移动端底部留出导航栏高度*/
-    border-radius: 30px 30px 0 0;
-    border-left: none;
-    border-top: 1px solid theme('colors.gray.200');
-    box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.1);
-
-    &-header {
-      @apply text-center relative px-4;
-
-      &::before {
-        content: '';
-        position: absolute;
-        top: -15px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 40px;
-        height: 5px;
-        border-radius: 5px;
-        background-color: rgba(150, 150, 150, 0.3);
-      }
-    }
-
-    &-content {
-      height: calc(80vh - 60px);
-      @apply px-4;
-      .delete-btn {
-        @apply visible;
-      }
-    }
+@media (prefers-reduced-motion: reduce) {
+  .playlist-panel,
+  button {
+    transition: none !important;
+  }
+  .queue-row {
+    transition: none;
+  }
+  .queue-dragging {
+    transform: none;
   }
 }
 </style>

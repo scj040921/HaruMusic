@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 const { _electron } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const profile=resolve('artifacts/desktop-ui-profile-0.1.13');mkdirSync(profile,{recursive:true});
+const profile=resolve('artifacts/desktop-ui-profile-0.1.14');mkdirSync(profile,{recursive:true});
 const occupied=createServer((_,res)=>{res.writeHead(503);res.end('test fixture');});
 await new Promise(resolve=>occupied.listen(0,'127.0.0.1',resolve));
 const occupiedPort=occupied.address().port;
@@ -37,6 +37,12 @@ try {
  assert.equal(await page.locator('[class*="salt-"]').count(),0);
  const config=await page.evaluate(()=>JSON.parse(localStorage.getItem('music-full-config')));
  assert.equal(config.fontSize,28);assert.equal(Object.keys(config).some(k=>k.startsWith('salt')),false);
- mkdirSync('artifacts/ui-0.1.13',{recursive:true});await page.screenshot({path:'artifacts/ui-0.1.13/desktop-liquid.png'});
+ mkdirSync('artifacts/ui-0.1.14',{recursive:true});await page.screenshot({path:'artifacts/ui-0.1.14/desktop-liquid.png'});
+ await page.evaluate(()=>{const pinia=document.getElementById('app').__vue_app__.config.globalProperties.$pinia;const queue=pinia._s.get('playlist'),core=pinia._s.get('playerCore');queue.setPlayList([core.playMusic,...Array.from({length:14},(_,i)=>({id:i+10,source:'netease',name:'Desktop selection '+i,ar:[{name:'Collection'}],picUrl:'',al:{name:'Album'}}))]);queue.setPlayListDrawerVisible(true);});
+ const queue=page.getByRole('dialog',{name:'播放队列',exact:true});await queue.waitFor();
+ await page.getByRole('searchbox',{name:'搜索播放队列'}).fill('selection 7');assert.equal(await queue.locator('.queue-row').count(),1);
+ assert.ok(await queue.evaluate(e=>e.contains(document.activeElement)));
+ await page.screenshot({path:'artifacts/ui-0.1.14/desktop-queue.png'});
+ await page.getByRole('button',{name:'关闭播放队列',exact:true}).click();await queue.waitFor({state:'detached'});assert.ok(await page.locator('.liquid-now-playing').isVisible());
  assert.deepEqual(errors,[]);console.log('Actual Electron renderer: Salt migration persisted, obsolete settings removed, Liquid player and cover rendered.');
 } finally {await app?.close();await new Promise(resolve=>occupied.close(resolve));}

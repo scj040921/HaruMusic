@@ -134,6 +134,8 @@ export const usePlayerStore = defineStore('player', () => {
     prepareSongPlayback: playlist.prepareSongPlayback,
     addToNextPlay: playlist.addToNextPlay,
     removeFromPlayList: playlist.removeFromPlayList,
+    moveQueueSong: playlist.moveQueueSong,
+    retainCurrentSong: playlist.retainCurrentSong,
     clearPlayAll: playlist.clearPlayAll,
     togglePlayMode: playlist.togglePlayMode,
     shufflePlayList: playlist.shufflePlayList,

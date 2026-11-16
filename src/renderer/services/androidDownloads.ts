@@ -1,5 +1,8 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
+import type { SongResult } from '@/types/music';
+import { matchesMusicQuery } from '@/utils/songIdentity';
+
 import type { DownloadSongInfo } from '../../shared/download';
 export type AndroidDownload = {
   taskId: string;
@@ -43,3 +46,23 @@ export function unwrapDownloadSource(raw: string): {
 }
 export const downloadedFileUrl = async (taskId: string) =>
   Capacitor.convertFileSrc((await androidDownloads.playbackFile({ taskId })).path);
+
+export function filterDownloads(tasks: AndroidDownload[], state: string, query = '') {
+  return tasks
+    .filter(
+      (task) =>
+        matchesMusicQuery(task.songInfo, query) &&
+        (state === '全部' ||
+          (state === '已完成'
+            ? task.state === 'completed'
+            : state === '失败'
+              ? task.state === 'error'
+              : ['queued', 'downloading'].includes(task.state)))
+    )
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** Resolve the file lazily when each track starts, keeping bulk playback offline. */
+export function toOfflineSong(task: AndroidDownload): SongResult {
+  return { ...task.songInfo, id: `android-download:${task.taskId}`, source: 'local' } as SongResult;
+}

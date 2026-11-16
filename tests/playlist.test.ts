@@ -9,7 +9,9 @@ const mocks = vi.hoisted(() => ({
   settings: { setData: { singleSongPlayMode: 'replace' } },
   intelligence: { isIntelligenceMode: false, clearIntelligenceMode: vi.fn() },
   getSongDetail: vi.fn(),
-  preload: vi.fn()
+  preload: vi.fn(),
+  retain: vi.fn(),
+  play: vi.fn()
 }));
 
 vi.mock('naive-ui', () => ({ createDiscreteApi: () => ({ message: {} }) }));
@@ -18,8 +20,15 @@ vi.mock('@/hooks/usePlayerHooks', () => ({
   useSongDetail: () => ({ getSongDetail: mocks.getSongDetail })
 }));
 vi.mock('@/services/audioService', () => ({ audioService: {} }));
+vi.mock('@/services/playbackController', async () => {
+  const { playbackRequestManager } = await import('@/services/playbackRequestManager');
+  return {
+    playTrack: mocks.play,
+    getCurrentGeneration: () => playbackRequestManager.getGeneration()
+  };
+});
 vi.mock('@/services/preloadService', () => ({
-  preloadService: { load: mocks.preload, getRevision: () => 0 }
+  preloadService: { load: mocks.preload, getRevision: () => 0, retain: mocks.retain }
 }));
 vi.mock('@/store/modules/settings', () => ({ useSettingsStore: () => mocks.settings }));
 vi.mock('@/store/modules/intelligenceMode', () => ({
@@ -44,6 +53,7 @@ describe('single-song queue preference (#766)', () => {
     setActivePinia(createPinia());
     mocks.settings.setData.singleSongPlayMode = 'replace';
     mocks.preload.mockResolvedValue('');
+    mocks.play.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -168,5 +178,108 @@ describe('single-song queue preference (#766)', () => {
 
     expect(queue.playList[0].playMusicUrl).toBe('https://example.com/one.mp3');
     expect(mocks.preload).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves the requested provider without losing the playing provider with the same ID', () => {
+    const queue = usePlaylistStore(),
+      core = usePlayerCoreStore();
+    const a = makeSong(1),
+      b = { ...makeSong(1), source: 'plugin:other' } as SongResult,
+      c = makeSong(2);
+    core.playMusic = b;
+    queue.setPlayList([a, b, c]);
+    queue.moveQueueSong(a, c);
+    expect(queue.playList).toEqual([b, c, a]);
+    expect(queue.playList[queue.playListIndex]).toBe(b);
+    expect(core.playMusic).toEqual(b);
+  });
+
+  it('can play a different provider next even if its numeric song ID matches the current one', () => {
+    const queue = usePlaylistStore(),
+      core = usePlayerCoreStore();
+    const a = makeSong(1),
+      b = { ...makeSong(1), source: 'plugin:other' } as SongResult,
+      c = makeSong(2);
+    core.playMusic = b;
+    queue.setPlayList([a, b, c]);
+    queue.addToNextPlay(a);
+    expect(queue.playList).toEqual([b, a, c]);
+    expect(queue.playListIndex).toBe(0);
+  });
+
+  it('removes only the specified source and never pauses a same-ID current track from another source', () => {
+    const queue = usePlaylistStore(),
+      core = usePlayerCoreStore();
+    const a = makeSong(1),
+      b = { ...makeSong(1), source: 'plugin:other' } as SongResult;
+    core.playMusic = b;
+    core.play = true;
+    queue.setPlayList([a, b]);
+    queue.removeFromPlayList(a.id, a.source);
+    expect(queue.playList).toEqual([b]);
+    expect(core.play).toBe(true);
+    expect(queue.playListIndex).toBe(0);
+  });
+
+  it('retains only the current track without interrupting playback and discards irrelevant warmups', () => {
+    const queue = usePlaylistStore(),
+      core = usePlayerCoreStore();
+    const song = makeSong(2);
+    core.playMusic = song;
+    core.play = true;
+    queue.setPlayList([makeSong(1), song, makeSong(3)]);
+    queue.retainCurrentSong();
+    expect(queue.playList).toEqual([song]);
+    expect(queue.playListIndex).toBe(0);
+    expect(core.play).toBe(true);
+    expect(mocks.retain).toHaveBeenCalledWith(song);
+  });
+
+  it('keeps both sources in shuffle history when editing and restoring the queue', () => {
+    const queue = usePlaylistStore(),
+      core = usePlayerCoreStore();
+    const a = makeSong(1),
+      b = { ...makeSong(1), source: 'plugin:other' } as SongResult;
+    core.playMusic = b;
+    queue.playMode = 2;
+    queue.setPlayList([a, b, makeSong(2)]);
+    expect(queue.playList[queue.playListIndex]).toEqual(b);
+    queue.moveQueueSong(a, b);
+    queue.restoreOriginalOrder();
+    expect(queue.playList).toEqual([a, b, makeSong(2)]);
+    expect(queue.playList[queue.playListIndex]).toEqual(b);
+  });
+
+  it('advances exactly once to the surviving next item when the playing item is removed', async () => {
+    const queue = usePlaylistStore(),
+      core = usePlayerCoreStore();
+    const songs = [makeSong(1), makeSong(2), makeSong(3)];
+    core.playMusic = songs[0];
+    core.play = true;
+    queue.setPlayList(songs);
+    vi.spyOn(core, 'handlePause').mockImplementation(() => {
+      core.play = false;
+      core.userPlayIntent = false;
+    });
+    queue.removeFromPlayList(1, 'netease');
+    await vi.waitFor(() => expect(mocks.play).toHaveBeenCalledOnce());
+    expect(mocks.play).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }), true);
+    expect(queue.playList.map((song) => song.id)).toEqual([2, 3]);
+    expect(queue.playListIndex).toBe(0);
+  });
+
+  it('does not toggle the playing source when choosing a same-ID item from another provider', async () => {
+    const queue = usePlaylistStore(),
+      core = usePlayerCoreStore();
+    const a = makeSong(1),
+      b = { ...makeSong(1), source: 'plugin:other' } as SongResult;
+    core.playMusic = a;
+    core.play = true;
+    queue.setPlayList([a, b]);
+    const start = vi.spyOn(core, 'setPlayMusic').mockResolvedValue(true);
+    expect(await queue.setPlay(b)).toBe(true);
+    expect(start).toHaveBeenCalledWith(b);
+    expect(core.play).toBe(true);
+    expect(queue.playListIndex).toBe(1);
   });
 });
