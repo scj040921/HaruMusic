@@ -154,6 +154,7 @@ const tabRects = () => {
     };
   });
 };
+let dragRects: ReturnType<typeof tabRects> = [];
 function paintLens() {
   sliderStyle.value = {
     opacity: '1',
@@ -243,6 +244,7 @@ watch(
 function startSliderDrag(event: PointerEvent) {
   if (!isAndroidApp || !isMobile.value || !event.isPrimary || event.button !== 0) return;
   suppressClick = false;
+  dragRects = tabRects();
   drag = {
     id: event.pointerId,
     start: event.clientX,
@@ -277,7 +279,8 @@ function moveSliderDrag(event: PointerEvent) {
   drag.velocity = (event.clientX - drag.lastX) / elapsed;
   drag.lastX = event.clientX;
   drag.lastTime = event.timeStamp;
-  const rects = tabRects();
+  // Geometry is stable throughout a gesture; avoid six layout reads per move.
+  const rects = dragRects;
   const min = rects[0]?.x || 0,
     max = rects.at(-1)?.x || min;
   const raw = drag.origin + dx;
@@ -296,7 +299,8 @@ function finishSliderDrag(event: PointerEvent) {
   sliderDragging.value = false;
   if (!moved) return;
   suppressClick = true;
-  const rects = tabRects();
+  const rects = dragRects;
+  dragRects = [];
   const index = nearestTab(
     lens.x + lens.width / 2,
     rects.map((r) => r.x + r.width / 2)
@@ -314,6 +318,7 @@ function cancelSliderDrag() {
   const id = drag?.id;
   const moved = drag?.moved;
   drag = null;
+  dragRects = [];
   sliderDragging.value = false;
   if (moved) {
     suppressClick = true;
@@ -338,7 +343,7 @@ onMounted(async () => {
   await nextTick();
   updateLiquidSlider();
   if (typeof ResizeObserver !== 'undefined' && menuListRef.value) {
-    menuResizeObserver = new ResizeObserver(() => updateLiquidSlider());
+    menuResizeObserver = new ResizeObserver(handleSliderResize);
     menuResizeObserver.observe(menuListRef.value);
   }
   window.addEventListener('resize', handleSliderResize);
@@ -537,7 +542,7 @@ const toggleMenu = () => {
     display: flex;
     justify-content: space-around;
     align-items: stretch;
-    gap: 4px;
+    gap: 0;
     position: relative;
     padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px));
   }

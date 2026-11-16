@@ -35,6 +35,7 @@ import { checkLoginStatus } from '@/utils/auth';
 
 import { initAudioListeners, initMusicHook } from './hooks/MusicHook';
 import { audioService } from './services/audioService';
+import { dismissTopOverlay } from './services/overlayStack';
 import { isMobile } from './utils';
 import { useAppShortcuts } from './utils/appShortcuts';
 
@@ -160,6 +161,11 @@ onMounted(async () => {
         const intro = document.querySelector<HTMLButtonElement>('.intro-skip');
         if (intro) {
           intro.click();
+          return;
+        }
+        if (dismissTopOverlay()) return;
+        if (playerStore.playListDrawerVisible) {
+          playerStore.setPlayListDrawerVisible(false);
           return;
         }
         if (playerStore.musicFull) {

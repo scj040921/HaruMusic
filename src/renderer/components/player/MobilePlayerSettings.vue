@@ -1,204 +1,205 @@
 <template>
-  <Teleport to="body">
-    <Transition name="settings-drawer">
+  <!-- Stay inside the player's focus scope; body teleport lets its drawer steal focus. -->
+  <Transition name="settings-drawer">
+    <div
+      v-if="visible"
+      class="fixed inset-0 z-[99999] flex items-end justify-center"
+      @click.self="close"
+    >
+      <!-- 遮罩层 -->
+      <div class="absolute inset-0 bg-black/50" @click="close"></div>
+
+      <!-- 弹窗内容 - 磨砂玻璃效果 -->
       <div
-        v-if="visible"
-        class="fixed inset-0 z-[99999] flex items-end justify-center"
-        @click.self="close"
+        ref="settingsPanel"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t('player.settings.title')"
+        tabindex="-1"
+        class="mobile-settings-panel relative bg-gray-900/40 backdrop-blur-2xl overflow-hidden flex flex-col border border-white/10 shadow-2xl"
       >
-        <!-- 遮罩层 -->
-        <div class="absolute inset-0 bg-black/50" @click="close"></div>
+        <!-- 顶部拖拽条 -->
+        <div class="flex justify-center pt-3 pb-2 flex-shrink-0">
+          <div class="w-10 h-1 rounded-full bg-white/30"></div>
+        </div>
 
-        <!-- 弹窗内容 - 磨砂玻璃效果 -->
-        <div
-          class="relative w-full max-w-lg bg-gray-900/40 backdrop-blur-2xl rounded-t-3xl overflow-hidden max-h-[85vh] flex flex-col border-t border-white/10 shadow-2xl"
-        >
-          <!-- 顶部拖拽条 -->
-          <div class="flex justify-center pt-3 pb-2 flex-shrink-0">
-            <div class="w-10 h-1 rounded-full bg-white/30"></div>
-          </div>
-
-          <!-- 标题栏 -->
-          <div class="flex items-center justify-between px-5 pb-4 flex-shrink-0">
-            <h2 class="text-lg font-semibold text-white">
-              {{ t('player.settings.title') }}
-            </h2>
-            <button
-              @click="close"
-              aria-label="关闭播放设置"
-              class="w-11 h-11 rounded-full flex items-center justify-center text-white/60 hover:bg-white/10"
-            >
-              <i class="ri-close-line text-xl"></i>
-            </button>
-          </div>
-
-          <!-- 内容区域 -->
-          <div
-            class="flex-1 overflow-y-auto px-5 pb-6"
-            :style="{ paddingBottom: `calc(24px + var(--safe-area-inset-bottom, 0px))` }"
+        <!-- 标题栏 -->
+        <div class="flex items-center justify-between px-5 pb-4 flex-shrink-0">
+          <h2 class="text-lg font-semibold text-white">
+            {{ t('player.settings.title') }}
+          </h2>
+          <button
+            @click="close"
+            aria-label="关闭播放设置"
+            class="w-11 h-11 rounded-full flex items-center justify-center text-white/60 hover:bg-white/10"
           >
-            <div v-if="isAndroidApp" class="mobile-download-options">
+            <i class="ri-close-line text-xl"></i>
+          </button>
+        </div>
+
+        <!-- 内容区域 -->
+        <div class="flex-1 overflow-y-auto px-5 pb-6">
+          <div v-if="isAndroidApp" class="mobile-download-options">
+            <button
+              :disabled="
+                isDownloading ||
+                !playerStore.playMusic.id ||
+                playerStore.playMusic.source === 'local'
+              "
+              @click="downloadMusic(playerStore.playMusic)"
+            >
+              <i class="ri-download-line" />
+              {{ isDownloading ? '正在解析下载地址…' : '下载音乐' }}
+            </button>
+            <button @click="openDownloads"><i class="ri-folder-music-line" /> 下载管理</button>
+          </div>
+          <details class="playback-diagnostics">
+            <summary>播放诊断</summary>
+            <p>记录最近五次点播的取源、缓冲时间，不含音频地址或账号凭据。</p>
+            <button type="button" @click="copyDiagnostics">{{ copyLabel }}</button>
+            <textarea aria-label="播放诊断内容" readonly :value="diagnosticText" />
+          </details>
+          <!-- 播放速度 -->
+          <div class="mb-6">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-sm font-medium text-white/80">
+                {{ t('player.settings.playbackSpeed') }}
+              </span>
+              <span class="text-sm text-[#ff657b] font-medium">{{ playbackRate }}x</span>
+            </div>
+            <div class="flex flex-wrap gap-2">
               <button
-                :disabled="
-                  isDownloading ||
-                  !playerStore.playMusic.id ||
-                  playerStore.playMusic.source === 'local'
+                v-for="option in speedOptions"
+                :key="option"
+                @click="setSpeed(option)"
+                class="px-4 py-2 rounded-full text-sm font-medium transition-colors"
+                :class="
+                  playbackRate === option
+                    ? 'bg-[#FA2D48] text-white'
+                    : 'bg-white/10 text-white/70 hover:bg-white/15'
                 "
-                @click="downloadMusic(playerStore.playMusic)"
               >
-                <i class="ri-download-line" />
-                {{ isDownloading ? '正在解析下载地址…' : '下载音乐' }}
+                {{ option }}x
               </button>
-              <button @click="openDownloads"><i class="ri-folder-music-line" /> 下载管理</button>
             </div>
-            <details class="playback-diagnostics">
-              <summary>播放诊断</summary>
-              <p>记录最近五次点播的取源、缓冲时间，不含音频地址或账号凭据。</p>
-              <button type="button" @click="copyDiagnostics">{{ copyLabel }}</button>
-              <textarea aria-label="播放诊断内容" readonly :value="diagnosticText" />
-            </details>
-            <!-- 播放速度 -->
-            <div class="mb-6">
-              <div class="flex items-center justify-between mb-3">
-                <span class="text-sm font-medium text-white/80">
-                  {{ t('player.settings.playbackSpeed') }}
-                </span>
-                <span class="text-sm text-green-400 font-medium">{{ playbackRate }}x</span>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="option in speedOptions"
-                  :key="option"
-                  @click="setSpeed(option)"
-                  class="px-4 py-2 rounded-full text-sm font-medium transition-colors"
-                  :class="
-                    playbackRate === option
-                      ? 'bg-green-500 text-white'
-                      : 'bg-white/10 text-white/70 hover:bg-white/15'
-                  "
-                >
-                  {{ option }}x
-                </button>
-              </div>
+          </div>
+
+          <!-- 分隔线 -->
+          <div class="h-px bg-white/10 my-5"></div>
+
+          <!-- 定时关闭 -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-sm font-medium text-white/80">
+                {{ t('player.sleepTimer.title') }}
+              </span>
+              <span v-if="hasTimerActive" class="text-sm text-[#ff657b] font-medium">
+                {{ timerStatusText }}
+              </span>
             </div>
 
-            <!-- 分隔线 -->
-            <div class="h-px bg-white/10 my-5"></div>
-
-            <!-- 定时关闭 -->
-            <div>
-              <div class="flex items-center justify-between mb-3">
-                <span class="text-sm font-medium text-white/80">
-                  {{ t('player.sleepTimer.title') }}
-                </span>
-                <span v-if="hasTimerActive" class="text-sm text-green-400 font-medium">
-                  {{ timerStatusText }}
-                </span>
+            <!-- 已激活状态 -->
+            <div v-if="hasTimerActive" class="space-y-3">
+              <div class="p-4 rounded-2xl bg-[#FA2D48]/15 border border-green-500/30">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-3">
+                    <i class="ri-timer-line text-[#ff657b] text-xl"></i>
+                    <span class="text-[#ff657b]">
+                      {{ timerDisplayText }}
+                    </span>
+                  </div>
+                  <button
+                    @click="cancelTimer"
+                    class="px-3 py-1 rounded-full text-sm bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                  >
+                    {{ t('player.sleepTimer.cancel') }}
+                  </button>
+                </div>
               </div>
+            </div>
 
-              <!-- 已激活状态 -->
-              <div v-if="hasTimerActive" class="space-y-3">
-                <div class="p-4 rounded-2xl bg-green-500/15 border border-green-500/30">
-                  <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                      <i class="ri-timer-line text-green-400 text-xl"></i>
-                      <span class="text-green-400">
-                        {{ timerDisplayText }}
-                      </span>
-                    </div>
+            <!-- 未激活状态 - 设置选项 -->
+            <div v-else class="space-y-4">
+              <!-- 按时间 -->
+              <div>
+                <p class="text-xs text-white/50 mb-2">
+                  {{ t('player.sleepTimer.timeMode') }}
+                </p>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    v-for="minutes in [15, 30, 60, 90]"
+                    :key="minutes"
+                    @click="setTimeTimer(minutes)"
+                    class="px-4 py-2 rounded-full text-sm font-medium bg-white/10 text-white/70 hover:bg-white/15"
+                  >
+                    {{ minutes }}{{ t('player.sleepTimer.minutes') }}
+                  </button>
+                </div>
+                <!-- 自定义时间 -->
+                <div class="flex items-center gap-2 mt-3">
+                  <div class="flex items-center flex-1 bg-white/10 rounded-full overflow-hidden">
                     <button
-                      @click="cancelTimer"
-                      class="px-3 py-1 rounded-full text-sm bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                      @click="decreaseMinutes"
+                      class="w-10 h-10 flex items-center justify-center text-white/70 hover:bg-white/10 active:bg-white/20"
                     >
-                      {{ t('player.sleepTimer.cancel') }}
+                      <i class="ri-subtract-line text-lg"></i>
+                    </button>
+                    <input
+                      v-model="customMinutes"
+                      type="text"
+                      inputmode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="分钟"
+                      class="flex-1 px-2 py-2 text-sm text-center bg-transparent text-white/80 border-0 outline-none placeholder-white/40"
+                      @input="handleMinutesInput"
+                    />
+                    <button
+                      @click="increaseMinutes"
+                      class="w-10 h-10 flex items-center justify-center text-white/70 hover:bg-white/10 active:bg-white/20"
+                    >
+                      <i class="ri-add-line text-lg"></i>
                     </button>
                   </div>
+                  <button
+                    @click="setCustomTimeTimer"
+                    :disabled="!customMinutes || Number(customMinutes) < 1"
+                    class="px-4 py-2 rounded-full text-sm font-medium bg-[#FA2D48] text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {{ t('player.sleepTimer.set') }}
+                  </button>
                 </div>
               </div>
 
-              <!-- 未激活状态 - 设置选项 -->
-              <div v-else class="space-y-4">
-                <!-- 按时间 -->
-                <div>
-                  <p class="text-xs text-white/50 mb-2">
-                    {{ t('player.sleepTimer.timeMode') }}
-                  </p>
-                  <div class="flex flex-wrap gap-2">
-                    <button
-                      v-for="minutes in [15, 30, 60, 90]"
-                      :key="minutes"
-                      @click="setTimeTimer(minutes)"
-                      class="px-4 py-2 rounded-full text-sm font-medium bg-white/10 text-white/70 hover:bg-white/15"
-                    >
-                      {{ minutes }}{{ t('player.sleepTimer.minutes') }}
-                    </button>
-                  </div>
-                  <!-- 自定义时间 -->
-                  <div class="flex items-center gap-2 mt-3">
-                    <div class="flex items-center flex-1 bg-white/10 rounded-full overflow-hidden">
-                      <button
-                        @click="decreaseMinutes"
-                        class="w-10 h-10 flex items-center justify-center text-white/70 hover:bg-white/10 active:bg-white/20"
-                      >
-                        <i class="ri-subtract-line text-lg"></i>
-                      </button>
-                      <input
-                        v-model="customMinutes"
-                        type="text"
-                        inputmode="numeric"
-                        pattern="[0-9]*"
-                        placeholder="分钟"
-                        class="flex-1 px-2 py-2 text-sm text-center bg-transparent text-white/80 border-0 outline-none placeholder-white/40"
-                        @input="handleMinutesInput"
-                      />
-                      <button
-                        @click="increaseMinutes"
-                        class="w-10 h-10 flex items-center justify-center text-white/70 hover:bg-white/10 active:bg-white/20"
-                      >
-                        <i class="ri-add-line text-lg"></i>
-                      </button>
-                    </div>
-                    <button
-                      @click="setCustomTimeTimer"
-                      :disabled="!customMinutes || Number(customMinutes) < 1"
-                      class="px-4 py-2 rounded-full text-sm font-medium bg-green-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {{ t('player.sleepTimer.set') }}
-                    </button>
-                  </div>
+              <!-- 按歌曲数 -->
+              <div>
+                <p class="text-xs text-white/50 mb-2">
+                  {{ t('player.sleepTimer.songsMode') }}
+                </p>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    v-for="songs in [1, 3, 5, 10]"
+                    :key="songs"
+                    @click="setSongsTimer(songs)"
+                    class="px-4 py-2 rounded-full text-sm font-medium bg-white/10 text-white/70 hover:bg-white/15"
+                  >
+                    {{ songs }}{{ t('player.sleepTimer.songs') }}
+                  </button>
                 </div>
-
-                <!-- 按歌曲数 -->
-                <div>
-                  <p class="text-xs text-white/50 mb-2">
-                    {{ t('player.sleepTimer.songsMode') }}
-                  </p>
-                  <div class="flex flex-wrap gap-2">
-                    <button
-                      v-for="songs in [1, 3, 5, 10]"
-                      :key="songs"
-                      @click="setSongsTimer(songs)"
-                      class="px-4 py-2 rounded-full text-sm font-medium bg-white/10 text-white/70 hover:bg-white/15"
-                    >
-                      {{ songs }}{{ t('player.sleepTimer.songs') }}
-                    </button>
-                  </div>
-                </div>
-
-                <!-- 播放列表结束 -->
-                <button
-                  @click="setPlaylistEndTimer"
-                  class="w-full py-3 rounded-2xl text-sm font-medium bg-white/10 text-white/70 hover:bg-white/15"
-                >
-                  {{ t('player.sleepTimer.playlistEnd') }}
-                </button>
               </div>
+
+              <!-- 播放列表结束 -->
+              <button
+                @click="setPlaylistEndTimer"
+                class="w-full py-3 rounded-2xl text-sm font-medium bg-white/10 text-white/70 hover:bg-white/15"
+              >
+                {{ t('player.sleepTimer.playlistEnd') }}
+              </button>
             </div>
           </div>
         </div>
       </div>
-    </Transition>
-  </Teleport>
+    </div>
+  </Transition>
 </template>
 
 <script setup lang="ts">
@@ -208,6 +209,7 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { useDownload } from '@/hooks/useDownload';
+import { useOverlayDialog } from '@/hooks/useOverlayDialog';
 import { playbackReports, playbackReportText } from '@/services/playbackDiagnostics';
 import { usePlayerStore } from '@/store/modules/player';
 import { isAndroidApp } from '@/utils';
@@ -243,13 +245,19 @@ const openDownloads = () => {
 const { sleepTimer, playbackRate } = storeToRefs(playerStore);
 
 // Props & Emits
-defineProps<{
+const props = defineProps<{
   visible: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void;
 }>();
+const settingsPanel = ref<HTMLElement | null>(null);
+useOverlayDialog(
+  () => props.visible,
+  settingsPanel,
+  () => emit('update:visible', false)
+);
 
 // 播放速度选项
 const speedOptions = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
@@ -391,6 +399,26 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.mobile-settings-panel {
+  width: min(512px, calc(100% - 24px));
+  margin: 12px 12px calc(12px + var(--safe-area-inset-bottom, 0px));
+  max-height: 85vh;
+  max-height: min(
+    85dvh,
+    calc(100dvh - var(--safe-area-inset-top, 0px) - var(--safe-area-inset-bottom, 0px) - 24px)
+  );
+  border-radius: var(--radius-container, 32px);
+  corner-shape: superellipse(2);
+  overscroll-behavior: contain;
+}
+.mobile-settings-panel button {
+  transition:
+    transform 260ms linear(0, 0.4, 0.8, 1.03, 1.01, 1),
+    background-color 140ms ease;
+}
+.mobile-settings-panel button:active:not(:disabled) {
+  transform: scale(0.96);
+}
 /* 弹窗动画 */
 .settings-drawer-enter-active,
 .settings-drawer-leave-active {
@@ -399,7 +427,7 @@ onUnmounted(() => {
 
 .settings-drawer-enter-active > div:last-child,
 .settings-drawer-leave-active > div:last-child {
-  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  transition: transform 420ms linear(0, 0.36, 0.75, 0.98, 1.025, 1.01, 1);
 }
 
 .settings-drawer-enter-from,
@@ -410,6 +438,15 @@ onUnmounted(() => {
 .settings-drawer-enter-from > div:last-child,
 .settings-drawer-leave-to > div:last-child {
   transform: translateY(100%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-drawer-enter-active,
+  .settings-drawer-leave-active,
+  .settings-drawer-enter-active > div:last-child,
+  .settings-drawer-leave-active > div:last-child,
+  .mobile-settings-panel button {
+    transition: none;
+  }
 }
 </style>
 

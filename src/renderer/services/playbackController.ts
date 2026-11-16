@@ -502,12 +502,6 @@ export const reparseCurrentSong = async (
     // 使用 SongSourceConfigManager 保存配置
     SongSourceConfigManager.setConfig(currentSong.id, [sourcePlatform], isAuto ? 'auto' : 'manual');
 
-    const currentSound = audioService.getCurrentSound();
-    const startTime = currentSound?.currentTime ?? 0;
-    if (currentSound) {
-      audioService.pause();
-    }
-
     console.log(`[playbackController] 使用音源 ${sourcePlatform} 重新解析歌曲 ${numericId}`);
 
     const songData = cloneDeep(currentSong);
@@ -523,8 +517,12 @@ export const reparseCurrentSong = async (
         playMusicUrl: newUrl,
         expiredAt: Date.now() + 1800000
       };
-
-      const playback = playTrack(updatedMusic, true, { startTime, recordHistory: false });
+      // Resolution can take seconds. Read live progress and intent only when
+      // committing the replacement, leaving the old stream audible meanwhile.
+      const currentSound = audioService.getCurrentSound();
+      const startTime = currentSound?.currentTime ?? 0;
+      const shouldPlay = currentSound ? !currentSound.paused : playerCore.isPlaying;
+      const playback = playTrack(updatedMusic, shouldPlay, { startTime, recordHistory: false });
       const playbackGeneration = getCurrentGeneration();
       const success = await playback;
       if (!success || playbackGeneration !== getCurrentGeneration()) return false;

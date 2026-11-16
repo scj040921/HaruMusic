@@ -599,6 +599,19 @@ const isTouchScrolling = ref(false);
 const touchStartY = ref(0);
 let touchMoved = false;
 let scrollFrame = 0;
+let scrollMotion: {
+  host: HTMLElement;
+  target: number;
+  position: number;
+  velocity: number;
+  last: number;
+} | null = null;
+const scrollReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const stopLyricScroll = () => {
+  cancelAnimationFrame(scrollFrame);
+  scrollFrame = 0;
+  scrollMotion = null;
+};
 let lyricFrame = 0;
 const lastScrollTop = ref(0);
 const autoScrollTimer = ref<number | null>(null);
@@ -691,27 +704,48 @@ const scrollToCurrentLyric = (immediate = false, customScrollerRef?: HTMLElement
       containerRect.height / 2 +
       lineRect.height / 2;
 
-    cancelAnimationFrame(scrollFrame);
     const target = Math.max(
       0,
       Math.min(scrollTop, scrollerRef.scrollHeight - scrollerRef.clientHeight)
     );
-    if (immediate || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (immediate || scrollReducedMotion.matches) {
+      stopLyricScroll();
       scrollerRef.scrollTo({ top: target, behavior: 'instant' });
       return;
     }
-    let position = scrollerRef.scrollTop;
-    let velocity = 0;
-    let last = performance.now();
+    if (scrollMotion?.host === scrollerRef) {
+      // A quick next lyric changes the destination, preserving the moving spring.
+      scrollMotion.target = target;
+      return;
+    }
+    stopLyricScroll();
+    scrollMotion = {
+      host: scrollerRef,
+      target,
+      position: scrollerRef.scrollTop,
+      velocity: 0,
+      last: performance.now()
+    };
     const follow = (stamp: number) => {
-      const dt = Math.min((stamp - last) / 1000, 0.032);
-      last = stamp;
-      velocity += ((target - position) * 180 - velocity * 26) * dt;
-      position += velocity * dt;
-      scrollerRef.scrollTop = position;
-      if (Math.abs(target - position) > 0.3 || Math.abs(velocity) > 1) {
+      const motion = scrollMotion;
+      if (!motion || !motion.host.isConnected) {
+        stopLyricScroll();
+        return;
+      }
+      const dt = Math.min(Math.max((stamp - motion.last) / 1000, 0), 0.032);
+      motion.last = stamp;
+      motion.velocity += ((motion.target - motion.position) * 180 - motion.velocity * 26) * dt;
+      motion.position += motion.velocity * dt;
+      motion.host.scrollTop = scrollReducedMotion.matches ? motion.target : motion.position;
+      if (
+        !scrollReducedMotion.matches &&
+        (Math.abs(motion.target - motion.position) > 0.3 || Math.abs(motion.velocity) > 1)
+      ) {
         scrollFrame = requestAnimationFrame(follow);
-      } else scrollerRef.scrollTop = target;
+      } else {
+        motion.host.scrollTop = motion.target;
+        stopLyricScroll();
+      }
     };
     scrollFrame = requestAnimationFrame(follow);
   } catch (err) {
@@ -742,6 +776,7 @@ watch(nowIndex, (newIndex, oldIndex) => {
 
 // 当显示状态变化时，触发滚动
 watch(showFullLyrics, (newVal) => {
+  stopLyricScroll();
   if (newVal) {
     nextTick(() => {
       setTimeout(() => {
@@ -783,7 +818,7 @@ const handleScroll = () => {
 
 // 触摸相关事件
 const handleTouchStart = (e: TouchEvent) => {
-  cancelAnimationFrame(scrollFrame);
+  stopLyricScroll();
   touchMoved = false;
   touchStartY.value = e.touches[0].clientY;
 
@@ -1030,7 +1065,7 @@ watch(
 
 // 组件卸载清理
 onBeforeUnmount(() => {
-  cancelAnimationFrame(scrollFrame);
+  stopLyricScroll();
   cancelAnimationFrame(lyricFrame);
   window.removeEventListener(LYRIC_CONFIG_CHANGE_EVENT, handleLyricConfigChange);
 
@@ -1150,6 +1185,7 @@ onMounted(() => {
 
 // 当显示状态变化时，更新封面与背景融合效果
 watch(isVisible, (newVal) => {
+  if (!newVal) stopLyricScroll();
   if (newVal) {
     // 播放器显示时，重新设置背景颜色
     if (targetBackground.value) {

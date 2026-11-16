@@ -207,6 +207,40 @@ describe('playback recovery ownership (#769)', () => {
     expect(mocks.sound.pause).not.toHaveBeenCalled();
   });
 
+  it('keeps playback audible during a source switch and commits at the live position', async () => {
+    const sound = { ...mocks.sound, currentTime: 42, paused: false };
+    mocks.audio.getCurrentSound.mockReturnValue(sound);
+    const pending = deferred<any>();
+    mocks.parse.mockReturnValueOnce(pending.promise);
+    const change = controller.reparseCurrentSong('migu');
+    await vi.waitFor(() => expect(mocks.parse).toHaveBeenCalled());
+    expect(mocks.audio.pause).not.toHaveBeenCalled();
+    sound.currentTime = 49;
+    pending.resolve({ data: { data: { url: 'https://example.com/new-source.mp3' } } });
+    expect(await change).toBe(true);
+    expect(mocks.audio.play).toHaveBeenCalledWith(
+      'https://example.com/new-source.mp3',
+      expect.anything(),
+      true,
+      49,
+      undefined,
+      expect.anything()
+    );
+  });
+
+  it('preserves pause intent when changing a source and leaves failed resolution untouched', async () => {
+    mocks.audio.getCurrentSound.mockReturnValue({ ...mocks.sound, paused: true });
+    expect(await controller.reparseCurrentSong('migu')).toBe(true);
+    expect(mocks.audio.play.mock.calls.at(-1)?.[2]).toBe(false);
+    mocks.audio.play.mockClear();
+    mocks.parse.mockResolvedValueOnce(null);
+    const current = mocks.core.playMusic;
+    expect(await controller.reparseCurrentSong('migu')).toBe(false);
+    expect(mocks.core.playMusic).toBe(current);
+    expect(mocks.audio.pause).not.toHaveBeenCalled();
+    expect(mocks.audio.play).not.toHaveBeenCalled();
+  });
+
   it('keeps the current song playing while the next URL is resolving', async () => {
     const previousTrack = mocks.core.playMusic;
     const detail = deferred<SongResult>();

@@ -199,6 +199,60 @@ describe('audio loading ownership (#769)', () => {
     expect(expired).toHaveBeenCalledExactlyOnceWith(song);
   });
 
+  it('recovers a frozen media clock despite repeated timeupdate and waiting events', async () => {
+    const song = makeSong(1, 'https://example.com/stalled.mp3');
+    const expired = vi.fn();
+    service.on('url_expired', expired);
+    const playback = service.play(song.playMusicUrl!, song);
+    audio.ready();
+    await playback;
+    audio.currentTime = 20;
+    audio.dispatchEvent(new Event('waiting'));
+    for (let i = 0; i < 14; i++) {
+      await vi.advanceTimersByTimeAsync(1000);
+      audio.dispatchEvent(new Event('timeupdate'));
+      audio.dispatchEvent(new Event('stalled'));
+      audio.dispatchEvent(new Event('canplay'));
+      audio.dispatchEvent(new Event('playing'));
+    }
+    expect(service.isLoading()).toBe(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(expired).toHaveBeenCalledExactlyOnceWith(song);
+  });
+
+  it('does not recover or interrupt audio that advances while background events are throttled', async () => {
+    const song = makeSong(1, 'https://example.com/playing.mp3');
+    const expired = vi.fn();
+    service.on('url_expired', expired);
+    const playback = service.play(song.playMusicUrl!, song);
+    audio.ready();
+    await playback;
+    audio.dispatchEvent(new Event('waiting'));
+    audio.currentTime = 10;
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(expired).not.toHaveBeenCalled();
+    expect(service.isLoading()).toBe(false);
+  });
+
+  it('clears stalled state when the user pauses and allows a fresh watchdog after resume', async () => {
+    const song = makeSong(1, 'https://example.com/paused.mp3');
+    const expired = vi.fn();
+    service.on('url_expired', expired);
+    const playback = service.play(song.playMusicUrl!, song);
+    audio.ready();
+    await playback;
+    audio.dispatchEvent(new Event('waiting'));
+    audio.paused = true;
+    audio.dispatchEvent(new Event('pause'));
+    expect(service.isLoading()).toBe(false);
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(expired).not.toHaveBeenCalled();
+    audio.paused = false;
+    audio.dispatchEvent(new Event('waiting'));
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(expired).toHaveBeenCalledOnce();
+  });
+
   it('cancels autoplay when paused before the source becomes ready', async () => {
     const song = makeSong(1, 'https://example.com/slow.mp3');
     const playback = service.play(song.playMusicUrl!, song).catch((error) => error);

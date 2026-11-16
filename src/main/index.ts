@@ -80,7 +80,7 @@ const icon = nativeImage.createFromPath(
 let mainWindow: Electron.BrowserWindow;
 
 // 初始化应用
-function initialize(configStore: any) {
+async function initialize(configStore: any) {
   // 使用已初始化的配置存储
   const store = configStore;
 
@@ -107,6 +107,13 @@ function initialize(configStore: any) {
   // 初始化本地音乐扫描模块
   initializeLocalMusicScanner();
 
+  // The renderer must read the final, bound API port on its first request.
+  try {
+    await startMusicApi();
+  } catch (error) {
+    console.error('MUSIC API could not start; local playback remains available:', error);
+  }
+
   // 创建主窗口
   mainWindow = createMainWindow(icon);
 
@@ -115,9 +122,6 @@ function initialize(configStore: any) {
 
   // 初始化托盘
   initializeTray(iconPath, mainWindow);
-
-  // 启动音乐API
-  startMusicApi();
 
   // 初始化落雪音乐 HTTP 请求处理
   initLxMusicHttp();
@@ -178,7 +182,7 @@ if (!isSingleInstance) {
   });
 
   // 应用程序准备就绪时的处理
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     // 设置应用ID
     electronApp.setAppUserModelId('com.haruapps.harumusic');
 
@@ -210,11 +214,11 @@ if (!isSingleInstance) {
     const store = initializeConfig();
 
     // 初始化应用
-    initialize(store);
+    await initialize(store);
 
     // macOS 激活应用时的处理
     app.on('activate', () => {
-      if (mainWindow === null) initialize(store);
+      if (mainWindow === null) void initialize(store).catch(console.error);
     });
   });
 

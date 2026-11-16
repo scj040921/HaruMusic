@@ -108,6 +108,7 @@ class AudioService {
     if (this.stallTimer) clearTimeout(this.stallTimer);
     this.stallTimer = null;
     const audio = this.audio;
+    let lastMediaTime = audio.currentTime;
     const isCurrent = () => this.audio === audio;
     const clearStallTimer = () => {
       if (this.stallTimer) clearTimeout(this.stallTimer);
@@ -115,11 +116,19 @@ class AudioService {
     };
     const armStallTimer = () => {
       if (!isCurrent() || audio.paused || this.pendingLoadCleanup || !this.currentTrack) return;
-      clearStallTimer();
+      // Repeated waiting/stalled notifications must not restart the deadline.
+      if (this.stallTimer) return;
+      lastMediaTime = audio.currentTime;
       this._isLoading = true;
       this.stallTimer = setTimeout(() => {
         this.stallTimer = null;
         if (!isCurrent() || audio.paused || this.pendingLoadCleanup || !this.currentTrack) return;
+        // Backgrounded WebViews may throttle timeupdate even while audio advances.
+        if (Math.abs(audio.currentTime - lastMediaTime) > 0.01) {
+          lastMediaTime = audio.currentTime;
+          this._isLoading = false;
+          return;
+        }
         this._isLoading = false;
         this.updateMediaSessionState(false);
         this.emit(
@@ -136,12 +145,15 @@ class AudioService {
 
     const onPause = () => {
       if (!isCurrent() || !audio.paused) return;
+      clearStallTimer();
+      if (!this.pendingLoadCleanup) this._isLoading = false;
       this.updateMediaSessionState(false);
       this.emit('pause');
     };
 
     const onEnded = () => {
       if (!isCurrent() || !audio.ended || !this.currentTrack) return;
+      clearStallTimer();
       this.updateMediaSessionState(false);
       this.emit('end', this.currentTrack);
     };
@@ -154,8 +166,12 @@ class AudioService {
 
     const onTimeUpdate = () => {
       if (!isCurrent()) return;
-      clearStallTimer();
-      if (!this.pendingLoadCleanup) this._isLoading = false;
+      const advanced = Math.abs(audio.currentTime - lastMediaTime) > 0.01;
+      if (advanced || audio.paused || audio.ended) {
+        lastMediaTime = audio.currentTime;
+        clearStallTimer();
+        if (!this.pendingLoadCleanup) this._isLoading = false;
+      }
       this.emit('timeupdate', audio.currentTime);
     };
 
@@ -165,18 +181,21 @@ class AudioService {
 
     const onPlaying = () => {
       if (!isCurrent()) return;
-      clearStallTimer();
-      if (!this.pendingLoadCleanup) this._isLoading = false;
+      if (Math.abs(audio.currentTime - lastMediaTime) > 0.01) {
+        lastMediaTime = audio.currentTime;
+        clearStallTimer();
+      }
+      if (!this.stallTimer && !this.pendingLoadCleanup) this._isLoading = false;
     };
 
     const onCanPlay = () => {
       if (!isCurrent()) return;
-      clearStallTimer();
-      if (!this.pendingLoadCleanup) this._isLoading = false;
+      if (!this.stallTimer && !this.pendingLoadCleanup) this._isLoading = false;
     };
 
     const onError = () => {
       if (!isCurrent()) return;
+      clearStallTimer();
       const error = audio.error;
       console.error('Audio element error:', error?.code, error?.message);
       this.emit('audio_error', { type: 'media_error', error });

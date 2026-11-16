@@ -1,12 +1,24 @@
 import assert from 'node:assert/strict';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 const { _electron } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const profile=resolve('artifacts/desktop-ui-profile');mkdirSync(profile,{recursive:true});
-const app=await _electron.launch({executablePath:resolve('node_modules/electron/dist/electron.exe'),args:['--user-data-dir='+profile,'out/main/index.js'],timeout:30000});
+const profile=resolve('artifacts/desktop-ui-profile-0.1.13');mkdirSync(profile,{recursive:true});
+const occupied=createServer((_,res)=>{res.writeHead(503);res.end('test fixture');});
+await new Promise(resolve=>occupied.listen(0,'127.0.0.1',resolve));
+const occupiedPort=occupied.address().port;
+const settings=JSON.parse(readFileSync('src/main/set.json','utf8'));
+writeFileSync(resolve(profile,'config.json'),JSON.stringify({set:{...settings,musicApiPort:occupiedPort}}));
+let app;
 try {
+ app=await _electron.launch({executablePath:resolve('node_modules/electron/dist/electron.exe'),args:['--user-data-dir='+profile,'out/main/index.js'],timeout:30000});
+ assert.equal(await app.evaluate(({app})=>app.getPath('userData')),profile,'desktop fixture must use an isolated profile');
  const page=await app.firstWindow();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.waitForLoadState('domcontentloaded');
+ const activePort=await page.evaluate(()=>window.electron.ipcRenderer.sendSync('get-store-value','set').musicApiPort);
+ assert.notEqual(activePort,occupiedPort,'desktop startup must move past an occupied real port');
+ const ready=await fetch('http://127.0.0.1:'+activePort+'/__fixture_not_found',{signal:AbortSignal.timeout(3000)});
+ assert.equal(ready.status,404,'API must already be listening when the renderer is available');
  await page.evaluate(()=>{localStorage.setItem('haru-salt-mode','true');localStorage.setItem('haru-liquid-mode','false');localStorage.setItem('music-full-config',JSON.stringify({fontSize:28,saltPlayerTheme:'dark'}));});
  await page.reload();
  const agree=page.getByText('我已阅读并同意',{exact:true});if(await agree.isVisible())await agree.click();
@@ -25,6 +37,6 @@ try {
  assert.equal(await page.locator('[class*="salt-"]').count(),0);
  const config=await page.evaluate(()=>JSON.parse(localStorage.getItem('music-full-config')));
  assert.equal(config.fontSize,28);assert.equal(Object.keys(config).some(k=>k.startsWith('salt')),false);
- mkdirSync('artifacts/ui-0.1.12',{recursive:true});await page.screenshot({path:'artifacts/ui-0.1.12/desktop-liquid.png'});
+ mkdirSync('artifacts/ui-0.1.13',{recursive:true});await page.screenshot({path:'artifacts/ui-0.1.13/desktop-liquid.png'});
  assert.deepEqual(errors,[]);console.log('Actual Electron renderer: Salt migration persisted, obsolete settings removed, Liquid player and cover rendered.');
-} finally {await app.close();}
+} finally {await app?.close();await new Promise(resolve=>occupied.close(resolve));}
