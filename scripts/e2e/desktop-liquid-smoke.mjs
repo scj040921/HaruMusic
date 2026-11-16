@@ -42,6 +42,9 @@ try {
  const queue=page.getByRole('dialog',{name:'播放队列',exact:true});await queue.waitFor();
  await page.getByRole('searchbox',{name:'搜索播放队列'}).fill('selection 7');assert.equal(await queue.locator('.queue-row').count(),1);
  assert.ok(await queue.evaluate(e=>e.contains(document.activeElement)));
+ await page.waitForFunction(()=>{const e=document.querySelector('.playlist-panel');return e&&getComputedStyle(e).opacity==='1'&&![...e.classList].some(c=>c.includes('enter-active'));});
+ const material=await queue.evaluate(e=>({opacity:getComputedStyle(e).opacity,background:getComputedStyle(e).backgroundColor,blur:getComputedStyle(e).backdropFilter}));
+ assert.equal(material.opacity,'1');assert.equal(material.background,'rgb(255, 255, 255)');assert.equal(material.blur,'none');
  await page.screenshot({path:'artifacts/ui-0.1.14/desktop-queue.png'});
  await page.getByRole('button',{name:'关闭播放队列',exact:true}).click();await queue.waitFor({state:'detached'});assert.ok(await page.locator('.liquid-now-playing').isVisible());
  assert.deepEqual(errors,[]);console.log('Actual Electron renderer: Salt migration persisted, obsolete settings removed, Liquid player and cover rendered.');
