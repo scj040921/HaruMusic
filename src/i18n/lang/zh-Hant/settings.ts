@@ -13,6 +13,8 @@ export default {
     about: '關於'
   },
   basic: {
+    reduceTransparency: '降低透明度',
+    reduceTransparencyDesc: '為導覽及播放控制項使用不透明背景，保持文字與按鈕清晰。',
     themeMode: '主題模式',
     themeModeDesc: '切換日間/夜間主題',
     autoTheme: '跟隨系統',

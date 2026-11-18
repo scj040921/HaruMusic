@@ -14,6 +14,8 @@
       :class="{ 'is-content-scrolled': headerHidden }"
       :inert="headerHidden || undefined"
       :aria-hidden="headerHidden ? 'true' : undefined"
+      @focusin="headerFocused = true"
+      @focusout="onHeaderFocusOut"
     />
 
     <!-- 主内容区域 -->
@@ -33,9 +35,9 @@
     <mobile-play-bar v-if="isPlay" />
 
     <!-- 底部导航菜单 -->
-    <div v-if="shouldShowBottomMenu" class="mobile-bottom-menu">
+    <nav v-if="shouldShowBottomMenu" class="mobile-bottom-menu" aria-label="HaruMusic">
       <app-menu class="mobile-menu" :menus="menuStore.menus" />
-    </div>
+    </nav>
     <!-- 其他弹窗/抽屉 -->
     <playlist-drawer v-model="showPlaylistDrawer" :song-id="currentSongId" />
     <playing-list-drawer />
@@ -78,10 +80,34 @@ const playerStore = usePlayerStore();
 const menuStore = useMenuStore();
 const contentRef = ref<HTMLElement | null>(null);
 const headerHidden = ref(false);
+const headerFocused = ref(false);
 let pageObserver: MutationObserver | undefined;
 let scrollHost: HTMLElement | null = null;
+let scrollBody: Element | null = null;
+let scrollAnchor = 0;
+const onHeaderFocusOut = (event: FocusEvent) => {
+  const header = event.currentTarget as HTMLElement;
+  headerFocused.value = event.relatedTarget instanceof Node && header.contains(event.relatedTarget);
+};
 const handlePageScroll = () => {
-  if (scrollHost) headerHidden.value = scrollHost.scrollTop > 16;
+  if (!scrollHost) return;
+  const top = Math.max(0, scrollHost.scrollTop);
+  if (top <= 8 || headerFocused.value) {
+    headerHidden.value = false;
+    scrollAnchor = top;
+  } else if (headerHidden.value) {
+    scrollAnchor = Math.max(scrollAnchor, top);
+    if (scrollAnchor - top >= 16) {
+      headerHidden.value = false;
+      scrollAnchor = top;
+    }
+  } else {
+    scrollAnchor = Math.min(scrollAnchor, top);
+    if (top - scrollAnchor >= 16) {
+      headerHidden.value = true;
+      scrollAnchor = top;
+    }
+  }
 };
 // Keep the scroll viewport edge-to-edge. Insets belong to scrollable content,
 // never an opaque reserved band outside it. This also covers nested Naive scrollbars.
@@ -92,14 +118,17 @@ const bindPageScroll = () => {
     content.querySelector<HTMLElement>(
       '.mobile-page .n-scrollbar-container, .mobile-page.n-scrollbar .n-scrollbar-container'
     ) || content;
-  if (host === scrollHost) return;
+  const body = host.firstElementChild;
+  if (host === scrollHost && body === scrollBody) return;
   scrollHost?.removeEventListener('scroll', handlePageScroll);
   scrollHost?.classList.remove('mobile-edge-scroll');
-  scrollHost?.firstElementChild?.classList.remove('mobile-edge-body');
+  scrollBody?.classList.remove('mobile-edge-body');
   scrollHost = host;
+  scrollBody = body;
+  scrollAnchor = 0;
   content.classList.toggle('owns-page-scroll', host === content);
   host.classList.add('mobile-edge-scroll');
-  host.firstElementChild?.classList.add('mobile-edge-body');
+  body?.classList.add('mobile-edge-body');
   host.addEventListener('scroll', handlePageScroll, { passive: true });
   handlePageScroll();
 };
@@ -107,8 +136,16 @@ watch(
   () => route.path,
   async () => {
     headerHidden.value = false;
+    headerFocused.value = false;
+    scrollAnchor = scrollHost?.scrollTop ?? 0;
     await nextTick();
     bindPageScroll();
+  }
+);
+watch(
+  () => playerStore.musicFull,
+  () => {
+    headerFocused.value = false;
   }
 );
 onMounted(() => {

@@ -1,14 +1,12 @@
 <template>
   <div :id="id" :ref="setRef" class="mb-8 scroll-mt-20">
     <!-- 分组标题 -->
-    <div class="text-lg font-semibold mb-4 text-gray-900 dark:text-white px-1">
+    <h2 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white px-1">
       <slot name="title">{{ title }}</slot>
-    </div>
+    </h2>
 
     <!-- 设置项列表容器 -->
-    <div
-      class="bg-[#f6f8f7] dark:bg-neutral-900 rounded-xl overflow-hidden border border-[#e8eeeb] dark:border-gray-800"
-    >
+    <div class="setting-group overflow-hidden border">
       <slot></slot>
     </div>
   </div>
@@ -42,3 +40,12 @@ const setRef = (el: Element | ComponentPublicInstance | null) => {
   emit('ref', el as Element | null);
 };
 </script>
+
+<style scoped>
+.setting-group {
+  background: var(--surface-secondary);
+  border-color: var(--divider);
+  border-radius: var(--radius-control);
+  corner-shape: superellipse(2);
+}
+</style>

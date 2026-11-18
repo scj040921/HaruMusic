@@ -60,7 +60,13 @@
 
 /* A thin optical rim keeps the center clear and the lens treatment inexpensive. */
 :is(.android-native, .liquid-mode)
-  :is(.mobile-bottom-menu, .mobile-mini-controls, .header-btn, .liquid-tab-slider)::before {
+  :is(
+    .mobile-bottom-menu,
+    .mobile-mini-controls,
+    .header-left .header-btn,
+    .header-right,
+    .liquid-tab-slider
+  )::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -73,7 +79,7 @@
     1px 2px 2px rgb(255 255 255 / 38%) inset,
     -1px -2px 3px rgb(80 100 120 / 14%) inset;
 }
-.android-native .mobile-header .header-btn {
+.android-native .mobile-header :is(.header-btn, .header-right) {
   position: relative;
 }
 
@@ -295,9 +301,7 @@ html.dark .android-native {
   pointer-events: none;
 }
 
-.android-native .mobile-header.android-hig-header .header-left,
-.android-native .mobile-header.android-hig-header .header-title,
-.android-native .mobile-header.android-hig-header .header-right {
+.android-native .mobile-header.android-hig-header .header-btn {
   pointer-events: auto;
 }
 
@@ -401,12 +405,24 @@ html.dark .android-native {
 .android-native .mobile-content.has-bottom-menu.has-player {
   padding-bottom: 0;
 }
-.android-native .mobile-header .header-btn {
+.android-native .mobile-header .header-left .header-btn,
+.android-native .mobile-header .header-right {
   background: var(--surface-glass);
   border: 1px solid color-mix(in srgb, var(--divider) 55%, transparent);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
+}
+
+.android-native .mobile-header .header-right {
+  min-width: 0;
+  gap: 0;
+  padding: 0 4px;
+  border-radius: 24px;
+}
+
+.android-native .mobile-header .header-right .header-btn:active {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 .android-native .android-native-player.play-bar-mini {
@@ -705,12 +721,44 @@ html.dark .android-native .android-native-player .mobile-mini-controls {
     --divider: #77777c;
   }
 }
-@media (prefers-reduced-transparency: reduce) {
-  .mobile .header-btn,
-  .mobile .mobile-bottom-menu,
-  .mobile .mobile-mini-controls {
-    backdrop-filter: none !important;
-    background: var(--canvas, #fff) !important;
+html[data-reduce-transparency]
+  :is(
+    .android-hig-header .header-left .header-btn,
+    .android-hig-header .header-right,
+    .mobile-bottom-menu,
+    .mobile-mini-controls,
+    .liquid-tab-slider,
+    .liquid-sidebar,
+    .liquid .music-play-bar,
+    .queue-header
+  ) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: var(--canvas) !important;
+  border-color: var(--divider) !important;
+}
+
+html[data-reduce-transparency] .liquid-tab-slider {
+  background: var(--surface-secondary) !important;
+  box-shadow: inset 0 0 0 1px var(--divider) !important;
+}
+
+html[data-reduce-transparency] .liquid-sidebar {
+  transition-property: width, padding;
+}
+
+html[data-reduce-transparency] #mobile-drawer-target .control-btn:not(.pure-mode) {
+  backdrop-filter: none;
+  background: #303032;
+}
+
+html[data-reduce-transparency] #mobile-drawer-target.light .control-btn:not(.pure-mode) {
+  background: #f2f2f7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #mobile-drawer-target .control-btn:active {
+    scale: none;
   }
 }
 
@@ -754,7 +802,7 @@ html.dark .android-native .android-native-player .mobile-mini-controls {
   opacity: 0;
   pointer-events: none;
 }
-.android-native .mobile-header.is-content-scrolled :is(.header-left, .header-title, .header-right) {
+.android-native .mobile-header.android-hig-header.is-content-scrolled .header-btn {
   pointer-events: none;
 }
 .android-native .player-expanded .mobile-edge-body {

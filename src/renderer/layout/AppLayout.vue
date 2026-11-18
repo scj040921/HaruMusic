@@ -43,8 +43,9 @@
             :to="item.path"
             class="liquid-nav-link"
             exact-active-class="active"
+            :aria-label="t(item.meta.title)"
             :title="sidebarCollapsed ? t(item.meta.title) : undefined"
-            ><i class="iconfont" :class="item.meta.icon" /><span>{{
+            ><i class="iconfont" :class="item.meta.icon" aria-hidden="true" /><span>{{
               sidebarCollapsed ? '' : t(item.meta.title)
             }}</span></router-link
           >
@@ -575,10 +576,6 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
 .liquid :deep(.hot-search-card:active) {
   transform: scale(0.975);
 }
-.liquid :deep(.liquid-settings-nav) {
-  background: color-mix(in srgb, var(--canvas) 92%, transparent) !important;
-  border-color: color-mix(in srgb, var(--divider) 72%, transparent) !important;
-}
 .liquid :deep(.settings-tab) {
   border-radius: 14px;
   transition:
@@ -588,9 +585,6 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
 }
 .liquid :deep(.settings-tab:active) {
   transform: scale(0.96);
-}
-.liquid :deep(.settings-tab-active) {
-  color: var(--accent) !important;
 }
 .liquid :deep(.settings-tab-active::after) {
   background: var(--accent) !important;
@@ -866,6 +860,8 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
   font-weight: 600;
 }
 .desktop-editorial-shell :deep(.liquid-settings-nav) {
+  position: sticky;
+  top: 0;
   width: 100%;
   max-width: 1040px;
   margin-inline: auto;

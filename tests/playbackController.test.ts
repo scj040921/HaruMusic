@@ -451,6 +451,22 @@ describe('playback recovery ownership (#769)', () => {
     expect(mocks.audio.pause).not.toHaveBeenCalled();
   });
 
+  it('does not let an error from the old stream cancel a pending song selection', async () => {
+    const previous = mocks.core.playMusic;
+    const detail = deferred<SongResult>();
+    mocks.getSongDetail.mockReturnValueOnce(detail.promise);
+    const pending = controller.playTrack(makeSong(2));
+    await vi.waitFor(() => expect(mocks.getSongDetail).toHaveBeenCalledTimes(1));
+
+    await mocks.handlers.get('url_expired')?.(previous);
+    await mocks.handlers.get('playback_error')?.(previous);
+    expect(mocks.audio.pause).not.toHaveBeenCalled();
+    expect(mocks.getSongDetail).toHaveBeenCalledTimes(1);
+    detail.resolve(makeSong(2));
+    expect(await pending).toBe(true);
+    expect(mocks.core.playMusic.id).toBe(2);
+  });
+
   it('does not restore the previous progress for a new explicit playback', async () => {
     vi.stubGlobal('localStorage', {
       getItem: (key: string) =>

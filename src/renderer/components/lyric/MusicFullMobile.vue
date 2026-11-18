@@ -26,24 +26,21 @@
       <div v-if="playMusic?.playLoading" class="loading-overlay">
         <i class="ri-loader-4-line loading-icon"></i>
       </div>
-      <div
+      <button
         class="control-btn absolute left-5"
-        role="button"
-        tabindex="0"
-        aria-label="收起播放页面"
-        @keydown.enter="closeMusicFull"
-        @keydown.space.prevent="closeMusicFull"
-        :class="{ 'pure-mode': config.pureModeEnabled }"
-        @click="closeMusicFull"
+        type="button"
+        :aria-label="showFullLyrics ? '退出纯歌词' : '收起播放页面'"
+        :class="{ 'pure-mode': config.pureModeEnabled || showFullLyrics }"
+        @click="showFullLyrics ? closeFullLyrics() : closeMusicFull()"
       >
-        <i class="ri-arrow-down-s-line"></i>
-      </div>
+        <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+      </button>
 
       <!-- 右上角设置按钮 -->
       <div
         class="control-btn absolute right-5 flex items-center gap-2"
         :class="[
-          { 'pure-mode': config.pureModeEnabled },
+          { 'pure-mode': config.pureModeEnabled || showFullLyrics },
           hasSleepTimerActive ? '!w-auto !px-2' : ''
         ]"
       >
@@ -408,6 +405,7 @@
             :aria-valuemin="0"
             :aria-valuemax="Math.round(allTime)"
             :aria-valuenow="Math.round(progressDisplayTime)"
+            :aria-valuetext="`${secondToMinute(progressDisplayTime)} / ${secondToMinute(allTime)}`"
             @pointerdown="handleProgressPointerDown"
             @pointermove="handleProgressPointerMove"
             @pointerup="handleProgressPointerUp"
@@ -431,23 +429,10 @@
 
         <!-- 控制按钮 -->
         <div class="control-buttons">
-          <!-- 返回按钮，仅在全屏歌词模式下显示 -->
-          <div
-            v-if="showFullLyrics"
-            class="back-button"
-            role="button"
-            tabindex="0"
-            aria-label="退出纯歌词"
-            @keydown.enter="closeFullLyrics"
-            @keydown.space.prevent="closeFullLyrics"
-            @click.stop="closeFullLyrics"
-          >
-            <i class="ri-arrow-down-s-line"></i>
-          </div>
           <button
             type="button"
             class="side-button"
-            aria-label="切换播放顺序"
+            :aria-label="`切换播放顺序 · ${playModeText}`"
             @click="togglePlayMode"
           >
             <i :class="[playModeIcon, { 'intelligence-active': playMode === 3 }]"></i>
@@ -1915,9 +1900,8 @@ watch([lrcArray, showFullLyrics, isVisible], () =>
   }
 
   .fullscreen-header {
-    @apply pt-16 pb-4 px-6 flex flex-col items-center fixed top-0 left-0 w-full z-10;
-    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0) 100%);
-    pointer-events: auto;
+    @apply flex flex-col items-center shrink-0;
+    padding: calc(var(--safe-area-inset-top, 0px) + 20px) 72px 12px;
 
     .song-title {
       @apply text-xl font-semibold text-center mb-1 max-w-full line-clamp-1;
@@ -1974,7 +1958,10 @@ watch([lrcArray, showFullLyrics, isVisible], () =>
 
 // 必要的控制按钮样式
 .control-btn {
-  @apply w-9 h-9 flex items-center justify-center rounded cursor-pointer transition-all duration-300 z-[9999];
+  @apply w-11 h-11 flex items-center justify-center rounded-full cursor-pointer z-[9999];
+  transition:
+    background-color 180ms ease,
+    scale 260ms linear(0, 0.48, 0.85, 1.04, 1.02, 1);
   background: rgba(142, 142, 142, 0.192);
   backdrop-filter: blur(12px);
   top: calc(var(--safe-area-inset-top, 0) + 20px);
@@ -1987,19 +1974,15 @@ watch([lrcArray, showFullLyrics, isVisible], () =>
   &.pure-mode {
     background: transparent;
     backdrop-filter: none;
-
-    &:not(:hover) {
-      i {
-        opacity: 0;
-      }
-    }
   }
 
-  &:hover {
+  &:hover,
+  &:focus-within {
     background: rgba(126, 121, 121, 0.2);
-    i {
-      opacity: 1;
-    }
+  }
+
+  &:active {
+    scale: 0.94;
   }
 }
 
@@ -2037,15 +2020,6 @@ watch([lrcArray, showFullLyrics, isVisible], () =>
   .unified-controls {
     &.fullscreen-mode {
       background: transparent;
-    }
-
-    .back-button {
-      @apply absolute top-4 left-1/2 -translate-x-1/2 w-10 h-10 flex items-center justify-center bg-black bg-opacity-30 rounded-2xl;
-
-      i {
-        @apply text-4xl;
-        color: var(--text-color-primary);
-      }
     }
   }
 
@@ -2201,8 +2175,9 @@ watch([lrcArray, showFullLyrics, isVisible], () =>
 }
 #mobile-drawer-target .fullscreen-lyrics .lyrics-scroller {
   margin: 0;
-  padding: calc(var(--safe-area-inset-top, 0px) + 100px) 16px 0;
-  margin-bottom: calc(156px + var(--safe-area-inset-bottom, 0px));
+  padding: 0 16px;
+  margin-bottom: calc(184px + var(--safe-area-inset-bottom, 0px));
+  min-height: 0;
   touch-action: pan-y;
   overscroll-behavior: contain;
 }
@@ -2366,13 +2341,13 @@ watch([lrcArray, showFullLyrics, isVisible], () =>
   }
 }
 #mobile-drawer-target .control-btn,
-#mobile-drawer-target .side-button,
-#mobile-drawer-target .back-button {
+#mobile-drawer-target .side-button {
   min-width: 44px;
   min-height: 44px;
 }
 #mobile-drawer-target button:focus-visible,
-#mobile-drawer-target [role='button']:focus-visible {
+#mobile-drawer-target [role='button']:focus-visible,
+#mobile-drawer-target [role='slider']:focus-visible {
   outline: 2px solid var(--text-color-active);
   outline-offset: 4px;
 }

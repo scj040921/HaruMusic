@@ -2,6 +2,7 @@ export default {
   menu: {
     play: '播放',
     playNext: '下一首播放',
+    appendQueue: '加入佇列末尾',
     download: '下載歌曲',
     downloadLyric: '下載歌詞',
     addToPlaylist: '新增至播放清單',

@@ -17,6 +17,7 @@
 </template>
 
 <script setup lang="ts">
+import { useMediaQuery } from '@vueuse/core';
 import { cloneDeep } from 'lodash';
 import { darkTheme, lightTheme } from 'naive-ui';
 import { computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
@@ -101,6 +102,13 @@ if (!isLyricWindow.value) {
 }
 
 handleSetLanguage(settingsStore.setData.language);
+
+const systemReducesTransparency = useMediaQuery('(prefers-reduced-transparency: reduce)');
+watch(
+  () => systemReducesTransparency.value || settingsStore.setData.reduceTransparency === true,
+  (reduce) => document.documentElement.toggleAttribute('data-reduce-transparency', reduce),
+  { immediate: true }
+);
 
 // 监听迷你模式状态
 if (isElectron) {

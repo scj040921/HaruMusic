@@ -370,6 +370,26 @@ export const usePlaylistStore = defineStore(
       setPlayList(list, true, false, true);
     };
 
+    const appendToQueue = (songs: SongResult[]): number => {
+      const existing = new Set(playList.value.map(songKey));
+      const additions = songs.filter((song) => {
+        if (!song?.id) return false;
+        const key = songKey(song);
+        if (existing.has(key)) return false;
+        existing.add(key);
+        return true;
+      });
+      if (additions.length) setPlayList([...playList.value, ...additions], true, false, true);
+      return additions.length;
+    };
+
+    const restorePlayingIndex = () => {
+      const index = playList.value.findIndex((song) =>
+        sameSong(song, usePlayerCoreStore().playMusic)
+      );
+      if (index >= 0) playListIndex.value = index;
+    };
+
     /**
      * 单曲播放前准备队列，返回是否替换了列表；实际播放仍由歌曲组件统一触发。
      */
@@ -557,13 +577,13 @@ export const usePlaylistStore = defineStore(
       playListIndex.value = index;
       const operation = ++navigationGeneration;
       playbackRequestManager.cancelCurrentRequest();
-      const initialGeneration = playbackRequestManager.getGeneration();
+      let generation = playbackRequestManager.getGeneration();
       try {
         const { playTrack, getCurrentGeneration } = await import('@/services/playbackController');
-        if (operation !== navigationGeneration || initialGeneration !== getCurrentGeneration())
+        if (operation !== navigationGeneration || generation !== getCurrentGeneration())
           return false;
         const playback = playTrack({ ...song }, shouldPlay);
-        const generation = getCurrentGeneration();
+        generation = getCurrentGeneration();
         const success = await playback;
         if (operation !== navigationGeneration || generation !== getCurrentGeneration())
           return false;
@@ -577,7 +597,8 @@ export const usePlaylistStore = defineStore(
           if (consecutiveFailCount.value >= MAX_CONSECUTIVE_FAILS) {
             getMessage().warning(i18n.global.t('player.consecutiveFailsError'));
           }
-          core.handlePause();
+          restorePlayingIndex();
+          if (skipOnFailure) core.handlePause();
           return false;
         }
         if (playList.value.length > 1) {
@@ -593,7 +614,13 @@ export const usePlaylistStore = defineStore(
         return false;
       } catch (error) {
         console.error('切歌失败:', error);
-        if (operation === navigationGeneration) usePlayerCoreStore().handlePause();
+        if (
+          operation === navigationGeneration &&
+          generation === playbackRequestManager.getGeneration()
+        ) {
+          restorePlayingIndex();
+          if (skipOnFailure) usePlayerCoreStore().handlePause();
+        }
         return false;
       }
     };
@@ -643,6 +670,7 @@ export const usePlaylistStore = defineStore(
             // 歌曲自然播放结束：停止播放
             console.log('[nextPlay] 顺序播放：最后一首播放完毕，停止');
             getMessage().info(i18n.global.t('player.playListEnded'));
+            restorePlayingIndex();
             playerCore.handlePause();
           } else {
             // 用户手动点击下一首：保持当前播放，只提示
@@ -656,7 +684,7 @@ export const usePlaylistStore = defineStore(
           autoEnd && playMode.value === 1
             ? playListIndex.value
             : (playListIndex.value + 1) % playList.value.length;
-        return await playAtIndex(index);
+        return await playAtIndex(index, true, autoEnd || fromFailover);
       } catch (error) {
         console.error('切换下一首出错:', error);
         return false;
@@ -706,7 +734,7 @@ export const usePlaylistStore = defineStore(
 
     const setPlay = async (song: SongResult): Promise<boolean> => {
       if (!song?.id) return false;
-      navigationGeneration++;
+      const operation = ++navigationGeneration;
       cancelRetryTimer();
       consecutiveFailCount.value = 0;
       try {
@@ -731,7 +759,9 @@ export const usePlaylistStore = defineStore(
           playListIndex.value = songIndex;
         }
 
-        return await playerCore.setPlayMusic({ ...song });
+        const success = await playerCore.setPlayMusic({ ...song });
+        if (!success && operation === navigationGeneration) restorePlayingIndex();
+        return success;
       } catch (error) {
         console.error('设置播放失败:', error);
         return false;
@@ -771,6 +801,7 @@ export const usePlaylistStore = defineStore(
       setPlayList,
       prepareSongPlayback,
       addToNextPlay,
+      appendToQueue,
       removeFromPlayList,
       moveQueueSong,
       retainCurrentSong,

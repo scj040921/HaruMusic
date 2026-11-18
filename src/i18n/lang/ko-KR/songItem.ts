@@ -2,6 +2,7 @@ export default {
   menu: {
     play: '재생',
     playNext: '다음에 재생',
+    appendQueue: '대기열 끝에 추가',
     download: '곡 다운로드',
     downloadLyric: '가사 다운로드',
     addToPlaylist: '플레이리스트에 추가',

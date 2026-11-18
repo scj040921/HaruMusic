@@ -17,7 +17,7 @@ await page.evaluate(()=>document.querySelector('.startup-intro').getAnimations({
 mkdirSync('artifacts/ui-0.1.14',{recursive:true});await page.screenshot({path:'artifacts/ui-0.1.14/startup.png'});
 await page.locator('.intro-skip').click();await page.locator('.startup-intro').waitFor({state:'detached'});assert.equal(await page.evaluate(()=>document.getElementById('app').inert),false);
 await page.getByText('我已阅读并同意',{exact:true}).click();await page.getByText('我已阅读并同意',{exact:true}).waitFor({state:'detached'});
-await page.goto(base+'#/downloads');await page.waitForSelector('.download-list li').catch(async e=>{console.log('DEBUG',await page.evaluate(()=>({text:document.body.innerText,platform:window.Capacitor?.getPlatform(),headers:window.Capacitor?.PluginHeaders,records:window.__downloads})),errors);await page.screenshot({path:'artifacts/android-download-ui-debug.png'});throw e;});
+await page.locator('.mobile-header').getByRole('button',{name:'下载管理'}).click();await page.waitForSelector('.download-list li').catch(async e=>{console.log('DEBUG',await page.evaluate(()=>({text:document.body.innerText,platform:window.Capacitor?.getPlatform(),headers:window.Capacitor?.PluginHeaders,records:window.__downloads})),errors);await page.screenshot({path:'artifacts/android-download-ui-debug.png'});throw e;});
 assert.equal(await page.locator('.download-list li').count(),3);await page.waitForTimeout(500);
 mkdirSync('artifacts/ui-0.1.14',{recursive:true});await page.screenshot({path:'artifacts/ui-0.1.14/downloads-light.png'});
 const sizes=await page.locator('.android-downloads button').evaluateAll(elements=>elements.filter(e=>e.getBoundingClientRect().width>0).map(e=>e.getBoundingClientRect().height));assert.ok(sizes.every(h=>h>=44));
@@ -28,13 +28,48 @@ await page.emulateMedia({reducedMotion:'reduce'});await page.evaluate(()=>sessio
 await page.setViewportSize({width:412,height:915});
 await page.evaluate(()=>document.documentElement.style.setProperty('--safe-area-inset-top','24px'));
 for(const path of ['/artists','/mobile-search','/set','/history','/downloads']) {
- await page.goto(base+'#'+path);await page.waitForTimeout(450);
+ await page.goto(base+'#'+path);
+ await page.evaluate(()=>document.documentElement.style.setProperty('--safe-area-inset-top','24px'));
+ if(path==='/set') await page.locator('.liquid-settings-page .mobile-edge-scroll').waitFor();
+ await page.waitForTimeout(450);
  const geometry=await page.evaluate(()=>{const h=document.querySelector('.mobile-header').getBoundingClientRect();const c=document.querySelector('.mobile-content').getBoundingClientRect();return {headerBottom:h.bottom,contentTop:c.top,contentBottom:c.bottom};});
  assert.equal(geometry.contentTop,0,path+' viewport must extend beneath the floating header');
  const bodyTop=await page.locator('.mobile-edge-body').first().evaluate(e=>parseFloat(getComputedStyle(e).paddingTop));
  assert.ok(bodyTop>=96,path+' must inset initial content inside the scroll host');
  assert.ok(geometry.contentBottom<=916,path+' scroll viewport must stay inside the window');
- if(path==='/artists') {await page.locator('.artists-page .n-scrollbar-container').evaluate(e=>e.scrollTop=300);await page.waitForTimeout(450);assert.equal(await page.locator('.mobile-header').evaluate(e=>getComputedStyle(e).opacity),'0');await page.screenshot({path:'artifacts/ui-0.1.14/header-artists-scrolled.png'});}
+ if(path==='/artists' || path==='/set') {
+  const header=page.locator('.mobile-header');
+  const host=page.locator('.mobile-edge-scroll');
+  await header.getByRole('button',{name:'返回'}).focus();
+  const extent=await host.evaluate(e=>e.scrollHeight-e.clientHeight);
+  assert.ok(extent>=48,`${path} must have a vertical scroll extent, received ${extent}`);
+  await host.evaluate(e=>e.scrollTop=24);
+  await page.waitForFunction(()=>document.querySelector('.mobile-edge-scroll').scrollTop>=24);
+  assert.equal(await header.getAttribute('inert'),null,'scrolling must not hide a focused control');
+  await page.evaluate(()=>document.activeElement.blur());
+  await host.evaluate(e=>e.scrollTop=48);
+  await page.waitForFunction(()=>document.querySelector('.mobile-header').inert);
+  await host.evaluate(e=>e.scrollTop-=20);
+  await page.waitForFunction(()=>!document.querySelector('.mobile-header').inert);
+  assert.ok(await host.evaluate(e=>e.scrollTop>0),'upward scroll reveals the header before reaching the top');
+  await host.evaluate(e=>e.scrollTop=0);
+ }
+ if(path==='/set') {
+  assert.equal(await page.locator('.mobile-header').getByRole('button',{name:'设置',exact:true}).count(),0);
+  await page.setViewportSize({width:320,height:740});
+  const setting=page.getByRole('switch',{name:'降低透明度'});
+  await setting.click();
+  await page.waitForFunction(()=>document.documentElement.hasAttribute('data-reduce-transparency'));
+  await page.waitForFunction(()=>getComputedStyle(document.querySelector('.header-right')).backdropFilter==='none',{},{timeout:3500}).catch(async error=>{
+   console.error(await page.locator('.header-right').evaluate(e=>({html:document.documentElement.hasAttribute('data-reduce-transparency'),parent:e.parentElement.className,blur:getComputedStyle(e).backdropFilter,url:location.href})));throw error;
+  });
+  await page.screenshot({path:'artifacts/ui-0.1.14/settings-hig-narrow.png',style:'#__vue-devtools-container__ {display:none !important}'});
+  await page.reload();
+  await page.waitForFunction(()=>document.documentElement.hasAttribute('data-reduce-transparency'));
+  await setting.click();
+  await page.waitForFunction(()=>!document.documentElement.hasAttribute('data-reduce-transparency'));
+  await page.setViewportSize({width:412,height:915});
+ }
 }
 await page.emulateMedia({reducedMotion:'no-preference'});await page.goto(base+'#/');await page.waitForSelector('.liquid-tab-slider');
 await page.evaluate(async()=>{
@@ -62,6 +97,16 @@ assert.ok(glass.mini.endsWith('0.26)') || glass.mini==='rgba(0, 0, 0, 0)');
 assert.equal(glass.content.top,0);assert.equal(glass.content.bottom,915);
 await page.locator('.mobile-edge-scroll').evaluate(e=>e.scrollTop=420);await page.waitForTimeout(450);
 await page.screenshot({path:'artifacts/ui-0.1.14/floating-glass.png'});
+const cdp=await context.newCDPSession(page);
+await cdp.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-transparency',value:'reduce'}]});
+await page.waitForFunction(()=>document.documentElement.hasAttribute('data-reduce-transparency'));
+for(const selector of ['.mobile-mini-controls','.mobile-bottom-menu','.liquid-tab-slider']) {
+ const material=await page.locator(selector).evaluate(e=>({blur:getComputedStyle(e).backdropFilter,background:getComputedStyle(e).backgroundColor}));
+ assert.equal(material.blur,'none',selector);assert.ok(material.background.startsWith('rgb('),selector+' must be opaque');
+}
+await page.screenshot({path:'artifacts/ui-0.1.14/floating-solid.png',style:'#__vue-devtools-container__ {display:none !important}'});
+await cdp.send('Emulation.setEmulatedMedia',{features:[]});
+await page.waitForFunction(()=>!document.documentElement.hasAttribute('data-reduce-transparency'));
 const links=page.locator('.android-hig-tabs .app-menu-item-link');
 const rects=await links.evaluateAll(es=>es.map(e=>({href:e.getAttribute('href'),r:e.getBoundingClientRect().toJSON()})));
 assert.ok(rects.length>=4);
@@ -84,7 +129,6 @@ await links.nth(0).click();await page.waitForTimeout(40);
 await page.mouse.move(x2,y);await page.mouse.down();await page.mouse.move(x0,y,{steps:8});await page.mouse.up();await page.waitForTimeout(950);
 assert.ok(page.url().endsWith(rects[0].href),'a new gesture can interrupt and reverse the spring');
 // Android WebView uses touch pointers: verify the real touch dispatch path too.
-const cdp=await context.newCDPSession(page);
 await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:x0,y}]});
 for(let i=1;i<=8;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x0+(x2-x0)*i/8,y}]});
 assert.ok(await slider.evaluate(e=>e.classList.contains('is-dragging')),'touch must drag the lens');

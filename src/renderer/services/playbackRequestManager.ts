@@ -55,6 +55,7 @@ class PlaybackRequestManager {
    * 标记请求完成
    */
   completeRequest(requestId: string): void {
+    if (this.currentRequestId === requestId) this.currentRequestId = null;
     console.log(`[RequestManager] 完成: ${requestId}`);
   }
 
@@ -62,7 +63,10 @@ class PlaybackRequestManager {
    * 标记请求失败
    */
   failRequest(requestId: string): void {
-    if (this.currentRequestId === requestId) this.controller.abort();
+    if (this.currentRequestId === requestId) {
+      this.currentRequestId = null;
+      this.controller.abort();
+    }
     console.log(`[RequestManager] 失败: ${requestId}`);
   }
 

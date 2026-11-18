@@ -26,6 +26,14 @@
             aria-label="搜索播放队列"
         /></label>
         <div class="queue-actions">
+          <button
+            type="button"
+            :aria-pressed="upcomingOnly"
+            :disabled="currentIndex < 0 && !upcomingOnly"
+            @click="toggleUpcoming"
+          >
+            待播
+          </button>
           <button type="button" :disabled="!currentSong?.id" @click="locateCurrent">
             定位当前
           </button>
@@ -48,7 +56,13 @@
         @lostpointercapture="lostCapture"
       >
         <p v-if="!entries.length" class="queue-empty">
-          {{ query ? '没有找到匹配的歌曲' : '队列为空，选一首音乐开始聆听。' }}
+          {{
+            query
+              ? '没有找到匹配的歌曲'
+              : upcomingOnly
+                ? '当前歌曲之后没有待播歌曲。'
+                : '队列为空，选一首音乐开始聆听。'
+          }}
         </p>
         <n-virtual-list v-else ref="virtualList" :item-size="72" :items="entries" key-field="key">
           <template #default="{ item }">
@@ -105,7 +119,7 @@
               <button
                 type="button"
                 class="queue-icon queue-grip"
-                :disabled="!!query.trim()"
+                :disabled="isFiltered"
                 :aria-label="'拖动调整 ' + item.song.name + ' 的顺序'"
                 title="拖动排序，也可用上下方向键"
                 @pointerdown="startDrag($event, item)"
@@ -122,7 +136,10 @@
         {{
           drag?.moved
             ? '松手调整顺序'
-            : announcement || '拖动右侧手柄排序，更多操作中可设为下一首。'
+            : announcement ||
+              (isFiltered
+                ? '可在全部队列中拖动排序。'
+                : '拖动右侧手柄排序，更多操作中可设为下一首。')
         }}
       </p>
     </div>
@@ -149,13 +166,28 @@ const show = computed({
 const playList = computed(() => player.playList as SongResult[]);
 const currentSong = computed(() => player.playMusic as SongResult);
 const query = ref('');
+const upcomingOnly = ref(false);
+const currentIndex = computed(() =>
+  playList.value.findIndex((song) => sameSong(song, currentSong.value))
+);
+const isFiltered = computed(() => upcomingOnly.value || !!query.value.trim());
 const virtualList = ref<any>(null),
   listHost = ref<HTMLElement | null>(null);
 const entries = computed(() =>
   playList.value
     .map((song, index) => ({ song, index, key: songKey(song) }))
-    .filter((item) => matchesMusicQuery(item.song, query.value))
+    .filter(
+      (item) =>
+        (!upcomingOnly.value || item.index > currentIndex.value) &&
+        matchesMusicQuery(item.song, query.value)
+    )
 );
+async function toggleUpcoming() {
+  upcomingOnly.value = !upcomingOnly.value;
+  announcement.value = upcomingOnly.value ? `待播 · ${entries.value.length} 首` : '显示全部队列';
+  await nextTick();
+  virtualList.value?.scrollTo({ top: 0 });
+}
 type QueueEntry = (typeof entries.value)[number];
 const entryMap = computed(() => new Map(entries.value.map((item) => [item.key, item])));
 const artists = (song: SongResult) =>
@@ -188,6 +220,7 @@ function moveOne(item: QueueEntry, delta: number) {
 }
 async function locateCurrent() {
   query.value = '';
+  upcomingOnly.value = false;
   await nextTick();
   const index = playList.value.findIndex((song) => sameSong(song, currentSong.value));
   if (index >= 0) virtualList.value?.scrollTo({ top: index * 72 });
@@ -195,6 +228,7 @@ async function locateCurrent() {
 function retainCurrent() {
   player.retainCurrentSong();
   query.value = '';
+  upcomingOnly.value = false;
   announcement.value = '已保留当前歌曲';
 }
 function clearQueue() {
@@ -224,7 +258,7 @@ let scrollFrame = 0;
 let scrollElement: HTMLElement | null = null;
 let dragBounds: DOMRect | undefined;
 function startDrag(event: PointerEvent, item: QueueEntry) {
-  if (!event.isPrimary || event.button !== 0 || query.value.trim() || !listHost.value) return;
+  if (!event.isPrimary || event.button !== 0 || isFiltered.value || !listHost.value) return;
   cancelDrag();
   drag.value = {
     id: event.pointerId,
@@ -393,10 +427,17 @@ h2 {
   gap: 8px;
 }
 .queue-actions button {
+  min-width: 44px;
   min-height: 44px;
   padding: 8px;
   font-size: 12px;
-  color: var(--accent, #fa2d48);
+  border-radius: 24px;
+  color: var(--text-primary);
+}
+.queue-actions button[aria-pressed='true'] {
+  background: var(--surface-secondary);
+  color: var(--accent);
+  font-weight: 700;
 }
 button:disabled {
   opacity: 0.35;
@@ -512,9 +553,12 @@ button:not(:disabled):active {
   color: var(--text-secondary, #77777c);
 }
 button:focus-visible,
-input:focus-visible {
+.queue-search:has(input:focus-visible) {
   outline: 2px solid var(--accent, #fa2d48);
   outline-offset: 2px;
+}
+.queue-search input:focus-visible {
+  outline: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .playlist-panel,

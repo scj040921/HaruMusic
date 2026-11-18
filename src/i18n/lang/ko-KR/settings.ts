@@ -13,6 +13,8 @@ export default {
     about: '정보'
   },
   basic: {
+    reduceTransparency: '투명도 줄이기',
+    reduceTransparencyDesc: '탐색 및 재생 제어에 불투명한 배경을 사용해 읽기 쉽게 합니다.',
     themeMode: '테마 모드',
     themeModeDesc: '낮/밤 테마 전환',
     autoTheme: '시스템 따라가기',

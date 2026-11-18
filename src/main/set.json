@@ -29,6 +29,7 @@
   "showTopAction": false,
   "contentZoomFactor": 1,
   "autoTheme": false,
+  "reduceTransparency": false,
   "manualTheme": "light",
   "isMenuExpanded": false,
   "customApiPlugin": "",

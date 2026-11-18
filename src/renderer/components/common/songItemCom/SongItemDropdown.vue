@@ -20,6 +20,7 @@ import { computed, h, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { useUserStore } from '@/store';
+import { usePlaylistStore } from '@/store/modules/playlist';
 import type { SongResult } from '@/types/music';
 import { getImgUrl, isAndroidApp, isElectron } from '@/utils';
 
@@ -53,6 +54,7 @@ const emits = defineEmits([
 const openPlaylistDrawer = inject<(songId: number | string) => void>('openPlaylistDrawer');
 
 const userStore = useUserStore();
+const queue = usePlaylistStore();
 
 // 本地歌曲：移除菜单项显示"从本地列表移除"而非"从歌单中删除"（#713）
 const isLocalSong = computed(
@@ -154,6 +156,11 @@ const dropdownOptions = computed<MenuOption[]>(() => {
       icon: () => h('i', { class: 'iconfont ri-play-list-2-line' })
     },
     {
+      label: t('songItem.menu.appendQueue'),
+      key: 'appendQueue',
+      icon: () => h('i', { class: 'iconfont ri-play-list-add-line' })
+    },
+    {
       type: 'divider',
       key: 'd1'
     },
@@ -210,7 +217,7 @@ const dropdownOptions = computed<MenuOption[]>(() => {
 
   return isAndroidApp
     ? options.filter((option) =>
-        ['header', 'divider1', 'play', 'playNext', 'download', 'favorite'].includes(
+        ['header', 'divider1', 'play', 'playNext', 'appendQueue', 'download', 'favorite'].includes(
           String(option.key)
         )
       )
@@ -230,6 +237,13 @@ const handleSelect = (key: string | number) => {
       break;
     case 'playNext':
       emits('play-next');
+      break;
+    case 'appendQueue':
+      if (queue.appendToQueue([props.item])) {
+        message.success(t('comp.musicList.addToPlaylistSuccess'));
+      } else {
+        message.info(t('comp.musicList.songsAlreadyInPlaylist'));
+      }
       break;
     case 'addToPlaylist':
       if (!userStore.hasRealAuth) {

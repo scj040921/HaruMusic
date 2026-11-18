@@ -2,6 +2,7 @@ export default {
   menu: {
     play: '再生',
     playNext: '次に再生',
+    appendQueue: 'キューの末尾に追加',
     download: '楽曲をダウンロード',
     downloadLyric: '歌詞をダウンロード',
     addToPlaylist: 'プレイリストに追加',

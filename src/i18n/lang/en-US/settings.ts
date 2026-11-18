@@ -13,6 +13,9 @@ export default {
     about: 'About'
   },
   basic: {
+    reduceTransparency: 'Reduce Transparency',
+    reduceTransparencyDesc:
+      'Use solid backgrounds for navigation and playback controls to improve legibility.',
     themeMode: 'Theme Mode',
     themeModeDesc: 'Switch between light/dark theme',
     autoTheme: 'Follow System',

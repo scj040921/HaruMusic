@@ -233,22 +233,13 @@ const toggleLayout = () => {
 const addToPlaylist = () => {
   if (songs.value.length === 0) return;
 
-  // 获取当前播放列表
-  const currentList = playerStore.playList;
-
-  // 添加歌曲到播放列表(避免重复添加)
-  const newSongs = songs.value.filter((song) => !currentList.some((item) => item.id === song.id));
-
-  if (newSongs.length === 0) {
+  const addedCount = playerStore.appendToQueue(songs.value.map(formatSong));
+  if (!addedCount) {
     message.info(t('comp.musicList.songsAlreadyInPlaylist'));
     return;
   }
 
-  // 合并到当前播放列表末尾
-  const newList = [...currentList, ...newSongs.map(formatSong)];
-  playerStore.setPlayList(newList);
-
-  message.success(t('comp.musicList.addToPlaylistSuccess', { count: newSongs.length }));
+  message.success(t('comp.musicList.addToPlaylistSuccess', { count: addedCount }));
 };
 
 // 播放单首歌曲

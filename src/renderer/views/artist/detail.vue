@@ -821,31 +821,16 @@ const handlePlayAll = () => {
 const addToPlaylist = () => {
   if (filteredSongs.value.length === 0) return;
 
-  // 获取当前播放列表
-  const currentList = playerStore.playList;
-
-  // 添加歌曲到播放列表(避免重复添加)
-  const newSongs = filteredSongs.value.filter(
-    (song) => !currentList.some((item) => item.id === song.id)
+  const addedCount = playerStore.appendToQueue(
+    filteredSongs.value.map((song) => ({ ...song, picUrl: song.al?.picUrl || song.picUrl }))
   );
 
-  if (newSongs.length === 0) {
+  if (!addedCount) {
     message.info(t('comp.musicList.songsAlreadyInPlaylist'));
     return;
   }
 
-  // 合并到当前播放列表末尾
-  const newList = [
-    ...currentList,
-    ...newSongs.map((song) => ({
-      ...song,
-      picUrl: song.al.picUrl
-    }))
-  ];
-
-  playerStore.setPlayList(newList);
-
-  message.success(t('comp.musicList.addToPlaylistSuccess', { count: newSongs.length }));
+  message.success(t('comp.musicList.addToPlaylistSuccess', { count: addedCount }));
 };
 
 const handlePlay = (song: any) => {

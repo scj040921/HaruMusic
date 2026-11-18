@@ -229,8 +229,14 @@ export const playTrack = async (
   const audioTrackBeforeSwitch = audioService.getCurrentTrack();
   const wasPlayingBeforeSwitch = playerCore.play;
   const previousPlayIntent = playerCore.userPlayIntent;
-  const previousMusic = playerCore.playMusic;
-  const previousMusicUrl = playerCore.playMusicUrl;
+  const previousMusic =
+    audioTrackBeforeSwitch && !sameSong(audioTrackBeforeSwitch, playerCore.playMusic)
+      ? audioTrackBeforeSwitch
+      : playerCore.playMusic;
+  const previousMusicUrl =
+    previousMusic === playerCore.playMusic
+      ? playerCore.playMusicUrl
+      : previousMusic.playMusicUrl || '';
   if (music.id !== playerCore.playMusic.id) {
     SongSourceConfigManager.clearTriedSources(music.id);
   }
@@ -392,8 +398,9 @@ export const playTrack = async (
         playerCore.playMusic = previousMusic;
         playerCore.playMusicUrl = previousMusicUrl;
         if (previousMusic.id) updateDocumentTitle(previousMusic);
-        playerCore.userPlayIntent = previousPlayIntent;
-        playerCore.setIsPlay(wasPlayingBeforeSwitch);
+        const ended = audioService.getCurrentSound()?.ended === true;
+        playerCore.userPlayIntent = previousPlayIntent && !ended;
+        playerCore.setIsPlay(wasPlayingBeforeSwitch && !ended);
       } else {
         playerCore.setIsPlay(false);
         playerCore.userPlayIntent = false;
@@ -427,7 +434,7 @@ export const resumeCurrentSong = async (): Promise<boolean> => {
     !sound ||
     sound.error ||
     sound.readyState < 2 ||
-    audioService.getCurrentTrack()?.id !== song.id
+    !sameSong(audioService.getCurrentTrack(), song)
   ) {
     return playTrack(song, true, {
       startTime: readPlaybackProgress(song.id),
@@ -468,6 +475,7 @@ export const resumeCurrentSong = async (): Promise<boolean> => {
     core.setIsPlay(false);
     core.userPlayIntent = false;
     core.playMusic.playLoading = false;
+    playbackRequestManager.failRequest(requestId);
     console.error('[playbackController] 恢复播放失败:', error);
     message.error(i18n.global.t('player.resumeFailed'));
     return false;
@@ -563,7 +571,7 @@ export const switchCurrentSongQuality = async (quality: SongQuality | null): Pro
     !result ||
     generation !== getCurrentGeneration() ||
     request !== reparseGeneration ||
-    core.playMusic.id !== song.id
+    !sameSong(core.playMusic, song)
   )
     return false;
   const sound = audioService.getCurrentSound();
@@ -626,7 +634,12 @@ let playbackHandlersInitialized = false;
 let recoveryInFlight: number | null = null;
 
 const handleUrlExpired = async (expiredTrack: SongResult): Promise<void> => {
-  if (!expiredTrack || expiredTrack.playMusicUrl?.startsWith('local://')) return;
+  if (
+    !expiredTrack ||
+    expiredTrack.playMusicUrl?.startsWith('local://') ||
+    playbackRequestManager.getCurrentRequestId()
+  )
+    return;
   const gen = getCurrentGeneration();
   if (recoveryInFlight === gen) return;
   recoveryInFlight = gen;
@@ -635,7 +648,7 @@ const handleUrlExpired = async (expiredTrack: SongResult): Promise<void> => {
     if (
       gen !== getCurrentGeneration() ||
       !core.userPlayIntent ||
-      core.playMusic?.id !== expiredTrack.id ||
+      !sameSong(core.playMusic, expiredTrack) ||
       core.playMusic.playMusicUrl !== expiredTrack.playMusicUrl
     )
       return;
@@ -679,9 +692,10 @@ export const setupUrlExpiredHandler = (): void => {
   playbackHandlersInitialized = true;
   audioService.on('url_expired', handleUrlExpired);
   audioService.on('playback_error', async (track: SongResult) => {
+    if (playbackRequestManager.getCurrentRequestId()) return;
     const gen = getCurrentGeneration();
     const core = await getPlayerCoreStore();
-    if (gen !== getCurrentGeneration() || core.playMusic.id !== track.id) return;
+    if (gen !== getCurrentGeneration() || !sameSong(core.playMusic, track)) return;
     core.handlePause();
     message.error(i18n.global.t('player.playFailed'));
   });

@@ -15,16 +15,22 @@
 
     <!-- 中间标题 -->
     <div class="header-title">
-      <span v-if="title">{{ t(title) }}</span>
+      <span v-if="title && !(isAndroidApp && route.path === '/set')">{{ t(title) }}</span>
     </div>
 
     <!-- 右侧区域 -->
     <div class="header-right">
-      <button class="header-btn" type="button" aria-label="搜索" @click="openSearch">
+      <button
+        v-if="!isAndroidApp || !isSearchPage"
+        class="header-btn"
+        type="button"
+        :aria-label="t('comp.search')"
+        @click="openSearch"
+      >
         <i class="ri-search-line"></i>
       </button>
       <button
-        v-if="isAndroidApp"
+        v-if="isAndroidApp && route.path !== '/downloads'"
         class="header-btn"
         type="button"
         aria-label="下载管理"
@@ -32,7 +38,13 @@
       >
         <i class="ri-download-line" />
       </button>
-      <button class="header-btn" type="button" aria-label="设置" @click="openSettings">
+      <button
+        v-if="!isAndroidApp || route.path !== '/set'"
+        class="header-btn"
+        type="button"
+        :aria-label="t('comp.settings')"
+        @click="openSettings"
+      >
         <i class="ri-settings-3-line"></i>
       </button>
     </div>
@@ -62,10 +74,17 @@ const showBack = computed(() => {
 const title = computed(() => {
   return (route.meta.title as string) || '';
 });
+const isSearchPage = computed(() =>
+  ['/mobile-search', '/mobile-search-result'].includes(route.path)
+);
 
 // 返回上一页
 const goBack = () => {
-  router.back();
+  if (isAndroidApp && !router.options.history.state.back) {
+    void router.replace('/');
+  } else {
+    router.back();
+  }
 };
 
 // 打开搜索

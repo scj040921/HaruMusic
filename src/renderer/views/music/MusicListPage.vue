@@ -876,15 +876,13 @@ const handleAddToPlaylist = () => {
     .filter((s) => s) as SongResult[];
   if (songs.length === 0) return;
 
-  const currentList = playerStore.playList;
-  const newSongs = songs.filter((s) => !currentList.some((item) => item.id === s.id));
-  if (newSongs.length === 0) {
+  const addedCount = playerStore.appendToQueue(songs);
+  if (!addedCount) {
     message.warning(t('comp.musicList.songsAlreadyInPlaylist'));
     return;
   }
 
-  playerStore.setPlayList([...currentList, ...newSongs], true);
-  message.success(t('comp.musicList.addToPlaylistSuccess', { count: newSongs.length }));
+  message.success(t('comp.musicList.addToPlaylistSuccess', { count: addedCount }));
   cancelSelect();
 };
 

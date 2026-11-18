@@ -30,6 +30,19 @@
     </setting-item>
 
     <setting-item
+      :title="t('settings.basic.reduceTransparency')"
+      :description="t('settings.basic.reduceTransparencyDesc')"
+      inline
+    >
+      <n-switch
+        :value="setData.reduceTransparency === true"
+        :aria-label="t('settings.basic.reduceTransparency')"
+        class="transparency-switch"
+        @update:value="setReduceTransparency"
+      />
+    </setting-item>
+
+    <setting-item
       :title="t('settings.basic.language')"
       :description="t('settings.basic.languageDesc')"
     >
@@ -221,6 +234,10 @@ const { t } = useI18n();
 const settingsStore = useSettingsStore();
 const userStore = useUserStore();
 const setData = inject(SETTINGS_DATA_KEY)!;
+const setReduceTransparency = (reduceTransparency: boolean) => {
+  setData.value = { ...setData.value, reduceTransparency };
+  settingsStore.setSetData(setData.value);
+};
 const message = inject(SETTINGS_MESSAGE_KEY)!;
 
 const isDarkTheme = computed({

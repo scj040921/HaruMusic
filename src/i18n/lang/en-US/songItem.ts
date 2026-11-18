@@ -2,6 +2,7 @@ export default {
   menu: {
     play: 'Play',
     playNext: 'Play Next',
+    appendQueue: 'Add to End of Queue',
     download: 'Download',
     downloadLyric: 'Download Lyrics',
     addToPlaylist: 'Add to Playlist',

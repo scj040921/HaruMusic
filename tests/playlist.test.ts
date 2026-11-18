@@ -207,6 +207,40 @@ describe('single-song queue preference (#766)', () => {
     expect(queue.playListIndex).toBe(0);
   });
 
+  it('appends unique provider tracks in order without reshuffling or pausing', () => {
+    const queue = usePlaylistStore();
+    const core = usePlayerCoreStore();
+    const current = makeSong(1);
+    const otherSource = { ...current, source: 'plugin:other' } as SongResult;
+    const last = makeSong(2);
+    core.playMusic = current;
+    core.play = true;
+    queue.playMode = 2;
+    queue.setPlayList([current, last]);
+
+    expect(queue.appendToQueue([current, otherSource, otherSource, makeSong(3)])).toBe(2);
+    expect(queue.playList).toEqual([current, last, otherSource, makeSong(3)]);
+    expect(queue.originalPlayList).toEqual(queue.playList);
+    expect(queue.playListIndex).toBe(0);
+    expect(core.play).toBe(true);
+  });
+
+  it('keeps the current song and index if a manual skip fails', async () => {
+    const queue = usePlaylistStore();
+    const core = usePlayerCoreStore();
+    const current = makeSong(1);
+    core.playMusic = current;
+    core.play = true;
+    queue.setPlayList([current, makeSong(2), makeSong(3)]);
+    const pause = vi.spyOn(core, 'handlePause');
+    mocks.play.mockResolvedValueOnce(false);
+
+    expect(await queue.nextPlay()).toBe(false);
+    expect(queue.playListIndex).toBe(0);
+    expect(core.play).toBe(true);
+    expect(pause).not.toHaveBeenCalled();
+  });
+
   it('removes only the specified source and never pauses a same-ID current track from another source', () => {
     const queue = usePlaylistStore(),
       core = usePlayerCoreStore();

@@ -11,8 +11,9 @@ await context.addInitScript(()=>{
 });
 await context.route('http://127.0.0.1:30488/**',route=>{const url=route.request().url();const artists=Array.from({length:24},(_,i)=>({id:i+1,name:'艺人 '+(i+1),picUrl:base+'resources/icon.png',albumSize:12}));return route.fulfill({json:url.includes('__health')?{service:'harumusic'}:url.includes('/artist/list')?{code:200,artists,more:false}:{code:200,data:[],albums:[],artists:[],result:{songs:[]}}});});
 const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+if(process.env.HARU_SMOKE_DEBUG) page.on('console',event=>console.log(event.text()));
 
-const out='artifacts/ui-0.1.14';mkdirSync(out,{recursive:true});
+const out='artifacts/ui-0.1.15';mkdirSync(out,{recursive:true});
 const wav=new Uint8Array(44+16000*30),view=new DataView(wav.buffer);const txt=(o,t)=>[...t].forEach((c,i)=>view.setUint8(o+i,c.charCodeAt(0)));txt(0,'RIFF');view.setUint32(4,wav.length-8,true);txt(8,'WAVEfmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,8000,true);view.setUint32(28,16000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);txt(36,'data');view.setUint32(40,wav.length-44,true);
 await context.route('**/__offline_fixture/**',route=>route.fulfill({body:Buffer.from(wav),contentType:'audio/wav',headers:{'Access-Control-Allow-Origin':'*'}}));
 await page.goto(base,{waitUntil:'domcontentloaded'});await page.locator('.intro-skip').click();await page.locator('.startup-intro').waitFor({state:'detached'});await page.getByText('我已阅读并同意',{exact:true}).click();await page.getByText('我已阅读并同意',{exact:true}).waitFor({state:'detached'});
@@ -25,7 +26,12 @@ async function seed(count=10){await page.evaluate(async count=>{
 const order=()=>page.evaluate(async()=>{const {usePlayerStore}=await window.__load('/store/modules/player.ts');const p=usePlayerStore();return {ids:p.playList.map(s=>s.id),index:p.playListIndex,current:p.playMusic.id};});
 await seed(25);const queue=page.getByRole('dialog',{name:'播放队列',exact:true});
 assert.ok(await queue.isVisible());assert.equal(await queue.locator('[aria-current="true"]').count(),1);
+const upcoming=queue.getByRole('button',{name:'待播',exact:true});
+await upcoming.click();assert.equal(await upcoming.getAttribute('aria-pressed'),'true');
+assert.equal(await queue.locator('[aria-current="true"]').count(),0);
+assert.ok(await queue.getByRole('button',{name:'拖动调整 Track 2 的顺序',exact:true}).isDisabled());
 await page.getByRole('searchbox',{name:'搜索播放队列'}).fill('artist14');assert.equal(await queue.locator('.queue-row').count(),1);assert.ok(await queue.getByText('Track 14',{exact:true}).isVisible());assert.equal(await order().then(o=>o.ids.length),25);
+await page.screenshot({path:out+'/queue-upcoming.png',style:'#__vue-devtools-container__ {display:none !important}'});
 await page.getByRole('button',{name:'定位当前',exact:true}).click();await queue.getByRole('button',{name:'Track 5 的队列操作',exact:true}).click();await page.getByText('下一首播放',{exact:true}).click();assert.equal((await order()).ids[1],5);
 await page.getByRole('button',{name:'仅保留当前',exact:true}).click();assert.deepEqual((await order()).ids,[1]);
 await seed(10);
@@ -49,17 +55,28 @@ await page.evaluate(async()=>{const {dismissTopOverlay}=await window.__load('/se
 await page.screenshot({path:out+'/queue.png'});
 await page.setViewportSize({width:320,height:740});await page.waitForTimeout(200);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
 await page.screenshot({path:out+'/queue-small.png'});await page.keyboard.press('Escape');await queue.waitFor({state:'detached'});
-await page.goto(base+'#/downloads');await page.waitForSelector('.download-list li');
+await page.locator('.mobile-header').getByRole('button',{name:'下载管理'}).click();await page.waitForSelector('.download-list li');
 await page.getByRole('tab',{name:'失败',exact:true}).click();assert.equal(await page.locator('.download-list li').count(),1);
 await page.getByRole('searchbox',{name:'搜索下载音乐'}).fill('not found');assert.equal(await page.locator('.download-list li').count(),0);
 await page.getByRole('searchbox',{name:'搜索下载音乐'}).fill('');await page.getByRole('tab',{name:'全部',exact:true}).click();
 await page.evaluate(()=>{window.__downloads.push({taskId:'4',songInfo:{id:4,name:'Afterglow',ar:[{name:'HaruMusic'}]},filename:'Afterglow.flac',state:'completed',total:2000000,loaded:2000000,progress:100,createdAt:4});window.dispatchEvent(new Event('haru-download-added'));});await page.waitForFunction(()=>document.querySelectorAll('.download-list li').length===4);
 await page.getByRole('searchbox',{name:'搜索下载音乐'}).fill('harumusic');await page.getByRole('tab',{name:'已完成',exact:true}).click();assert.equal(await page.locator('.download-list li').count(),2);
 await page.getByRole('button',{name:'播放已下载 · 2',exact:true}).click();await page.waitForFunction(()=>window.__fileCalls?.includes('4'));
-await page.waitForFunction(async()=>{const {audioService}=await window.__load('/services/audioService.ts');return !audioService.getCurrentSound().paused&&audioService.getCurrentSound().readyState>=2;});
+await page.waitForFunction(async()=>{const {audioService}=await window.__load('/services/audioService.ts');const {usePlayerStore}=await window.__load('/store/modules/player.ts');return !usePlayerStore().playMusic.playLoading&&!audioService.getCurrentSound().paused&&audioService.getCurrentSound().readyState>=2;});
 assert.deepEqual((await order()).ids,['android-download:4','android-download:1']);
-await page.evaluate(async()=>{const {usePlayerStore}=await window.__load('/store/modules/player.ts');usePlayerStore().nextPlay();});await page.waitForFunction(()=>window.__fileCalls?.includes('1'));
+assert.equal(await page.evaluate(async()=>{const {usePlayerStore}=await window.__load('/store/modules/player.ts');return usePlayerStore().nextPlay();}),true);await page.waitForFunction(()=>window.__fileCalls?.includes('1'));
 await page.waitForFunction(async()=>{const {audioService}=await window.__load('/services/audioService.ts');return audioService.getCurrentTrack()?.id==='android-download:1'&&!audioService.getCurrentSound().paused;});
+await context.route('**/__offline_fixture/task-missing.wav',route=>route.fulfill({status:404,body:'missing'}));
+const failedSkip=await page.evaluate(async()=>{
+ const {usePlayerStore}=await window.__load('/store/modules/player.ts');
+ const {audioService}=await window.__load('/services/audioService.ts');
+ const p=usePlayerStore();
+ const missing={id:'android-download:missing',source:'local',name:'Unavailable file',picUrl:''};
+ const added=p.appendToQueue([missing,missing]);
+ const result=await p.nextPlay();
+ return {added,result,index:p.playListIndex,current:p.playMusic.id,sound:audioService.getCurrentTrack()?.id,paused:audioService.getCurrentSound().paused};
+});
+assert.deepEqual(failedSkip,{added:1,result:false,index:1,current:'android-download:1',sound:'android-download:1',paused:false});
 await page.screenshot({path:out+'/downloads-offline.png'});
 await page.getByRole('searchbox',{name:'搜索下载音乐'}).fill('');await page.getByRole('tab',{name:'失败',exact:true}).click();await page.getByRole('button',{name:'清理失败任务',exact:true}).click();await page.getByText('清理 1 个失败任务？',{exact:true}).waitFor();
 await page.getByRole('button',{name:'清理',exact:true}).click();await page.waitForFunction(()=>window.__downloads.every(task=>task.state!=='error'));assert.equal(await page.evaluate(()=>window.__downloads.filter(task=>task.state==='completed').length),2);
@@ -68,5 +85,5 @@ await page.evaluate(async()=>{const {usePlayerStore}=await window.__load('/store
 assert.ok(await queue.evaluate(e=>e.contains(document.activeElement)),'queue focus remains inside when opened above the full player');
 await page.evaluate(async()=>{const {dismissTopOverlay}=await window.__load('/services/overlayStack.ts');dismissTopOverlay();});await queue.waitFor({state:'detached'});
 assert.equal(await page.evaluate(async()=>{const {usePlayerStore}=await window.__load('/store/modules/player.ts');return usePlayerStore().musicFull;}),true);
-assert.deepEqual(errors,[]);console.log('Queue search, next-play, keep-current, touch/keyboard reorder, confirmation Back, narrow layout, download filtering/event refresh and two actual local WAV tracks passed.');
+assert.deepEqual(errors,[]);console.log('Upcoming filter, queue edits, download library, two playable WAV tracks and failed-skip recovery passed.');
 await browser.close();

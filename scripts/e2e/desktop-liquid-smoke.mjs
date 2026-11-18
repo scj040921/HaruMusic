@@ -19,7 +19,7 @@ try {
  assert.notEqual(activePort,occupiedPort,'desktop startup must move past an occupied real port');
  const ready=await fetch('http://127.0.0.1:'+activePort+'/__fixture_not_found',{signal:AbortSignal.timeout(3000)});
  assert.equal(ready.status,404,'API must already be listening when the renderer is available');
- await page.evaluate(()=>{localStorage.setItem('haru-salt-mode','true');localStorage.setItem('haru-liquid-mode','false');localStorage.setItem('music-full-config',JSON.stringify({fontSize:28,saltPlayerTheme:'dark'}));});
+ await page.evaluate(()=>{localStorage.setItem('haru-salt-mode','true');localStorage.setItem('haru-liquid-mode','false');localStorage.removeItem('haru-sidebar-collapsed');localStorage.setItem('music-full-config',JSON.stringify({fontSize:28,saltPlayerTheme:'dark'}));});
  await page.reload();
  const agree=page.getByText('我已阅读并同意',{exact:true});if(await agree.isVisible())await agree.click();
  await page.waitForSelector('.liquid-sidebar');
@@ -47,5 +47,23 @@ try {
  assert.equal(material.opacity,'1');assert.equal(material.background,'rgb(255, 255, 255)');assert.equal(material.blur,'none');
  await page.screenshot({path:'artifacts/ui-0.1.14/desktop-queue.png'});
  await page.getByRole('button',{name:'关闭播放队列',exact:true}).click();await queue.waitFor({state:'detached'});assert.ok(await page.locator('.liquid-now-playing').isVisible());
+ await page.evaluate(()=>{
+  const globals=document.getElementById('app').__vue_app__.config.globalProperties;
+  globals.$pinia._s.get('playerCore').setMusicFull(false);
+  return globals.$router.push('/set');
+ });
+ await page.getByRole('button',{name:'收起侧边栏'}).click();
+ assert.ok(await page.locator('.liquid-sidebar').getByRole('link',{name:'首页',exact:true}).isVisible());
+ const materialToggle=page.getByRole('switch',{name:'降低透明度'});
+ await page.locator('.music-play-bar').waitFor();
+ await materialToggle.click();
+ await page.waitForFunction(()=>document.documentElement.hasAttribute('data-reduce-transparency'));
+ for(const selector of ['.liquid-sidebar','.music-play-bar']) {
+  const surface=await page.locator(selector).evaluate(e=>({blur:getComputedStyle(e).backdropFilter,background:getComputedStyle(e).backgroundColor,classes:e.className,canvas:getComputedStyle(e).getPropertyValue('--canvas')}));
+  assert.equal(surface.blur,'none',selector);assert.ok(surface.background.startsWith('rgb('),`${selector}: ${JSON.stringify(surface)}`);
+ }
+ await page.screenshot({path:'artifacts/ui-0.1.14/desktop-hig-solid.png'});
+ await materialToggle.click();
+ await page.waitForFunction(()=>!document.documentElement.hasAttribute('data-reduce-transparency'));
  assert.deepEqual(errors,[]);console.log('Actual Electron renderer: Salt migration persisted, obsolete settings removed, Liquid player and cover rendered.');
 } finally {await app?.close();await new Promise(resolve=>occupied.close(resolve));}

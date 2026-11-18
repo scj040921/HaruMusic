@@ -2,16 +2,19 @@
   <div
     class="liquid-settings-page h-full w-full bg-white dark:bg-black transition-colors duration-500 flex flex-col"
   >
-    <!-- 顶部导航区 -->
-    <div
-      class="liquid-settings-nav flex-shrink-0 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-black z-10 page-padding pt-6 pb-2"
-    >
-      <h1 class="text-2xl md:text-3xl font-bold text-neutral-900 dark:text-white mb-6">
-        {{ t('common.settings') }}
-      </h1>
+    <n-scrollbar ref="settingsScroll" class="flex-1">
+      <div
+        class="liquid-settings-nav flex-shrink-0 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-black z-10 page-padding pt-6 pb-2"
+      >
+        <h1 class="text-2xl md:text-3xl font-bold text-neutral-900 dark:text-white mb-6">
+          {{ t('common.settings') }}
+        </h1>
 
-      <n-scrollbar x-scrollable class="w-full">
-        <div class="flex items-center pl-2 pb-2 whitespace-nowrap">
+        <div
+          class="settings-sections flex items-center pb-2"
+          :aria-label="t('common.settings')"
+          role="group"
+        >
           <button
             v-for="section in navSections"
             :key="section.id"
@@ -19,16 +22,13 @@
             class="settings-tab"
             :class="{ 'settings-tab-active': currentSection === section.id }"
             :aria-pressed="currentSection === section.id"
-            @click="currentSection = section.id"
+            @click="changeSection(section.id)"
           >
             {{ section.title }}
           </button>
         </div>
-      </n-scrollbar>
-    </div>
+      </div>
 
-    <!-- 内容区域 -->
-    <n-scrollbar class="flex-1">
       <div class="settings-content w-full mx-auto pb-32 pt-6 page-padding">
         <div v-show="currentSection === 'basic'" class="animate-fade-in">
           <basic-tab />
@@ -63,7 +63,7 @@
 
 <script setup lang="ts">
 import { useDebounceFn } from '@vueuse/core';
-import { useDialog, useMessage } from 'naive-ui';
+import { type ScrollbarInst, useDialog, useMessage } from 'naive-ui';
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -150,6 +150,12 @@ const navSections = computed(() => {
 });
 
 const currentSection = ref('basic');
+const settingsScroll = ref<ScrollbarInst | null>(null);
+const changeSection = (section: string) => {
+  if (currentSection.value === section) return;
+  currentSection.value = section;
+  settingsScroll.value?.scrollTo({ top: 0, behavior: 'instant' });
+};
 
 // ==================== 初始化 ====================
 onMounted(() => {
@@ -178,22 +184,31 @@ onMounted(() => {
 .settings-content {
   max-width: 1120px;
 }
+.settings-sections {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+:deep(.transparency-switch) {
+  min-width: 44px;
+  min-height: 44px;
+  --n-rail-color-active: var(--accent) !important;
+}
 .settings-tab {
   position: relative;
   padding: 9px 14px 12px;
   border: 0;
   background: transparent;
-  color: #63736c;
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
 }
 .settings-tab:hover {
-  color: #315f55;
+  color: var(--text-primary);
 }
 .settings-tab-active {
-  color: #315f55;
+  color: var(--text-primary);
 }
 .settings-tab-active::after {
   content: '';
@@ -203,17 +218,11 @@ onMounted(() => {
   bottom: 0;
   height: 2px;
   border-radius: 2px;
-  background: #376d5e;
+  background: var(--accent);
 }
 .settings-tab:focus-visible {
   outline: 2px solid #568f7c;
   outline-offset: -2px;
-}
-:global(.dark) .settings-tab {
-  color: #a6b8b0;
-}
-:global(.dark) .settings-tab-active {
-  color: #c5e2d5;
 }
 
 :deep(.n-select .n-base-selection) {

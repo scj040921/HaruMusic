@@ -38,7 +38,10 @@ const focus = await page.locator('.lyrics-wrapper .now-text').evaluate(e=>{const
 assert.ok(focus.delta < 8, 'normal lyric must remain centered');
 assert.ok(focus.text.includes('without clipping'));
 await page.locator('.lyrics-expand').click();await page.waitForTimeout(600);
-await page.screenshot({path:'artifacts/ui-0.1.14/pure.png'});
+assert.ok(await page.getByRole('button',{name:'退出纯歌词'}).evaluate(e=>getComputedStyle(e.querySelector('i')).opacity==='1'),'pure lyrics keeps the exit icon visible');
+assert.ok(await page.locator('.fullscreen-lyrics').evaluate(e=>e.querySelector('.fullscreen-header').getBoundingClientRect().bottom<=e.querySelector('.lyrics-scroller').getBoundingClientRect().top),'lyrics cannot scroll across the title');
+assert.match(await page.locator('.unified-controls [role="slider"]').getAttribute('aria-valuetext'),/\d+:\d+ \/ \d+:\d+/);
+await page.screenshot({path:'artifacts/ui-0.1.14/pure.png',style:'#__vue-devtools-container__ {display:none !important}'});
 const scroller=page.locator('.lyrics-scroller');
 for(const time of [12.2,15.2,18.2]) {
  await page.evaluate(async(time)=>{const h=await window.__loadTestModule('/hooks/MusicHook.ts');const {audioService}=await window.__loadTestModule('/services/audioService.ts');audioService.seek(time);h.nowTime.value=audioService.getCurrentSound().currentTime;h.nowIndex.value=Math.floor(h.nowTime.value/3);},time);

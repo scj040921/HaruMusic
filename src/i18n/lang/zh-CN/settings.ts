@@ -13,6 +13,8 @@ export default {
     about: '关于'
   },
   basic: {
+    reduceTransparency: '降低透明度',
+    reduceTransparencyDesc: '让导航和播放控件使用实色背景，保持文字和按钮清晰。',
     themeMode: '主题模式',
     themeModeDesc: '切换日间/夜间主题',
     autoTheme: '跟随系统',

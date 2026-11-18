@@ -13,6 +13,9 @@ export default {
     about: 'について'
   },
   basic: {
+    reduceTransparency: '透明度を下げる',
+    reduceTransparencyDesc:
+      'ナビゲーションと再生コントロールの背景を不透明にして、見やすくします。',
     themeMode: 'テーマモード',
     themeModeDesc: 'ライト/ダークテーマの切り替え',
     autoTheme: 'システムに従う',

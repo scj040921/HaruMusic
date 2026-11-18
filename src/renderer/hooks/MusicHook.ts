@@ -10,6 +10,7 @@ import { isElectron } from '@/utils';
 import { getTextColors } from '@/utils/linearColor';
 import { savePlaybackProgress } from '@/utils/playerUtils';
 import { isEditableTarget } from '@/utils/shortcutKeyboard';
+import { sameSong } from '@/utils/songIdentity';
 import { parseLyrics } from '@/utils/yrcParser';
 
 const windowData = window as any;
@@ -508,7 +509,12 @@ const setupAudioListeners = () => {
     clearInterval();
 
     const gen = playbackRequestManager.getGeneration();
-    if (track?.id !== getPlayerStore().playMusic.id || !getPlayerStore().userPlayIntent) return;
+    if (
+      playbackRequestManager.getCurrentRequestId() ||
+      !sameSong(track, getPlayerStore().playMusic) ||
+      !getPlayerStore().userPlayIntent
+    )
+      return;
     const { usePlaylistStore } = await import('@/store/modules/playlist');
     if (gen !== playbackRequestManager.getGeneration()) return;
     await usePlaylistStore().nextPlayOnEnd();
